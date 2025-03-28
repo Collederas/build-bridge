@@ -11,6 +11,7 @@ class P4Client(VCSClient):
         super().__init__(config)
         self.p4 = P4()
         self.workspace_root = self.get_workspace_root()
+        self.p4.exception_level = 1  # File(s) up-to-date is a warning - no exception raised
 
     @property
     def is_connected(self) -> bool:
@@ -39,7 +40,7 @@ class P4Client(VCSClient):
         try:
             self.ensure_connected()
             info = self.p4.run("info")[0]
-            return info.get("Client root")  # Extracts the workspace root
+            return info.get("clientRoot")  # Extracts the workspace root
         except P4Exception:
             raise RuntimeError("Failed to retrieve Perforce workspace root.")
         
@@ -59,15 +60,18 @@ class P4Client(VCSClient):
                 raise RuntimeError(f"Could not determine local path for {stream}.")
 
             # Normalize and extract the base directory
-            local_base_dir = os.path.normpath(local_path.rsplit("/...", 1)[0])
+            local_base_dir = os.path.normpath(local_path.rsplit("\\...", 1)[0])
+
+            # TODO this needs to be checked (are all repos needing this extra dir?) and configurable in case
+            project_path = os.path.join(local_base_dir, "AtmosProject")
 
             # Search for a .uproject file
-            for root, _, files in os.walk(local_base_dir):
+            for root, _, files in os.walk(project_path):
                 for file in files:
                     if file.endswith(".uproject"):
                         return os.path.join(root, file)
 
-            raise RuntimeError(f"No .uproject file found in {local_base_dir}.")
+            raise RuntimeError(f"No .uproject file found in {project_path}.")
 
         except P4Exception as e:
             raise RuntimeError(f"Failed to determine local project path: {str(e)}")
@@ -110,20 +114,18 @@ class P4Client(VCSClient):
                 return
 
             # Change to workspace root before executing p4 commands
-            original_dir = os.getcwd()
-            os.chdir(self.workspace_root)
+            os.chdir(self.get_workspace_root())
 
             print(f"🔄 Switching to stream: {ref}")
             self.p4.run("switch", ref)
 
-            # Force sync to ensure correct files
-            print("🔃 Syncing files to match the new stream...")
-            self.p4.run("sync", "-f")
+            self.p4.run_sync()
+            
+            print("✅ Sync complete!")
+        except Exception as e:
+            print(f"❌ Error: {e}")
 
-            print("✅ Stream switch complete!")
 
-        except P4Exception as e:
-            raise RuntimeError(f"Failed to switch to {ref}: {str(e)}")
 
     @staticmethod
     def test_connection(

@@ -149,7 +149,7 @@ class BuildBridgeWindow(QMainWindow):
 
             # Step 2: Determine the local project path after switching branches
             try:
-                project_path = self.p4_client.get_local_project_path(selected_branch)
+                project_path = self.p4_client.get_project_path(selected_branch)
             except Exception as e:
                 QMessageBox.critical(
                     self, "Project Path Error", f"Failed to determine project path: {str(e)}"

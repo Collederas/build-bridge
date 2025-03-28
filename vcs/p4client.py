@@ -16,13 +16,12 @@ class P4Client(VCSClient):
 
     def _connect(self) -> None:
         # Defaults to use p4 env variables. If config_override exists, it will use that.
-        if config_override := self.config.get("config_override"):
+        if config_override := self.config.get("perforce").get("config_override"):
             self.p4.port = config_override["p4port"]
             self.p4.user = config_override["p4user"]
             self.p4.password = config_override["p4password"]
             self.p4.client = config_override["p4client"]
         try:
-            print(f"Connecting with port: {self.p4.port}")  # Debug
             self.p4.connect()
             self.p4.run_login()
         except P4Exception as e:

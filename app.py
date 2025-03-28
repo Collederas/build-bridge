@@ -69,7 +69,7 @@ class ConnectionSettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         test_button = QPushButton("Test Connection")
-        test_button.clicked.connect(self.test_connection)
+        test_button.clicked.connect(self.test_connection_with_feedback)
 
         layout.addWidget(test_button)
         layout.addWidget(buttons)
@@ -77,7 +77,15 @@ class ConnectionSettingsDialog(QDialog):
         if self.has_existing_config:
             layout.insertRow(0, QLabel("Editing existing connection settings:"))
 
+    def test_connection_with_feedback(self):
+        result, error_msg = self.test_connection()
+        if result == "success":
+            QMessageBox.information(self, "Connection Test", "Connection successful!")
+        else:
+            QMessageBox.critical(self, "Connection Test", f"Connection failed: {error_msg}")
+
     def test_connection(self):
+        """Test the Perforce connection with the current input values from the UI."""
         result_queue = multiprocessing.Queue()
         port = self.port_input.text()
         user = self.user_input.text()
@@ -94,26 +102,11 @@ class ConnectionSettingsDialog(QDialog):
         if process.is_alive():
             process.terminate()
             process.join()
-            QMessageBox.critical(
-                self, "Connection Test", "Connection timed out: Server not responding."
-            )
+            return "error", "Connection timed out: Server not responding."
         else:
             if not result_queue.empty():
-                result, error_msg = result_queue.get()
-                if result == "success":
-                    QMessageBox.information(
-                        self, "Connection Test", "Connection successful!"
-                    )
-                else:
-                    QMessageBox.critical(
-                        self, "Connection Test", f"Connection failed: {error_msg}"
-                    )
-            else:
-                QMessageBox.critical(
-                    self,
-                    "Connection Test",
-                    "Connection failed: No response from process.",
-                )
+                return result_queue.get()
+            return "error", "Connection failed: No response from process."
 
     def get_config(self):
         return {
@@ -126,6 +119,17 @@ class ConnectionSettingsDialog(QDialog):
                 }
             }
         }
+
+    def accept(self):
+        result, error_msg = self.test_connection()
+        if result == "success":
+            super().accept()
+        else:
+            QMessageBox.critical(
+                self,
+                "Connection Test",
+                f"Connection failed: {error_msg}\nPlease correct the settings.",
+            )
 
 
 class BuildBridgeWindow(QMainWindow):

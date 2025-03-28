@@ -6,22 +6,17 @@ from P4 import P4, P4Exception
 
 
 class P4Client(VCSClient):
-    def __init__(self, config: Optional[dict] = None, config_path: Optional[str] = None):
-            super().__init__(config_path)
+    def __init__(self, config: Optional[str] = None):
+            super().__init__(config)
             self.p4 = P4()
-            self.config = config or {}
-            self.vcs_config = self.config.get("perforce", {})
 
     @property
     def is_connected(self) -> bool:
         return self.p4.connected()
 
-    def _get_vcs_name(self) -> str:
-        return "perforce"  # Matches the JSON key
-
     def _connect(self) -> None:
-        # Only override with config if use_config is True and config exists
-        if self.use_config and (config_override := self.config.get("config_override")):
+        # Defaults to use p4 env variables. If config_override exists, it will use that.
+        if config_override := self.config.get("config_override"):
             self.p4.port = config_override["p4port"]
             self.p4.user = config_override["p4user"]
             self.p4.password = config_override["p4password"]
@@ -87,13 +82,12 @@ class P4Client(VCSClient):
 
     @staticmethod
     def test_connection(
-        port: str, user: str, password: str, client: str
+        address: str, user: str, password: str
     ) -> Tuple[str, Optional[str]]:
         p4 = P4()
-        p4.port = port
+        p4.port = address
         p4.user = user
         p4.password = password
-        p4.client = client
         try:
             p4.connect()
             p4.run_login()

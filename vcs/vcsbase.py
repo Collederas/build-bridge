@@ -18,14 +18,9 @@ def vcs_session(config_path="vcsconfig.json"):
 class VCSClient(ABC):
     """Base class to abstract connection to different VCS."""
 
-    def __init__(self, config_path: Optional[str] = None):
-            self.config_path = config_path
-
-    @abstractmethod
-    def _get_vcs_name(self) -> str:
-        """Subclasses must override this to return their config key (e.g., 'perforce')."""
-        pass
-
+    def __init__(self, config: Optional[dict] = None):
+        self.config = config
+        
     @abstractmethod
     def get_branches(self, pattern: Optional[str] = None) -> List[str]:
         """Return branches/tags/streams matching a glob/regex pattern."""
@@ -54,7 +49,7 @@ class VCSClient(ABC):
     @staticmethod
     @abstractmethod
     def test_connection(
-        port: str, user: str, password: str, client: str
+        address: str, user: str, password: str, client: str
     ) -> Tuple[str, Optional[str]]:
         """Test connection with given parameters. Returns (result, error_msg)."""
         pass

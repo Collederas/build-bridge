@@ -5,24 +5,45 @@ import json
 import os
 import keyring
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QListWidget, QLabel, QMessageBox, QDialog, QFormLayout,
-    QLineEdit, QDialogButtonBox
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QListWidget,
+    QLabel,
+    QMessageBox,
+    QDialog,
+    QFormLayout,
+    QLineEdit,
+    QDialogButtonBox,
 )
 from PyQt6.QtCore import Qt
 from typing import Optional
 from vcs.p4client import P4Client
 
-def connect_in_process(vcs_type, port: str, user: str, password: str, client: str, result_queue: multiprocessing.Queue):
+
+def connect_in_process(
+    vcs_type,
+    port: str,
+    user: str,
+    password: str,
+    client: str,
+    result_queue: multiprocessing.Queue,
+):
     """Run connection test in a separate process using the specified VCS type."""
-    result, error_msg = vcs_type.test_connection(port, user, password, client)
+    result, error_msg = vcs_type.test_connection(port, user, password)
     result_queue.put((result, error_msg))
+
 
 class ConnectionSettingsDialog(QDialog):
     def __init__(self, current_config: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Perforce Connection Settings")
-        self.current_config = current_config.get("perforce", {}).get("config_override", {})
+        self.current_config = current_config.get("perforce", {}).get(
+            "config_override", {}
+        )
         self.has_existing_config = bool(self.current_config)
         self.init_ui()
 
@@ -41,7 +62,8 @@ class ConnectionSettingsDialog(QDialog):
         layout.addRow("Client:", self.client_input)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -64,7 +86,7 @@ class ConnectionSettingsDialog(QDialog):
 
         process = multiprocessing.Process(
             target=connect_in_process,
-            args=(P4Client, port, user, password, client, result_queue)
+            args=(P4Client, port, user, password, client, result_queue),
         )
         process.start()
         process.join(timeout=5)
@@ -72,16 +94,26 @@ class ConnectionSettingsDialog(QDialog):
         if process.is_alive():
             process.terminate()
             process.join()
-            QMessageBox.critical(self, "Connection Test", "Connection timed out: Server not responding.")
+            QMessageBox.critical(
+                self, "Connection Test", "Connection timed out: Server not responding."
+            )
         else:
             if not result_queue.empty():
                 result, error_msg = result_queue.get()
                 if result == "success":
-                    QMessageBox.information(self, "Connection Test", "Connection successful!")
+                    QMessageBox.information(
+                        self, "Connection Test", "Connection successful!"
+                    )
                 else:
-                    QMessageBox.critical(self, "Connection Test", f"Connection failed: {error_msg}")
+                    QMessageBox.critical(
+                        self, "Connection Test", f"Connection failed: {error_msg}"
+                    )
             else:
-                QMessageBox.critical(self, "Connection Test", "Connection failed: No response from process.")
+                QMessageBox.critical(
+                    self,
+                    "Connection Test",
+                    "Connection failed: No response from process.",
+                )
 
     def get_config(self):
         return {
@@ -90,10 +122,11 @@ class ConnectionSettingsDialog(QDialog):
                     "p4port": self.port_input.text(),
                     "p4user": self.user_input.text(),
                     "p4password": self.password_input.text(),
-                    "p4client": self.client_input.text()
+                    "p4client": self.client_input.text(),
                 }
             }
         }
+
 
 class BuildBridgeWindow(QMainWindow):
     def __init__(self):
@@ -101,26 +134,29 @@ class BuildBridgeWindow(QMainWindow):
         self.setWindowTitle("BuildBridge")
         self.setGeometry(100, 100, 400, 300)
         self.config_path = "vcsconfig.json"
-        self.load_config()
-        self.p4_client = P4Client(config=self.config)
+        self.vcs_config = self.load_config()
+        self.p4_client = P4Client(config=self.vcs_config)
         self.init_ui()
 
     def load_config(self):
-        self.config = {}
+        config = {}
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, "r") as f:
-                    self.config = json.load(f)
+                    config = json.load(f)
             except json.JSONDecodeError as e:
                 print(f"Error decoding {self.config_path}: {e}")
             except Exception as e:
                 print(f"Error loading {self.config_path}: {e}")
-        if "perforce" in self.config and "config_override" in self.config["perforce"]:
-            user = self.config["perforce"]["config_override"].get("p4user")
+
+        if "perforce" in config and "config_override" in config["perforce"]:
+            user = config["perforce"]["config_override"].get("p4user")
             if user:
                 password = keyring.get_password("BuildBridge", user)
                 if password:
-                    self.config["perforce"]["config_override"]["p4password"] = password
+                    config["perforce"]["config_override"]["p4password"] = password
+
+        return config
 
     def save_config(self, new_config: dict):
         config_override = new_config["perforce"]["config_override"]
@@ -129,16 +165,25 @@ class BuildBridgeWindow(QMainWindow):
         if user and password:
             keyring.set_password("BuildBridge", user, password)
 
-        config_to_save = {
-            "perforce": {
-                "config_override": {k: v for k, v in config_override.items() if k != "p4password"}
+            # Load existing config to preserve other data
+            current_config = {}
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r") as f:
+                    current_config = json.load(f)
+
+            # Update with new config (excluding password)
+            config_to_save = {
+                "perforce": {
+                    "config_override": {
+                        k: v for k, v in config_override.items() if k != "p4password"
+                    }
+                }
             }
-        }
+            current_config.update(config_to_save)
+
+        # Save
         with open(self.config_path, "w") as f:
             json.dump(config_to_save, f, indent=4)
-
-        self.config = new_config
-        self.p4_client = P4Client(config=self.config)
 
     def init_ui(self):
         menubar = self.menuBar()
@@ -167,7 +212,7 @@ class BuildBridgeWindow(QMainWindow):
         self.refresh_branches()
 
     def open_settings_dialog(self):
-        dialog = ConnectionSettingsDialog(self.config, self)
+        dialog = ConnectionSettingsDialog(self.vcs_config, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_config = dialog.get_config()
             self.save_config(new_config)
@@ -187,7 +232,9 @@ class BuildBridgeWindow(QMainWindow):
     def trigger_build(self):
         selected_items = self.branch_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Selection Error", "Please select a branch to build.")
+            QMessageBox.warning(
+                self, "Selection Error", "Please select a branch to build."
+            )
             return
         selected_branch = selected_items[0].text()
         if selected_branch == "No release branches found.":
@@ -196,22 +243,28 @@ class BuildBridgeWindow(QMainWindow):
         try:
             self.p4_client.switch_to_ref(selected_branch)
             self.run_unreal_build(selected_branch)
-            QMessageBox.information(self, "Build Started", f"Build triggered for {selected_branch}")
+            QMessageBox.information(
+                self, "Build Started", f"Build triggered for {selected_branch}"
+            )
         except Exception as e:
-            QMessageBox.critical(self, "Build Error", f"Failed to trigger build: {str(e)}")
+            QMessageBox.critical(
+                self, "Build Error", f"Failed to trigger build: {str(e)}"
+            )
 
     def run_unreal_build(self, branch: str):
         print(f"Simulating Unreal build for branch: {branch}")
 
     def closeEvent(self, event):
-        self.p4_client.disconnect()
+        self.p4_client._disconnect()
         super().closeEvent(event)
+
 
 def main():
     app = QApplication(sys.argv)
     window = BuildBridgeWindow()
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

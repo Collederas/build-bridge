@@ -1,9 +1,8 @@
-
-import queue
 import sys
 import json
 import os
 import keyring
+
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -15,11 +14,17 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QDialog,
-
 )
+
 from PyQt6.QtCore import Qt
-from typing import Optional
-from build.unreal_builder import UnrealBuilder
+
+from dialogs.build_dialog import BuildWindowDialog
+from builder.unreal_builder import (
+    EngineVersionError,
+    ProjectFileNotFoundError,
+    UnrealBuilder,
+    UnrealEngineNotInstalledError,
+)
 from dialogs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
 
@@ -32,7 +37,6 @@ class BuildBridgeWindow(QMainWindow):
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
         self.p4_client = P4Client(config=self.vcs_config)
-        self.unreal_builder = UnrealBuilder(parent=self)
         self.init_ui()
 
     def load_config(self):
@@ -127,59 +131,71 @@ class BuildBridgeWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
     def trigger_build(self):
-            selected_items = self.branch_list.selectedItems()
-            if not selected_items:
-                QMessageBox.warning(
-                    self, "Selection Error", "Please select a branch to build."
-                )
-                return
-            selected_branch = selected_items[0].text()
-            if selected_branch == "No release branches found.":
-                QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
-                return
+        selected_items = self.branch_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(
+                self, "Selection Error", "Please select a branch to build."
+            )
+            return
+        selected_branch = selected_items[0].text()
+        if selected_branch == "No release branches found.":
+            QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
+            return
 
-            # Step 1: Switch to the selected branch using P4Client
-            try:
-                self.p4_client.switch_to_ref(selected_branch)
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Branch Switch Error", f"Failed to switch to branch: {str(e)}"
-                )
-                return
+        # Switch to the selected branch if we're not there already
+        try:
+            self.p4_client.switch_to_ref(selected_branch)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Branch Switch Failed",
+                f"Could not switch to branch '{selected_branch}':\n\n{str(e)}\n\n"
+                "Check your Perforce connection settings or ensure no pending changes exist.",
+            )
+            return
 
-            # Step 2: Determine the local project path after switching branches
-            try:
-                project_path = self.p4_client.get_project_path(selected_branch)
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Project Path Error", f"Failed to determine project path: {str(e)}"
-                )
-                return
+        # Determine the local project path
+        try:
+            vcs_root = self.p4_client.get_workspace_root()
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Project Path Error",
+                f"Could not find project path for '{selected_branch}':\n\n{str(e)}\n\n"
+                "Ensure the branch contains a valid Unreal project.",
+            )
+            return
 
-            # Step 3: Detect the required Unreal Engine version (exceptions handled by the builder)
-            engine_version = self.unreal_builder.get_unreal_engine_version(project_path)
-            if not engine_version:
-                return
+        try:
+            # Feed the VCS root to the builder and let it find the uproject
+            # It will do all sorts of validations to ensure we can actually
+            # build the project and scream if prerequisites are not met.
+            unreal_builder = UnrealBuilder(
+                root_directory=vcs_root,
+            )
+        except ProjectFileNotFoundError as e:
+            QMessageBox.critical(
+                self,
+                "Project File Error",
+                f"Project file not found: {str(e)}",
+            )
+            return
+        except EngineVersionError as e:
+            QMessageBox.critical(
+                self,
+                "Engine Version Error",
+                f"Could not determine Unreal Engine version: {str(e)}",
+            )
+            return
+        except UnrealEngineNotInstalledError as e:
+            QMessageBox.critical(
+                self, f"Unreal Engine Not Found at: {unreal_builder.ue_base_path}"
+            )
 
-            # Step 4: Check if the required Unreal Engine version is installed
-            if not self.unreal_builder.check_unreal_engine_installed(engine_version):
-                return  # User was prompted to install the engine
+            return
 
-            # Step 5: Proceed with the UAT build
-            try:
-                success = self.unreal_builder.run_unreal_build(selected_branch, project_path, engine_version)
-                if success:
-                    QMessageBox.information(
-                        self, "Build Started", f"Build triggered for {selected_branch}"
-                    )
-                else:
-                    QMessageBox.critical(
-                        self, "Build Error", "Build failed. Check the logs for details."
-                    )
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Build Error", f"Failed to trigger build: {str(e)}"
-                )
+        dialog = BuildWindowDialog(unreal_builder, parent=self)
+        dialog.exec()
 
     def closeEvent(self, event):
         self.p4_client._disconnect()
@@ -195,3 +211,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename="logs/build.log",
+    filemode="a",
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)

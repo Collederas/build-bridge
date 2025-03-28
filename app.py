@@ -19,9 +19,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from typing import Optional
+from build.unreal_builder import UnrealBuilder
 from dialogs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
-
 
 
 class BuildBridgeWindow(QMainWindow):
@@ -32,6 +32,7 @@ class BuildBridgeWindow(QMainWindow):
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
         self.p4_client = P4Client(config=self.vcs_config)
+        self.unreal_builder = UnrealBuilder(parent=self)
         self.init_ui()
 
     def load_config(self):
@@ -126,29 +127,59 @@ class BuildBridgeWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
     def trigger_build(self):
-        selected_items = self.branch_list.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(
-                self, "Selection Error", "Please select a branch to build."
-            )
-            return
-        selected_branch = selected_items[0].text()
-        if selected_branch == "No release branches found.":
-            QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
-            return
-        try:
-            self.p4_client.switch_to_ref(selected_branch)
-            self.run_unreal_build(selected_branch)
-            QMessageBox.information(
-                self, "Build Started", f"Build triggered for {selected_branch}"
-            )
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Build Error", f"Failed to trigger build: {str(e)}"
-            )
+            selected_items = self.branch_list.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(
+                    self, "Selection Error", "Please select a branch to build."
+                )
+                return
+            selected_branch = selected_items[0].text()
+            if selected_branch == "No release branches found.":
+                QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
+                return
 
-    def run_unreal_build(self, branch: str):
-        print(f"Simulating Unreal build for branch: {branch}")
+            # Step 1: Switch to the selected branch using P4Client
+            try:
+                self.p4_client.switch_to_ref(selected_branch)
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Branch Switch Error", f"Failed to switch to branch: {str(e)}"
+                )
+                return
+
+            # Step 2: Determine the local project path after switching branches
+            try:
+                project_path = self.p4_client.get_local_project_path(selected_branch)
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Project Path Error", f"Failed to determine project path: {str(e)}"
+                )
+                return
+
+            # Step 3: Detect the required Unreal Engine version (exceptions handled by the builder)
+            engine_version = self.unreal_builder.get_unreal_engine_version(project_path)
+            if not engine_version:
+                return
+
+            # Step 4: Check if the required Unreal Engine version is installed
+            if not self.unreal_builder.check_unreal_engine_installed(engine_version):
+                return  # User was prompted to install the engine
+
+            # Step 5: Proceed with the UAT build
+            try:
+                success = self.unreal_builder.run_unreal_build(selected_branch, project_path, engine_version)
+                if success:
+                    QMessageBox.information(
+                        self, "Build Started", f"Build triggered for {selected_branch}"
+                    )
+                else:
+                    QMessageBox.critical(
+                        self, "Build Error", "Build failed. Check the logs for details."
+                    )
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Build Error", f"Failed to trigger build: {str(e)}"
+                )
 
     def closeEvent(self, event):
         self.p4_client._disconnect()

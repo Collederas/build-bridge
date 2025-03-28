@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Optional, Dict, Tuple
 from vcs.vcsbase import VCSClient
@@ -7,8 +8,9 @@ from P4 import P4, P4Exception
 
 class P4Client(VCSClient):
     def __init__(self, config: Optional[str] = None):
-            super().__init__(config)
-            self.p4 = P4()
+        super().__init__(config)
+        self.p4 = P4()
+        self.workspace_root = self.get_workspace_root()
 
     @property
     def is_connected(self) -> bool:
@@ -29,6 +31,46 @@ class P4Client(VCSClient):
 
     def _disconnect(self):
         self.p4.disconnect()
+
+    def get_workspace_root(self):
+        """
+        Retrieves the current Perforce workspace root directory.
+        """
+        try:
+            self.ensure_connected()
+            info = self.p4.run("info")[0]
+            return info.get("Client root")  # Extracts the workspace root
+        except P4Exception:
+            raise RuntimeError("Failed to retrieve Perforce workspace root.")
+        
+    def get_project_path(self, stream: str):
+        try:
+            if not self.workspace_root:
+                self.get_workspace_root()
+
+            # Map depot path to local path
+            where_output = self.p4.run("where", f"{stream}/...")
+            if not where_output or not isinstance(where_output, list):
+                raise RuntimeError(f"Could not map depot path {stream} to local path.")
+
+            # Extract the first valid mapping
+            local_path = where_output[0].get("path")
+            if not local_path:
+                raise RuntimeError(f"Could not determine local path for {stream}.")
+
+            # Normalize and extract the base directory
+            local_base_dir = os.path.normpath(local_path.rsplit("/...", 1)[0])
+
+            # Search for a .uproject file
+            for root, _, files in os.walk(local_base_dir):
+                for file in files:
+                    if file.endswith(".uproject"):
+                        return os.path.join(root, file)
+
+            raise RuntimeError(f"No .uproject file found in {local_base_dir}.")
+
+        except P4Exception as e:
+            raise RuntimeError(f"Failed to determine local project path: {str(e)}")
 
     def get_branches(self, stream_filter: Optional[str] = "Type=release") -> List[str]:
         """
@@ -66,6 +108,10 @@ class P4Client(VCSClient):
                 print("⚠️ WARNING: You have pending changes!")
                 print("Please shelve or submit them before switching streams.")
                 return
+
+            # Change to workspace root before executing p4 commands
+            original_dir = os.getcwd()
+            os.chdir(self.workspace_root)
 
             print(f"🔄 Switching to stream: {ref}")
             self.p4.run("switch", ref)

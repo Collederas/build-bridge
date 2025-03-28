@@ -1,5 +1,3 @@
-
-import queue
 import sys
 import json
 import os
@@ -15,11 +13,17 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QDialog,
-
 )
-from PyQt6.QtCore import Qt
-from typing import Optional
-from build.unreal_builder import UnrealBuilder
+
+from builder.unreal_builder import (
+    CleanupError,
+    EngineVersionError,
+    ProjectFileNotFoundError,
+    UATScriptNotFoundError,
+    UnrealBuilder,
+    BuildError,
+    UnrealEngineNotInstalledError,
+)
 from dialogs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
 
@@ -32,7 +36,6 @@ class BuildBridgeWindow(QMainWindow):
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
         self.p4_client = P4Client(config=self.vcs_config)
-        self.unreal_builder = UnrealBuilder(parent=self)
         self.init_ui()
 
     def load_config(self):
@@ -127,59 +130,129 @@ class BuildBridgeWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
     def trigger_build(self):
-            selected_items = self.branch_list.selectedItems()
-            if not selected_items:
-                QMessageBox.warning(
-                    self, "Selection Error", "Please select a branch to build."
-                )
-                return
-            selected_branch = selected_items[0].text()
-            if selected_branch == "No release branches found.":
-                QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
-                return
+        selected_items = self.branch_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(
+                self, "Selection Error", "Please select a branch to build."
+            )
+            return
+        selected_branch = selected_items[0].text()
+        if selected_branch == "No release branches found.":
+            QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
+            return
 
-            # Step 1: Switch to the selected branch using P4Client
-            try:
-                self.p4_client.switch_to_ref(selected_branch)
-            except Exception as e:
+        import pdb; pdb.set_trace()
+        # Step 1: Switch to the selected branch
+        try:
+            self.p4_client.switch_to_ref(selected_branch)
+        except Exception as e:
+            self.progress_bar.setVisible(False)
+            QMessageBox.critical(
+                self,
+                "Branch Switch Failed",
+                f"Could not switch to branch '{selected_branch}':\n\n{str(e)}\n\n"
+                "Check your Perforce connection settings or ensure no pending changes exist.",
+            )
+            return
+
+        # Step 2: Determine the local project path
+        try:
+            project_path = self.p4_client.get_project_path(selected_branch)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Project Path Error",
+                f"Could not find project path for '{selected_branch}':\n\n{str(e)}\n\n"
+                "Ensure the branch contains a valid Unreal project.",
+            )
+            return
+
+        # Step 3: Instantiate UnrealBuilder and detect Unreal Engine version
+        project_name = os.path.splitext(os.path.basename(project_path))[
+            0
+        ]
+        try:
+            unreal_builder = UnrealBuilder(
+                project_name=project_name,
+                project_path=project_path,
+            )
+        except ProjectFileNotFoundError as e:
+            QMessageBox.critical(
+                self,
+                "Project File Error",
+                f"Project file not found: {str(e)}",
+            )
+            return
+        except EngineVersionError as e:
+            QMessageBox.critical(
+                self,
+                "Engine Version Error",
+                f"Could not determine Unreal Engine version: {str(e)}",
+            )
+            return
+
+        # Step 4: Check if Unreal Engine is installed
+        try:
+            unreal_builder.check_unreal_engine_installed()
+        except UnrealEngineNotInstalledError as e:
+            reply = QMessageBox.question(
+                self,
+                "Unreal Engine Not Found",
+                f"{str(e)}\nWould you like to install it now? (Manual installation required)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                QMessageBox.information(
+                    self,
+                    "Install Unreal Engine",
+                    f"Please install Unreal Engine {unreal_builder.target_ue_version} using the Epic Games Launcher "
+                    "and then try again.",
+                )
+            return
+
+        # Step 5: Run the build
+        try:
+            success = unreal_builder.run_unreal_build(selected_branch)
+            if success:
+                QMessageBox.information(
+                    self,
+                    "Build Started",
+                    f"Build triggered successfully for '{selected_branch}'.",
+                )
+            else:
                 QMessageBox.critical(
-                    self, "Branch Switch Error", f"Failed to switch to branch: {str(e)}"
+                    self,
+                    "Build Failed",
+                    f"Build for '{selected_branch}' failed.\n\nCheck the build logs for details.",
                 )
-                return
-
-            # Step 2: Determine the local project path after switching branches
-            try:
-                project_path = self.p4_client.get_project_path(selected_branch)
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Project Path Error", f"Failed to determine project path: {str(e)}"
-                )
-                return
-
-            # Step 3: Detect the required Unreal Engine version (exceptions handled by the builder)
-            engine_version = self.unreal_builder.get_unreal_engine_version(project_path)
-            if not engine_version:
-                return
-
-            # Step 4: Check if the required Unreal Engine version is installed
-            if not self.unreal_builder.check_unreal_engine_installed(engine_version):
-                return  # User was prompted to install the engine
-
-            # Step 5: Proceed with the UAT build
-            try:
-                success = self.unreal_builder.run_unreal_build(selected_branch, project_path, engine_version)
-                if success:
-                    QMessageBox.information(
-                        self, "Build Started", f"Build triggered for {selected_branch}"
-                    )
-                else:
-                    QMessageBox.critical(
-                        self, "Build Error", "Build failed. Check the logs for details."
-                    )
-            except Exception as e:
-                QMessageBox.critical(
-                    self, "Build Error", f"Failed to trigger build: {str(e)}"
-                )
+        except BuildError as e:
+            self.progress_bar.setVisible(False)
+            QMessageBox.critical(
+                self,
+                "Build Error",
+                f"Build already in progress: {str(e)}",
+            )
+        except UATScriptNotFoundError as e:
+            self.progress_bar.setVisible(False)
+            QMessageBox.critical(
+                self,
+                "UAT Error",
+                f"UAT script error: {str(e)}",
+            )
+        except CleanupError as e:
+            QMessageBox.warning(
+                self,
+                "Cleanup Warning",
+                f"Build canceled, but cleanup failed: {str(e)}",
+            )
+        except Exception as e:
+            self.progress_bar.setVisible(False)
+            QMessageBox.critical(
+                self,
+                "Unexpected Build Error",
+                f"Failed to trigger build for '{selected_branch}':\n\n{str(e)}\n\n"
+                "Verify your Unreal Engine setup and project configuration.",
+            )
 
     def closeEvent(self, event):
         self.p4_client._disconnect()

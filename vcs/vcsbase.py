@@ -1,9 +1,6 @@
 from contextlib import contextmanager
 from abc import ABC, abstractmethod
-import json
-from typing import List, Optional, Dict, Any, Tuple
-from retry import retry
-import re
+from typing import List, Optional, Tuple
 
 
 @contextmanager
@@ -20,7 +17,7 @@ class VCSClient(ABC):
 
     def __init__(self, config: Optional[dict] = None):
         self.config = config
-        
+
     @abstractmethod
     def get_branches(self, pattern: Optional[str] = None) -> List[str]:
         """Return branches/tags/streams matching a glob/regex pattern."""

@@ -11,7 +11,9 @@ class P4Client(VCSClient):
         super().__init__(config)
         self.p4 = P4()
         self.workspace_root = self.get_workspace_root()
-        self.p4.exception_level = 1  # File(s) up-to-date is a warning - no exception raised
+        self.p4.exception_level = (
+            1  # File(s) up-to-date is a warning - no exception raised
+        )
 
     @property
     def is_connected(self) -> bool:
@@ -34,47 +36,38 @@ class P4Client(VCSClient):
         self.p4.disconnect()
 
     def get_workspace_root(self):
-        """
-        Retrieves the current Perforce workspace root directory.
-        """
         try:
             self.ensure_connected()
             info = self.p4.run("info")[0]
-            return info.get("clientRoot")  # Extracts the workspace root
-        except P4Exception:
-            raise RuntimeError("Failed to retrieve Perforce workspace root.")
-        
+            return info.get("clientRoot")
+        except P4Exception as e:
+            raise RuntimeError(
+                f"Could not retrieve workspace root: {str(e)}\n"
+                "Ensure your Perforce client is properly configured."
+            )
+
     def get_project_path(self, stream: str):
         try:
             if not self.workspace_root:
                 self.get_workspace_root()
 
-            # Map depot path to local path
             where_output = self.p4.run("where", f"{stream}/...")
             if not where_output or not isinstance(where_output, list):
-                raise RuntimeError(f"Could not map depot path {stream} to local path.")
+                raise RuntimeError(
+                    f"Depot path '{stream}' could not be mapped to a local path."
+                )
 
-            # Extract the first valid mapping
             local_path = where_output[0].get("path")
             if not local_path:
-                raise RuntimeError(f"Could not determine local path for {stream}.")
+                raise RuntimeError(f"No local path found for depot stream '{stream}'.")
 
-            # Normalize and extract the base directory
             local_base_dir = os.path.normpath(local_path.rsplit("\\...", 1)[0])
-
-            # TODO this needs to be checked (are all repos needing this extra dir?) and configurable in case
-            project_path = os.path.join(local_base_dir, "AtmosProject")
-
-            # Search for a .uproject file
-            for root, _, files in os.walk(project_path):
-                for file in files:
-                    if file.endswith(".uproject"):
-                        return os.path.join(root, file)
-
-            raise RuntimeError(f"No .uproject file found in {project_path}.")
+            
+            #TODO: remove hardcoded, make configurable
+            return os.path.join(local_base_dir, "AtmosProject")
 
         except P4Exception as e:
-            raise RuntimeError(f"Failed to determine local project path: {str(e)}")
+            raise RuntimeError(f"Perforce error while mapping project path: {str(e)}")
 
     def get_branches(self, stream_filter: Optional[str] = "Type=release") -> List[str]:
         """
@@ -88,17 +81,19 @@ class P4Client(VCSClient):
         try:
             self.ensure_connected()
             command_args = ["streams"]
-
-            # Apply server-side filtering (default or custom)
             if stream_filter:
                 command_args.extend(["-F", stream_filter])
 
             streams = self.p4.run(*command_args)
             stream_paths = [s["Stream"] for s in streams]
+            if not stream_paths:
+                return []  # Empty list instead of raising an error
             return stream_paths
-
         except P4Exception as e:
-            raise RuntimeError(f"Failed to get streams: {str(e)}")
+            raise RuntimeError(
+                f"Failed to fetch release branches: {str(e)}\n"
+                "Check your Perforce connection and stream filter settings."
+            )
 
     def switch_to_ref(self, ref: str) -> None:
         """
@@ -109,23 +104,16 @@ class P4Client(VCSClient):
             self.ensure_connected()
             opened_files = self.p4.run("opened")
             if opened_files:
-                print("⚠️ WARNING: You have pending changes!")
-                print("Please shelve or submit them before switching streams.")
-                return
+                raise RuntimeError(
+                    "You have pending changes in your workspace.\n"
+                    "Please shelve or submit them before switching branches."
+                )
 
-            # Change to workspace root before executing p4 commands
             os.chdir(self.get_workspace_root())
-
-            print(f"🔄 Switching to stream: {ref}")
             self.p4.run("switch", ref)
-
             self.p4.run_sync()
-            
-            print("✅ Sync complete!")
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-
+        except P4Exception as e:
+            raise RuntimeError(f"Failed to switch to stream '{ref}': {str(e)}")
 
     @staticmethod
     def test_connection(

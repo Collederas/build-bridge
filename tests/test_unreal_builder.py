@@ -4,12 +4,12 @@ from unittest.mock import patch, MagicMock
 import json
 from PyQt6.QtWidgets import QDialog
 from PyQt6.QtCore import QProcess
-from build.unreal_builder import UnrealBuilder
+from builder.unreal_builder import UnrealBuilder
 
 
 @pytest.fixture
 def unreal_builder():
-    return UnrealBuilder(parent=None)
+    return UnrealBuilder()
 
 
 def test_get_unreal_engine_version_success(unreal_builder):

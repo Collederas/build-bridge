@@ -2,6 +2,7 @@ import sys
 import json
 import os
 import keyring
+
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -15,13 +16,13 @@ from PyQt6.QtWidgets import (
     QDialog,
 )
 
+from PyQt6.QtCore import Qt
+
+from dialogs.build_dialog import BuildWindowDialog
 from builder.unreal_builder import (
-    CleanupError,
     EngineVersionError,
     ProjectFileNotFoundError,
-    UATScriptNotFoundError,
     UnrealBuilder,
-    BuildError,
     UnrealEngineNotInstalledError,
 )
 from dialogs.connection_dialog import ConnectionSettingsDialog
@@ -141,12 +142,10 @@ class BuildBridgeWindow(QMainWindow):
             QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
             return
 
-        import pdb; pdb.set_trace()
-        # Step 1: Switch to the selected branch
+        # Switch to the selected branch if we're not there already
         try:
             self.p4_client.switch_to_ref(selected_branch)
         except Exception as e:
-            self.progress_bar.setVisible(False)
             QMessageBox.critical(
                 self,
                 "Branch Switch Failed",
@@ -155,9 +154,9 @@ class BuildBridgeWindow(QMainWindow):
             )
             return
 
-        # Step 2: Determine the local project path
+        # Determine the local project path
         try:
-            project_path = self.p4_client.get_project_path(selected_branch)
+            vcs_root = self.p4_client.get_workspace_root()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -167,14 +166,12 @@ class BuildBridgeWindow(QMainWindow):
             )
             return
 
-        # Step 3: Instantiate UnrealBuilder and detect Unreal Engine version
-        project_name = os.path.splitext(os.path.basename(project_path))[
-            0
-        ]
         try:
+            # Feed the VCS root to the builder and let it find the uproject
+            # It will do all sorts of validations to ensure we can actually
+            # build the project and scream if prerequisites are not met.
             unreal_builder = UnrealBuilder(
-                project_name=project_name,
-                project_path=project_path,
+                root_directory=vcs_root,
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(
@@ -190,69 +187,15 @@ class BuildBridgeWindow(QMainWindow):
                 f"Could not determine Unreal Engine version: {str(e)}",
             )
             return
-
-        # Step 4: Check if Unreal Engine is installed
-        try:
-            unreal_builder.check_unreal_engine_installed()
         except UnrealEngineNotInstalledError as e:
-            reply = QMessageBox.question(
-                self,
-                "Unreal Engine Not Found",
-                f"{str(e)}\nWould you like to install it now? (Manual installation required)",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.critical(
+                self, f"Unreal Engine Not Found at: {unreal_builder.ue_base_path}"
             )
-            if reply == QMessageBox.StandardButton.Yes:
-                QMessageBox.information(
-                    self,
-                    "Install Unreal Engine",
-                    f"Please install Unreal Engine {unreal_builder.target_ue_version} using the Epic Games Launcher "
-                    "and then try again.",
-                )
+
             return
 
-        # Step 5: Run the build
-        try:
-            success = unreal_builder.run_unreal_build(selected_branch)
-            if success:
-                QMessageBox.information(
-                    self,
-                    "Build Started",
-                    f"Build triggered successfully for '{selected_branch}'.",
-                )
-            else:
-                QMessageBox.critical(
-                    self,
-                    "Build Failed",
-                    f"Build for '{selected_branch}' failed.\n\nCheck the build logs for details.",
-                )
-        except BuildError as e:
-            self.progress_bar.setVisible(False)
-            QMessageBox.critical(
-                self,
-                "Build Error",
-                f"Build already in progress: {str(e)}",
-            )
-        except UATScriptNotFoundError as e:
-            self.progress_bar.setVisible(False)
-            QMessageBox.critical(
-                self,
-                "UAT Error",
-                f"UAT script error: {str(e)}",
-            )
-        except CleanupError as e:
-            QMessageBox.warning(
-                self,
-                "Cleanup Warning",
-                f"Build canceled, but cleanup failed: {str(e)}",
-            )
-        except Exception as e:
-            self.progress_bar.setVisible(False)
-            QMessageBox.critical(
-                self,
-                "Unexpected Build Error",
-                f"Failed to trigger build for '{selected_branch}':\n\n{str(e)}\n\n"
-                "Verify your Unreal Engine setup and project configuration.",
-            )
+        dialog = BuildWindowDialog(unreal_builder, parent=self)
+        dialog.exec()
 
     def closeEvent(self, event):
         self.p4_client._disconnect()
@@ -268,3 +211,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename="logs/build.log",
+    filemode="a",
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)

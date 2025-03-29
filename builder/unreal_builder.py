@@ -1,7 +1,18 @@
-import os, sys, json
-from typing import Optional
-from PyQt6.QtWidgets import QMessageBox, QVBoxLayout, QTextEdit, QPushButton, QDialog
-from PyQt6.QtCore import QProcess
+import json
+import subprocess
+import os
+import sys
+import threading
+import logging
+from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class MultipleUprojectFoundError(Exception):
+    """Custom exception raised when multiple .uproject files are found."""
+
+    pass
 
 
 class BuildError(Exception):
@@ -40,56 +51,111 @@ class CleanupError(BuildError):
     pass
 
 
-# TODO: decouple this ui layer stuff from this module
-class BuildProgressDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Build Progress")
-        self.setGeometry(100, 100, 600, 400)
-        layout = QVBoxLayout(self)
-
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        layout.addWidget(self.log_output)
-
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.reject)
-        layout.addWidget(self.cancel_button)
-
-    def append_log(self, text: str):
-        self.log_output.append(text)
-        self.log_output.ensureCursorVisible()
-
-
 class UnrealBuilder:
     def __init__(
         self,
-        project_name: str,
-        project_path: str,
-        target_ue_version: Optional[str] = None,
+        root_directory: str,
         ue_base_path: str = "C:/Program Files/Epic Games",
     ):
+        # First check to find uproject in the root given. This must be first as it is
+        # a fundamental validation.
+        self.project_path = self.find_unreal_project_root(root_directory)
+        self.uproj = self.get_uproject_path()
+
+        # We will search here for the engine used for the build
         self.ue_base_path = ue_base_path
-        self.project_name = project_name
-        self.project_path = project_path
-        self.process = None
-        self.build_in_progress = False  # Lock to prevent concurrent builds
 
-        # Move build_dir and archive_dir to __init__
-        self.build_dir = "C:/Builds"  # TODO: Move to config
-        self.archive_dir = os.path.join(self.build_dir, project_name)
+        # Determine engine version from .uproject and ensure one is available
+        # on local machine.
 
-        # Determine engine version
-        self.target_ue_version = (
-            target_ue_version or self.get_engine_version_from_uproj()
-        )
+        self.target_ue_version = self.get_engine_version_from_uproj()
+        self.check_unreal_engine_installed()
+
+        # TODO: Move to config
+        self.build_dir = "C:/Builds"
+
+        self.on_build_output = None
+        self.on_build_finished = None
+
+    def register_build_output_callback(self, callback: Callable[[str], None]):
+        """Register a callback function to receive build output."""
+        self.on_build_output = callback
+
+    def register_build_finished_callback(self, callback: Callable[[bool], None]):
+        """Register a callback function to be called when build finishes."""
+        self.on_build_finished = callback
+
+    def _emit_output(self, output: str):
+        """Helper method to call the output callback if registered."""
+        if self.on_build_output:
+            self.on_build_output(output)
+
+    def _emit_finished(self, success: bool):
+        """Helper method to call the finished callback if registered."""
+        if self.on_build_finished:
+            self.on_build_finished(success)
+
+    @staticmethod
+    def find_unreal_project_root(workspace_root):
+        """
+        Finds the Unreal Engine project root (containing the .uproject file)
+        within a given workspace root.
+
+        Args:
+            workspace_root (str): The path to the Perforce workspace root.
+
+        Returns:
+            str: The normalized path to the Unreal Engine project root
+                if exactly one .uproject file is found.
+
+        Raises:
+            NoUprojectFoundError: If no .uproject file is found.
+            MultipleUprojectFoundError: If more than one .uproject file is found.
+        """
+        project_file_paths = []
+        for root, _, files in os.walk(workspace_root):
+            for file in files:
+                if file.endswith(".uproject"):
+                    project_file_paths.append(root)
+
+        if len(project_file_paths) == 1:
+            return os.path.normpath(project_file_paths[0])
+        elif len(project_file_paths) > 1:
+            raise MultipleUprojectFoundError(
+                f"Found multiple .uproject files in '{workspace_root}': {project_file_paths}. Please specify which project to use."
+            )
+        else:
+            raise ProjectFileNotFoundError(
+                f"No .uproject file found in '{workspace_root}'."
+            )
+
+    def get_uproject_path(self) -> str:
+        # If self.project_path is a directory, look for a .uproject file
+        if os.path.isdir(self.project_path):
+            # Find all .uproject files in the directory
+            uproject_files = [
+                f for f in os.listdir(self.project_path) if f.endswith(".uproject")
+            ]
+
+            if not uproject_files:
+                raise ProjectFileNotFoundError(
+                    f"No .uproject file found in: {self.project_path}"
+                )
+
+            # Use the first .uproject file found
+            uproj_path = os.path.join(self.project_path, uproject_files[0])
+        else:
+            # Assume self.project_path is already the path to the .uproject file
+            uproj_path = self.project_path
+
+        return uproj_path
 
     def get_engine_version_from_uproj(self) -> Optional[str]:
         """
         Reads the .uproject file to determine the required Unreal Engine version.
 
         Returns:
-            The Unreal Engine version (e.g., "5.3"), or None if detection fails.
+            The Unreal Engine version (e.g., "5.5"), or None if detection fails.
 
         Raises:
             ProjectFileNotFoundError: If the project file does not exist.
@@ -99,9 +165,8 @@ class UnrealBuilder:
             raise ProjectFileNotFoundError(
                 f"Project file not found: {self.project_path}"
             )
-
         try:
-            with open(self.project_path, "r") as f:
+            with open(self.uproj, "r") as f:
                 uproject_data = json.load(f)
                 engine_version = uproject_data.get("EngineAssociation")
                 if not engine_version:
@@ -132,65 +197,21 @@ class UnrealBuilder:
                 f"Unreal Engine {self.target_ue_version} is not installed at {ue_version_path}."
             )
 
-    def _cleanup_build_artifacts(self):
-        """
-        Cleans up temporary build artifacts in the archive directory after cancellation.
-
-        Raises:
-            CleanupError: If cleanup fails.
-        """
-        if os.path.exists(self.archive_dir):
-            try:
-                for root, dirs, files in os.walk(self.archive_dir, topdown=False):
-                    for name in files:
-                        os.remove(os.path.join(root, name))
-                    for name in dirs:
-                        os.rmdir(os.path.join(root, name))
-                os.rmdir(self.archive_dir)
-            except Exception as e:
-                raise CleanupError(
-                    f"Failed to clean up build artifacts: {str(e)}. "
-                    f"You may need to manually delete {self.archive_dir}."
-                )
-
-    def run_unreal_build(self, branch: str) -> bool:
-        """
-        Runs the Unreal build using UAT for the specified branch and project.
-
-        Args:
-            branch: The branch being built (e.g., "//MyGame/release_0.2.2").
-
-        Returns:
-            True if the build succeeds, False otherwise.
-
-        Raises:
-            BuildError: If a build is already in progress.
-        """
-
-        self.build_in_progress = True
-        ue_version_path = os.path.join(
-            self.ue_base_path, f"UE_{self.target_ue_version}"
-        )
+    def get_build_command(self):
+        """Returns the UAT command as a list for QProcess."""
+        ue_version_path = os.path.join(self.ue_base_path, f"UE_{self.target_ue_version}")
         uat_script = os.path.join(
             ue_version_path,
-            (
-                "Engine/Build/BatchFiles/RunUAT.bat"
-                if sys.platform == "win32"
-                else "Engine/Build/BatchFiles/RunUAT.sh"
-            ),
+            "Engine/Build/BatchFiles/RunUAT.bat" if sys.platform == "win32" else "Engine/Build/BatchFiles/RunUAT.sh"
         )
 
         if not os.path.exists(uat_script):
-            self.build_in_progress = False
-            raise UATScriptNotFoundError(
-                f"UAT script not found at {uat_script}. "
-                f"Ensure Unreal Engine {self.target_ue_version} is installed correctly."
-            )
+            raise Exception(f"UAT script not found at {uat_script}")
 
-        uat_args = [
-            uat_script,
+        return [
+            f'"{uat_script}"',
             "BuildCookRun",
-            f"-project={self.project_path}",
+            f'-project="{self.uproj}"',
             "-noP4",
             "-platform=Win64",
             "-clientconfig=Development",
@@ -198,56 +219,22 @@ class UnrealBuilder:
             "-cook",
             "-stage",
             "-pak",
+            "-clean",
             "-archive",
-            f"-archivedirectory={self.archive_dir}",
+            f'-archivedirectory="{self.build_dir}"'
         ]
 
-        dialog = BuildProgressDialog()  # Mock dialog for logging
-        self.process = QProcess()
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-
-        self.process.readyReadStandardOutput.connect(
-            lambda: self.process
-            and dialog.append_log(
-                self.process.readAllStandardOutput().data().decode("utf-8")
-            )
-        )
-        self.process.finished.connect(
-            lambda: None
-        )  # Placeholder; UI layer can handle this
-
-        dialog.append_log(f"Starting build for {branch}...\n")
-        dialog.append_log(f"UAT Command: {' '.join(uat_args)}\n\n")
-        self.process.start(uat_args[0], uat_args[1:])
-
-        # Simulate dialog.exec() behavior (this would be handled by UI)
-        # For now, we'll assume the process runs to completion or is canceled externally
-        self.process.waitForFinished(-1)  # Blocking wait; UI layer would handle async
-
-        if self.process.state() == QProcess.ProcessState.Running:
-            dialog.append_log("\nAttempting to gracefully stop the build...")
-            self.end_build_process(canceled=True)
-            return False
-
-        exit_code = self.process.exitCode()
-        if exit_code == 0:
-            dialog.append_log("\nBuild completed successfully!")
-            self.end_build_process()
-            return True
-        else:
-            dialog.append_log(f"\nBuild failed with exit code {exit_code}.")
-            self.end_build_process()
-            return False
-
-    def end_build_process(self, canceled=False):
-        """Terminates the build process and manages cleanup if it was canceled."""
-        if self.process:
-            self.process.readyReadStandardOutput.disconnect()
-            self.process.finished.disconnect()
-            if canceled:
-                self.process.terminate()
-                if not self.process.waitForFinished(2000):  # Wait up to 2 seconds
-                    self.process.kill()
-                self._cleanup_build_artifacts()
-            self.process = None
-        self.build_in_progress = False
+    def cleanup_build_artifacts(self):
+        """Cleans up build artifacts."""
+        if os.path.exists(self.build_dir):
+            try:
+                for root, dirs, files in os.walk(self.build_dir, topdown=False):
+                    for name in files:
+                        os.remove(os.path.join(root, name))
+                    for name in dirs:
+                        os.rmdir(os.path.join(root, name))
+                os.rmdir(self.build_dir)
+                logger.info(f"Cleaned up artifacts at {self.build_dir}")
+            except Exception as e:
+                logger.error(f"Cleanup failed: {str(e)}", exc_info=True)
+                raise

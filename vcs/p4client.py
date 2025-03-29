@@ -46,29 +46,6 @@ class P4Client(VCSClient):
                 "Ensure your Perforce client is properly configured."
             )
 
-    def get_project_path(self, stream: str):
-        try:
-            if not self.workspace_root:
-                self.get_workspace_root()
-
-            where_output = self.p4.run("where", f"{stream}/...")
-            if not where_output or not isinstance(where_output, list):
-                raise RuntimeError(
-                    f"Depot path '{stream}' could not be mapped to a local path."
-                )
-
-            local_path = where_output[0].get("path")
-            if not local_path:
-                raise RuntimeError(f"No local path found for depot stream '{stream}'.")
-
-            local_base_dir = os.path.normpath(local_path.rsplit("\\...", 1)[0])
-            
-            #TODO: remove hardcoded, make configurable
-            return os.path.join(local_base_dir, "AtmosProject")
-
-        except P4Exception as e:
-            raise RuntimeError(f"Perforce error while mapping project path: {str(e)}")
-
     def get_branches(self, stream_filter: Optional[str] = "Type=release") -> List[str]:
         """
         Returns Perforce streams matching server-side filter criteria, defaulting to release streams.

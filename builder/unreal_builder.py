@@ -55,12 +55,13 @@ class UnrealBuilder:
     def __init__(
         self,
         root_directory: str,
+        build_dest: str,
         ue_base_path: str = "C:/Program Files/Epic Games",
     ):
         # First check to find uproject in the root given. This must be first as it is
         # a fundamental validation.
         self.project_path = self.find_unreal_project_root(root_directory)
-        self.uproj = self.get_uproject_path()
+        self.uproj_path = self.get_uproject_path()
 
         # We will search here for the engine used for the build
         self.ue_base_path = ue_base_path
@@ -71,8 +72,7 @@ class UnrealBuilder:
         self.target_ue_version = self.get_engine_version_from_uproj()
         self.check_unreal_engine_installed()
 
-        # TODO: Move to config
-        self.build_dir = "C:/Builds"
+        self.build_dir = build_dest
 
         self.on_build_output = None
         self.on_build_finished = None
@@ -166,7 +166,7 @@ class UnrealBuilder:
                 f"Project file not found: {self.project_path}"
             )
         try:
-            with open(self.uproj, "r") as f:
+            with open(self.uproj_path, "r") as f:
                 uproject_data = json.load(f)
                 engine_version = uproject_data.get("EngineAssociation")
                 if not engine_version:
@@ -211,7 +211,7 @@ class UnrealBuilder:
         return [
             f'"{uat_script}"',
             "BuildCookRun",
-            f'-project="{self.uproj}"',
+            f'-project="{self.uproj_path}"',
             "-noP4",
             "-platform=Win64",
             "-clientconfig=Development",

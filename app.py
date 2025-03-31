@@ -18,14 +18,16 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtCore import Qt
 
-from dialogs.build_dialog import BuildWindowDialog
+from builder.build_dialog import BuildWindowDialog
+from builder.buildlist_widget import BuildListWidget
 from builder.unreal_builder import (
     EngineVersionError,
     ProjectFileNotFoundError,
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
-from dialogs.connection_dialog import ConnectionSettingsDialog
+from utils.paths import unc_join_path
+from vcs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
 
 
@@ -37,6 +39,9 @@ class BuildBridgeWindow(QMainWindow):
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
         self.p4_client = P4Client(config=self.vcs_config)
+
+        # TODO: Move to config
+        self.build_dir = "C:/Builds"
         self.init_ui()
 
     def load_config(self):
@@ -110,6 +115,13 @@ class BuildBridgeWindow(QMainWindow):
         button_layout.addWidget(build_btn)
 
         layout.addLayout(button_layout)
+
+        # Existing Builds Section
+        layout.addWidget(QLabel("Existing Builds:"))
+        self.build_list_widget = BuildListWidget(self.build_dir, self)
+        layout.addWidget(self.build_list_widget)
+
+        self.refresh_branches()
         self.refresh_branches()
 
     def open_settings_dialog(self):
@@ -166,12 +178,13 @@ class BuildBridgeWindow(QMainWindow):
             )
             return
 
-        try:
+        try:           
             # Feed the VCS root to the builder and let it find the uproject
             # It will do all sorts of validations to ensure we can actually
             # build the project and scream if prerequisites are not met.
             unreal_builder = UnrealBuilder(
                 root_directory=vcs_root,
+                build_dest=unc_join_path(self.build_dir, selected_branch)
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(

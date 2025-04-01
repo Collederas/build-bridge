@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QDialog,
 )
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
 from builder.build_dialog import BuildWindowDialog
 from builder.buildlist_widget import BuildListWidget
@@ -35,6 +35,7 @@ class BuildBridgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BuildBridge")
+        self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 400, 300)
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
@@ -178,13 +179,38 @@ class BuildBridgeWindow(QMainWindow):
             )
             return
 
-        try:           
+        try:
+
+            build_dest = unc_join_path(self.build_dir, selected_branch)
+            # Check if build directory already exists
+            if os.path.exists(build_dest):
+                response = QMessageBox.question(
+                    self,
+                    "Build Conflict",
+                    f"A build already exists at:\n{build_dest}\n\nDo you want to proceed and overwrite it? This will delete the existing build directory.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if response == QMessageBox.StandardButton.No:
+                    return  # Cancel and return to main window
+                # Proceed with cleanup
+                import shutil
+
+                try:
+                    shutil.rmtree(build_dest)
+                except Exception as e:
+                    QMessageBox.critical(
+                        self,
+                        "Cleanup Error",
+                        f"Failed to delete existing build directory:\n{str(e)}",
+                    )
+                    return
+
             # Feed the VCS root to the builder and let it find the uproject
             # It will do all sorts of validations to ensure we can actually
             # build the project and scream if prerequisites are not met.
             unreal_builder = UnrealBuilder(
-                root_directory=vcs_root,
-                build_dest=unc_join_path(self.build_dir, selected_branch)
+                root_directory=vcs_root, build_dest=build_dest
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(
@@ -210,6 +236,12 @@ class BuildBridgeWindow(QMainWindow):
         dialog = BuildWindowDialog(unreal_builder, parent=self)
         dialog.exec()
 
+        self.build_list_widget.load_builds(select_build=selected_branch)
+
+    def focusInEvent(self, a0):
+        self.build_list_widget.load_builds()
+        return super().focusInEvent(a0)
+
     def closeEvent(self, event):
         self.p4_client._disconnect()
         super().closeEvent(event)
@@ -226,9 +258,10 @@ if __name__ == "__main__":
     main()
 
 import logging
+
 logging.basicConfig(
     level=logging.DEBUG,
     filename="logs/build.log",
     filemode="a",
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )

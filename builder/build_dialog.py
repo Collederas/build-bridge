@@ -23,6 +23,7 @@ class BuildWindowDialog(QDialog):
         super().__init__(parent)
         self.builder = builder
         self.build_in_progress = False
+        self.process = None
         self.setup_ui()
         self.start_build()
 
@@ -58,7 +59,7 @@ class BuildWindowDialog(QDialog):
             if self.build_in_progress:
                 self.append_output("A build is already in progress.")
                 return
-
+                
             self.build_in_progress = True
             self.process = QProcess(self)
             self.process.readyReadStandardOutput.connect(self.handle_output)

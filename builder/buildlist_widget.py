@@ -1,7 +1,9 @@
 import os
 import logging
-from PyQt6.QtWidgets import QListWidget, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+from PyQt6.QtWidgets import QListWidget, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox
 from PyQt6.QtCore import Qt
+
+from publisher.publisher_factory import PublisherFactory
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,10 @@ class BuildListWidget(QWidget):
         self.open_explorer_button.clicked.connect(self.open_in_explorer)
         self.open_explorer_button.setEnabled(False)
         button_layout.addWidget(self.open_explorer_button)
+
+        self.store_selector = QComboBox()
+        self.store_selector.addItems(["Steam"])  # Add more stores later (e.g., "Epic")
+        button_layout.addWidget(self.store_selector)
 
         self.publish_button = QPushButton("Publish")
         self.publish_button.clicked.connect(self.open_publish_dialog)
@@ -75,12 +81,15 @@ class BuildListWidget(QWidget):
             return
         build_name = selected_items[0].text()
         build_path = os.path.join(self.build_dir, build_name)
+        store_name = self.store_selector.currentText()
         try:
-            from dialogs.publish_dialog import PublishDialog  # Import here to avoid circular issues
-            dialog = PublishDialog(build_path, self.parent().vcs_config, self)
-            dialog.exec()
+            publisher = PublisherFactory.get_publisher(store_name, build_path)
+            if not publisher.config.get("app_id"):  # Check if config exists
+                if not publisher.configure(self):
+                    return
+            publisher.publish(self)
         except Exception as e:
-            logger.error(f"Publish dialog failed: {str(e)}", exc_info=True)
+            logger.error(f"Publish to {store_name} failed: {str(e)}", exc_info=True)
 
     def get_selected_build_path(self):
         """Return the full path of the selected build."""

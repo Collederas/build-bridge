@@ -34,7 +34,7 @@ from vcs.p4client import P4Client
 class BuildBridgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("BuildBridge")
+        self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 400, 300)
         self.config_path = "vcsconfig.json"

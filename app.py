@@ -16,16 +16,18 @@ from PyQt6.QtWidgets import (
     QDialog,
 )
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
-from dialogs.build_dialog import BuildWindowDialog
+from builder.build_dialog import BuildWindowDialog
+from builder.buildlist_widget import BuildListWidget
 from builder.unreal_builder import (
     EngineVersionError,
     ProjectFileNotFoundError,
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
-from dialogs.connection_dialog import ConnectionSettingsDialog
+from utils.paths import unc_join_path
+from vcs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
 
 
@@ -33,10 +35,14 @@ class BuildBridgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BuildBridge")
+        self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 400, 300)
         self.config_path = "vcsconfig.json"
         self.vcs_config = self.load_config()
         self.p4_client = P4Client(config=self.vcs_config)
+
+        # TODO: Move to config
+        self.build_dir = "C:/Builds"
         self.init_ui()
 
     def load_config(self):
@@ -110,6 +116,13 @@ class BuildBridgeWindow(QMainWindow):
         button_layout.addWidget(build_btn)
 
         layout.addLayout(button_layout)
+
+        # Existing Builds Section
+        layout.addWidget(QLabel("Existing Builds:"))
+        self.build_list_widget = BuildListWidget(self.build_dir, self)
+        layout.addWidget(self.build_list_widget)
+
+        self.refresh_branches()
         self.refresh_branches()
 
     def open_settings_dialog(self):
@@ -167,11 +180,37 @@ class BuildBridgeWindow(QMainWindow):
             return
 
         try:
+
+            build_dest = unc_join_path(self.build_dir, selected_branch)
+            # Check if build directory already exists
+            if os.path.exists(build_dest):
+                response = QMessageBox.question(
+                    self,
+                    "Build Conflict",
+                    f"A build already exists at:\n{build_dest}\n\nDo you want to proceed and overwrite it? This will delete the existing build directory.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if response == QMessageBox.StandardButton.No:
+                    return  # Cancel and return to main window
+                # Proceed with cleanup
+                import shutil
+
+                try:
+                    shutil.rmtree(build_dest)
+                except Exception as e:
+                    QMessageBox.critical(
+                        self,
+                        "Cleanup Error",
+                        f"Failed to delete existing build directory:\n{str(e)}",
+                    )
+                    return
+
             # Feed the VCS root to the builder and let it find the uproject
             # It will do all sorts of validations to ensure we can actually
             # build the project and scream if prerequisites are not met.
             unreal_builder = UnrealBuilder(
-                root_directory=vcs_root,
+                root_directory=vcs_root, build_dest=build_dest
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(
@@ -197,6 +236,12 @@ class BuildBridgeWindow(QMainWindow):
         dialog = BuildWindowDialog(unreal_builder, parent=self)
         dialog.exec()
 
+        self.build_list_widget.load_builds(select_build=selected_branch)
+
+    def focusInEvent(self, a0):
+        self.build_list_widget.load_builds()
+        return super().focusInEvent(a0)
+
     def closeEvent(self, event):
         self.p4_client._disconnect()
         super().closeEvent(event)
@@ -213,9 +258,10 @@ if __name__ == "__main__":
     main()
 
 import logging
+
 logging.basicConfig(
     level=logging.DEBUG,
     filename="logs/build.log",
     filemode="a",
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )

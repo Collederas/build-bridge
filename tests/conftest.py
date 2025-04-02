@@ -16,9 +16,9 @@ def p4_client():
         config = json.load(f)
 
     password = keyring.get_password(
-        "BuildBridge", config["perforce"]["config_override"]["p4user"]
+        "BuildBridge", config["perforce"]["p4user"]
     )
-    config["perforce"]["config_override"]["p4password"] = password
+    config["perforce"]["p4password"] = password
     client = P4Client(config)
 
     try:

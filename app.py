@@ -1,7 +1,5 @@
 import sys
-import json
 import os
-import keyring
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -14,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QDialog,
+    QMenu,
 )
 
 from PyQt6.QtGui import QIcon
@@ -26,9 +25,11 @@ from builder.unreal_builder import (
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
+from dialogs.settings import SettingsDialog
+from publisher.steam.steam_publisher import SteamPublisher
 from utils.paths import unc_join_path
-from vcs.connection_dialog import ConnectionSettingsDialog
 from vcs.p4client import P4Client
+from vcs.vcsbase import MissingConfigException
 
 
 class BuildBridgeWindow(QMainWindow):
@@ -37,65 +38,37 @@ class BuildBridgeWindow(QMainWindow):
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 400, 300)
-        self.config_path = "vcsconfig.json"
-        self.vcs_config = self.load_config()
-        self.p4_client = P4Client(config=self.vcs_config)
+
+        try:
+            self.vcs_client = P4Client()
+        except MissingConfigException as e:
+            QMessageBox.warning(
+                self,
+                "Missing VCS Configuration",
+                "VCS is not configured. You can set it up in File->Settings->VCS",
+            )
+        except ConnectionError:
+            QMessageBox.warning(
+                self,
+                "Wrong VCS Configuration",
+                "VCS is misconfigured. Check details in File->Settings->VCS",
+            )
+            self.vcs_client = None
 
         # TODO: Move to config
         self.build_dir = "C:/Builds"
+
+        self.publishers = {}
+        self.build_list_widget = None
+
         self.init_ui()
 
-    def load_config(self):
-        config = {}
-        if os.path.exists(self.config_path):
-            try:
-                with open(self.config_path, "r") as f:
-                    config = json.load(f)
-            except json.JSONDecodeError as e:
-                print(f"Error decoding {self.config_path}: {e}")
-            except Exception as e:
-                print(f"Error loading {self.config_path}: {e}")
-
-        if "perforce" in config and "config_override" in config["perforce"]:
-            user = config["perforce"]["config_override"].get("p4user")
-            if user:
-                password = keyring.get_password("BuildBridge", user)
-                if password:
-                    config["perforce"]["config_override"]["p4password"] = password
-
-        return config
-
-    def save_config(self, new_config: dict):
-        config_override = new_config["perforce"]["config_override"]
-        user = config_override["p4user"]
-        password = config_override["p4password"]
-        if user and password:
-            keyring.set_password("BuildBridge", user, password)
-
-            # Load existing config to preserve other data
-            current_config = {}
-            if os.path.exists(self.config_path):
-                with open(self.config_path, "r") as f:
-                    current_config = json.load(f)
-
-            # Update with new config (excluding password)
-            config_to_save = {
-                "perforce": {
-                    "config_override": {
-                        k: v for k, v in config_override.items() if k != "p4password"
-                    }
-                }
-            }
-            current_config.update(config_to_save)
-
-        # Save
-        with open(self.config_path, "w") as f:
-            json.dump(config_to_save, f, indent=4)
-
     def init_ui(self):
-        menubar = self.menuBar()
-        file_menu = menubar.addMenu("File")
-        settings_action = file_menu.addAction("Connection Settings")
+        menu_bar = self.menuBar()
+        # Creating menus using a QMenu object
+        file_menu = QMenu("&File", self)
+        menu_bar.addMenu(file_menu)
+        settings_action = file_menu.addAction("Settings")
         settings_action.triggered.connect(self.open_settings_dialog)
 
         central_widget = QWidget()
@@ -110,32 +83,41 @@ class BuildBridgeWindow(QMainWindow):
         refresh_btn = QPushButton("Refresh Branches")
         refresh_btn.clicked.connect(self.refresh_branches)
         button_layout.addWidget(refresh_btn)
-
         build_btn = QPushButton("Build Selected")
         build_btn.clicked.connect(self.trigger_build)
         button_layout.addWidget(build_btn)
 
-        layout.addLayout(button_layout)
-
-        # Existing Builds Section
         layout.addWidget(QLabel("Existing Builds:"))
         self.build_list_widget = BuildListWidget(self.build_dir, self)
         layout.addWidget(self.build_list_widget)
 
-        self.refresh_branches()
-        self.refresh_branches()
+        publish_btn = QPushButton("Publish Selected")
+        publish_btn.clicked.connect(self.handle_publish)
+        button_layout.addWidget(publish_btn)
+        layout.addLayout(button_layout)
+
+        if self.vcs_client:
+            self.refresh_branches()
 
     def open_settings_dialog(self):
-        dialog = ConnectionSettingsDialog(self.vcs_config, self)
+        dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_config = dialog.get_config()
-            self.save_config(new_config)
+            vcs_config, publisher_configs = dialog.get_configs()
+            self.vcs_config = vcs_config
+            self.vcs_client = P4Client()
+            self.publishers.clear()
+
+            for store_conf in publisher_configs:
+                print(store_conf)
+                if store_conf["Steam"]["enabled"]:
+                    publisher = SteamPublisher()
+                    self.publishers["Steam"] = publisher
             self.refresh_branches()
 
     def refresh_branches(self):
         try:
             self.branch_list.clear()
-            branches = self.p4_client.get_branches()
+            branches = self.vcs_client.get_branches()
             if not branches:
                 self.branch_list.addItem("No release branches found.")
             else:
@@ -157,7 +139,7 @@ class BuildBridgeWindow(QMainWindow):
 
         # Switch to the selected branch if we're not there already
         try:
-            self.p4_client.switch_to_ref(selected_branch)
+            self.vcs_client.switch_to_ref(selected_branch)
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -169,7 +151,7 @@ class BuildBridgeWindow(QMainWindow):
 
         # Determine the local project path
         try:
-            vcs_root = self.p4_client.get_workspace_root()
+            vcs_root = self.vcs_client.get_workspace_root()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -238,12 +220,30 @@ class BuildBridgeWindow(QMainWindow):
 
         self.build_list_widget.load_builds(select_build=selected_branch)
 
+    def handle_publish(self):
+        selected_items = self.build_list_widget.build_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(
+                self, "Selection Error", "Please select a build to publish."
+            )
+            return
+        
+        if not self.publishers:
+            QMessageBox.warning(
+                self,
+                "No Publishers",
+                "No publishing destinations enabled. Configure in Settings.",
+            )
+            return
+        for publisher in self.publishers.items():
+            publisher.publish()
+
     def focusInEvent(self, a0):
         self.build_list_widget.load_builds()
         return super().focusInEvent(a0)
 
     def closeEvent(self, event):
-        self.p4_client._disconnect()
+        self.vcs_client._disconnect()
         super().closeEvent(event)
 
 
@@ -256,12 +256,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-import logging
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename="logs/build.log",
-    filemode="a",
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)

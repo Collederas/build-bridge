@@ -1,8 +1,6 @@
 import json
-import subprocess
 import os
 import sys
-import threading
 import logging
 from typing import Callable, Optional
 

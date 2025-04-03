@@ -10,15 +10,15 @@ def p4_client():
     Fixture to create a P4 client connected to a test Perforce server.
     Uses environment variables or a test configuration file.
     """
-    config_path = "tests/tesT_vcsconfig.json"
+    config_path = "tests/test_vcsconfig.json"
 
     with open(config_path, "r") as f:
         config = json.load(f)
 
     password = keyring.get_password(
-        "BuildBridge", config["perforce"]["config_override"]["p4user"]
+        "BuildBridge", config["perforce"]["p4user"]
     )
-    config["perforce"]["config_override"]["p4password"] = password
+    config["perforce"]["p4password"] = password
     client = P4Client(config)
 
     try:

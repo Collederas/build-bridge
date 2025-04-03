@@ -1,10 +1,10 @@
 import json
-import subprocess
 import os
 import sys
-import threading
 import logging
 from typing import Callable, Optional
+
+from app_config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -54,46 +54,26 @@ class CleanupError(BuildError):
 class UnrealBuilder:
     def __init__(
         self,
-        root_directory: str,
-        build_dest: str,
-        ue_base_path: str = "C:/Program Files/Epic Games",
+        root_directory: str, # project dir, actually
+        config_name: str = "build"
     ):
-        # First check to find uproject in the root given. This must be first as it is
-        # a fundamental validation.
+        self.config_manager = ConfigManager(config_name)
+        
+        self.build_config = self.config_manager.get("unreal", {})
+        
+        # Project path validation
         self.project_path = self.find_unreal_project_root(root_directory)
         self.uproj_path = self.get_uproject_path()
 
-        # We will search here for the engine used for the build
-        self.ue_base_path = ue_base_path
+        self.ue_base_path = self.build_config.get(
+            "engine_path", 
+        )
 
-        # Determine engine version from .uproject and ensure one is available
-        # on local machine.
-
+        # Determine engine version and validate
         self.target_ue_version = self.get_engine_version_from_uproj()
         self.check_unreal_engine_installed()
 
-        self.build_dir = build_dest
-
-        self.on_build_output = None
-        self.on_build_finished = None
-
-    def register_build_output_callback(self, callback: Callable[[str], None]):
-        """Register a callback function to receive build output."""
-        self.on_build_output = callback
-
-    def register_build_finished_callback(self, callback: Callable[[bool], None]):
-        """Register a callback function to be called when build finishes."""
-        self.on_build_finished = callback
-
-    def _emit_output(self, output: str):
-        """Helper method to call the output callback if registered."""
-        if self.on_build_output:
-            self.on_build_output(output)
-
-    def _emit_finished(self, success: bool):
-        """Helper method to call the finished callback if registered."""
-        if self.on_build_finished:
-            self.on_build_finished(success)
+        self.build_dir = self.build_config.get("archive_directory", "C:/Builds")
 
     @staticmethod
     def find_unreal_project_root(workspace_root):
@@ -198,7 +178,7 @@ class UnrealBuilder:
             )
 
     def get_build_command(self):
-        """Returns the UAT command as a list for QProcess."""
+        """Returns the UAT command as a list for QProcess using config settings."""
         ue_version_path = os.path.join(self.ue_base_path, f"UE_{self.target_ue_version}")
         uat_script = os.path.join(
             ue_version_path,
@@ -206,23 +186,38 @@ class UnrealBuilder:
         )
 
         if not os.path.exists(uat_script):
-            raise Exception(f"UAT script not found at {uat_script}")
+            raise UATScriptNotFoundError(f"UAT script not found at {uat_script}")
 
-        return [
+        # Base command
+        command = [
             f'"{uat_script}"',
             "BuildCookRun",
             f'-project="{self.uproj_path}"',
             "-noP4",
-            "-platform=Win64",
-            "-clientconfig=Development",
-            "-build",
-            "-cook",
-            "-stage",
-            "-pak",
-            "-clean",
+        ]
+
+        # Add platform from config
+        target_platforms = self.build_config.get("target_platforms", ["Win64"])
+        command.append(f"-platform={target_platforms[0]}")
+
+        # Add configuration from config
+        target_config = self.build_config.get("target_config", "Development")
+        command.append(f"-clientconfig={target_config}")
+
+        # Add standard build options
+        command.extend(["-build", "-cook", "-stage", "-pak"])
+
+        # Add clean build if specified
+        if self.build_config.get("clean_build", False):
+            command.append("-clean")
+
+        # Add archive settings
+        command.extend([
             "-archive",
             f'-archivedirectory="{self.build_dir}"'
-        ]
+        ])
+
+        return command
 
     def cleanup_build_artifacts(self):
         """Cleans up build artifacts."""
@@ -237,4 +232,4 @@ class UnrealBuilder:
                 logger.info(f"Cleaned up artifacts at {self.build_dir}")
             except Exception as e:
                 logger.error(f"Cleanup failed: {str(e)}", exc_info=True)
-                raise
+                raise CleanupError(f"Failed to clean up build artifacts: {str(e)}")

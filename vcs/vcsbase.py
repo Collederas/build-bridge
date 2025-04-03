@@ -1,7 +1,12 @@
 from contextlib import contextmanager
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from enum import Enum
+from typing import Dict, List, Optional, Tuple
 
+
+class MissingConfigException(Exception):
+    """Missing configuration"""
+    pass
 
 @contextmanager
 def vcs_session(config_path="vcsconfig.json"):
@@ -11,12 +16,15 @@ def vcs_session(config_path="vcsconfig.json"):
     finally:
         client.close()
 
+class VCSType(Enum):
+    NONE = ""
+    PERFORCE = "perforce"
+    GIT = "git"
 
 class VCSClient(ABC):
     """Base class to abstract connection to different VCS."""
 
-    def __init__(self, config: Optional[dict] = None):
-        self.config = config
+    vcs_type = VCSType.NONE
 
     @abstractmethod
     def get_branches(self, pattern: Optional[str] = None) -> List[str]:
@@ -43,16 +51,7 @@ class VCSClient(ABC):
     def is_connected(self):
         pass
 
-    @staticmethod
-    @abstractmethod
-    def test_connection(
-        address: str, user: str, password: str, client: str
-    ) -> Tuple[str, Optional[str]]:
-        """Test connection with given parameters. Returns (result, error_msg)."""
-        pass
-
     def ensure_connected(self) -> None:
-        """Reusable connection logic (with retry, if needed)."""
         if not self.is_connected:
             try:
                 self._connect()

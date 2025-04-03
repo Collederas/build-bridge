@@ -86,8 +86,12 @@ class SteamUploadDialog(QDialog):
 
     def start_upload(self):
         self.thread = UploadThread(self.steamcmd_path, self.vdf_file, self.config)
+        self.thread.log_signal.connect(self.log_progress)
         self.thread.finished_signal.connect(self.upload_finished)
         self.thread.start()
+
+    def log_progress(self):
+        pass
 
     def upload_finished(self, success):
         self.cancel_btn.setText("Close")
@@ -98,11 +102,11 @@ class SteamUploadDialog(QDialog):
 
 
 class SteamPublisher(BasePublisher):
-    store_name = "Steam"
     KEYRING_SERVICE = "BuildBridgeSteam"
 
     def __init__(self):        
-        # Use ConfigManager for stores
+        # Use ConfigManager for stores. Probably at some point would
+        # be good to support multiple projects so config should be per-project.
         self.config_manager = ConfigManager("stores")
         
         # Get basic config data

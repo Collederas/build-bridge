@@ -70,7 +70,24 @@ class ConfigManager:
                 "platform": "Win64",
                 "configuration": "Development",
                 "clean_build": False,
-                "build_options": []
+                "build_options": [],
+                "unreal": {
+                    "engine_path": "C:/Program Files/Epic Games",
+                    "archive_directory": "C:/Builds",
+                    "build_type": "Development",
+                    "target_platforms": ["Win64"],
+                    "target_config": "Development",
+                    "cook_all": True,
+                    "cook_dirs": [],
+                    "build_uat_options": [
+                        "-map=",
+                        "-clientconfig=Development",
+                        "-noP4",
+                        "-stage",
+                        "-archive",
+                        "-archivedirectory="
+                    ],
+                }
             }
         elif self.config_name == "stores":
             return {
@@ -80,13 +97,7 @@ class ConfigManager:
                     "depot_id": "",
                     "build_id": "",
                     "builder_path": ""
-                },
-                "epic": {
-                    "enabled": False,
-                    "product_id": "",
-                    "artifact_id": ""
                 }
-                # Add other stores as needed
             }
         else:
             return {}  # Generic empty config for unknown types

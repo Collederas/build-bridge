@@ -47,7 +47,7 @@ class BuildWindowDialog(QDialog):
         self.button_layout.addWidget(self.action_button)
 
         # Build list widget (hidden until build completes)
-        self.build_list_widget = BuildListWidget(self.builder.build_dir, self)
+        self.build_list_widget = BuildListWidget(self)
         self.build_list_widget.setVisible(False)
         self.layout.addWidget(self.build_list_widget)
 

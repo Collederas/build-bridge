@@ -80,13 +80,13 @@ class BuildBridgeWindow(QMainWindow):
         branches_widget = QWidget()
         branches_layout = QVBoxLayout(branches_widget)
         branches_layout.addWidget(QLabel("Release Branches:"))
-        
+
         self.branch_list = QListWidget()
         self.branch_list.setMinimumHeight(100)
         branches_layout.addWidget(self.branch_list)
 
         vcs_button_layout = QHBoxLayout()
-        
+
         refresh_btn = QPushButton("Refresh Branches")
         refresh_btn.clicked.connect(self.refresh_branches)
         refresh_btn.setMaximumWidth(150)
@@ -105,16 +105,15 @@ class BuildBridgeWindow(QMainWindow):
         builds_widget = QWidget()
         builds_layout = QVBoxLayout(builds_widget)
         builds_layout.addWidget(QLabel("Existing Builds:"))
-        
+
         self.build_list_widget = BuildListWidget(self)
         self.build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(self.build_list_widget)
-        
+
         main_layout.addWidget(self.build_list_widget)
 
         if self.vcs_client:
             self.refresh_branches()
-
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
@@ -166,9 +165,6 @@ class BuildBridgeWindow(QMainWindow):
             # neatly have all versions of the project's build inside the same root dir.
             build_conf = ConfigManager("build")
             build_dir = build_conf.get("unreal").get("archive_directory")
-            # if p4 is the VCS, then paths are UNC-like. And that does not play well with os.path.join()
-            build_conf = ConfigManager("build")
-            build_dir = build_conf.get("unreal").get("archive_directory")
             build_dest = unc_join_path(build_dir, selected_branch)
 
             if os.path.exists(build_dest):
@@ -190,16 +186,29 @@ class BuildBridgeWindow(QMainWindow):
                         f"Failed to delete existing build directory:\n{str(e)}",
                     )
                     return
-
-            unreal_builder = UnrealBuilder(root_directory=self.vcs_client.get_workspace_root())
+            
+            unreal_builder = UnrealBuilder(
+                root_directory=self.vcs_client.get_workspace_root(),
+                release_id=selected_branch.strip("//")
+            )
         except ProjectFileNotFoundError as e:
-            QMessageBox.critical(self, "Project File Error", f"Project file not found: {str(e)}")
+            QMessageBox.critical(
+                self, "Project File Error", f"Project file not found: {str(e)}"
+            )
             return
         except EngineVersionError as e:
-            QMessageBox.critical(self, "Engine Version Error", f"Could not determine Unreal Engine version: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Engine Version Error",
+                f"Could not determine Unreal Engine version: {str(e)}",
+            )
             return
         except UnrealEngineNotInstalledError as e:
-            QMessageBox.critical(self, "Unreal Engine Not Found", f"Unreal Engine not found at: {unreal_builder.ue_base_path}")
+            QMessageBox.critical(
+                self,
+                "Unreal Engine Not Found",
+                f"Unreal Engine not found at: {unreal_builder.ue_base_path}",
+            )
             return
 
         dialog = BuildWindowDialog(unreal_builder, parent=self)

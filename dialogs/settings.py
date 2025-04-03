@@ -1,5 +1,4 @@
 import os
-from typing import Dict, Tuple
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,

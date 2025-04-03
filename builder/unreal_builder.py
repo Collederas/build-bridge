@@ -55,6 +55,7 @@ class UnrealBuilder:
     def __init__(
         self,
         root_directory: str, # project dir, actually
+        release_id: str,
         config_name: str = "build"
     ):
         self.config_manager = ConfigManager(config_name)
@@ -73,7 +74,8 @@ class UnrealBuilder:
         self.target_ue_version = self.get_engine_version_from_uproj()
         self.check_unreal_engine_installed()
 
-        self.build_dir = self.build_config.get("archive_directory", "C:/Builds")
+        build_dest = self.build_config.get("archive_directory", "C:/Builds")
+        self.build_dir = os.path.join(build_dest, release_id)
 
     @staticmethod
     def find_unreal_project_root(workspace_root):

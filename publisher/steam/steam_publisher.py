@@ -20,7 +20,6 @@ from publisher.steam.steam_wizard import SteamBuildSetupWizard
 from app_config import ConfigManager
 
 
-
 class UploadThread(QThread):
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool)
@@ -90,8 +89,9 @@ class SteamUploadDialog(QDialog):
         self.thread.finished_signal.connect(self.upload_finished)
         self.thread.start()
 
-    def log_progress(self):
-        pass
+    def log_progress(self, message):
+        # Fixed the missing parameter
+        self.log_display.append(message)
 
     def upload_finished(self, success):
         self.cancel_btn.setText("Close")
@@ -105,8 +105,7 @@ class SteamPublisher(BasePublisher):
     KEYRING_SERVICE = "BuildBridgeSteam"
 
     def __init__(self):        
-        # Use ConfigManager for stores. Probably at some point would
-        # be good to support multiple projects so config should be per-project.
+        # Use ConfigManager for stores
         self.config_manager = ConfigManager("stores")
         
         # Get basic config data
@@ -118,26 +117,33 @@ class SteamPublisher(BasePublisher):
         if self.username:
             self.password = self.config_manager.get_secure(self.KEYRING_SERVICE, self.username) or ""
         
+        # Load other config values
+        self.builder_path = self.config_manager.get("steam.builder_path", "")
+        self.depots = self.config_manager.get("steam.depots", [])
+        
         self.config = {
             "app_id": self.app_id,
             "username": self.username,
             "password": self.password,
-            "depots": self.config_manager.get("steam.depots", []),
-            "builder_path": self.config_manager.get("steam.builder_path", "")
+            "depots": self.depots,
+            "builder_path": self.builder_path
         }
 
-    def check_build_files(self):
-        builder_path = self.config["builder_path"]
-        app_vdf_path = os.path.join(builder_path, "app_build.vdf")
+    def check_build_files(self) -> bool:
+        """Check if necessary build files exist"""
+        if not self.builder_path:
+            return False
+            
+        app_vdf_path = os.path.join(self.builder_path, "app_build.vdf")
         
         # Get depot IDs or use default (app_id + 1)
-        depot_ids = self.config.get("depots", [])
+        depot_ids = self.depots
         if not depot_ids and self.app_id:
             depot_ids = [str(int(self.app_id) + 1)]
         
         # Check if all depot VDF files exist
         depot_vdf_exists = all(
-            os.path.exists(os.path.join(builder_path, f"depot_build_{depot_id}.vdf"))
+            os.path.exists(os.path.join(self.builder_path, f"depot_build_{depot_id}.vdf"))
             for depot_id in depot_ids
         ) if depot_ids else False
         
@@ -147,14 +153,69 @@ class SteamPublisher(BasePublisher):
             and depot_vdf_exists
         )
 
-    def publish(self, parent=None):
-        if not self.app_id or not self.username:
-            QMessageBox.warning(
-                parent,
-                "Config Error",
-                "Steam configuration is incomplete. Please configure first.",
-            )
-            return False
+    def configure(self, build_path, parent=None):
+        """Open the configuration wizard to set up Steam publishing"""
+        wizard = SteamBuildSetupWizard(build_path, self.config, parent=parent)
+        
+        if wizard.exec() == QDialog.DialogCode.Accepted:
+            # Reload configuration after wizard completes
+            self.__init__()  # Re-initialize to load updated config
+            return True
+            
+        return False
 
+    def publish(self, parent=None):
+        """Start the Steam publishing process"""
+        # Check if we have necessary configuration
+        if not self.app_id or not self.username:
+            msg = QMessageBox.question(
+                parent,
+                "Steam Configuration",
+                "Steam configuration is incomplete. Would you like to configure it now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if msg == QMessageBox.StandardButton.Yes:
+                # Get the build path from caller
+                build_path = parent.get_build_path() if hasattr(parent, "get_build_path") else ""
+                if not build_path:
+                    build_path = os.getcwd()
+                
+                # Open configuration wizard
+                if self.configure(build_path, parent):
+                    # If configuration was successful, check build files
+                    if not self.check_build_files():
+                        QMessageBox.warning(
+                            parent, 
+                            "Build Files Missing",
+                            "Some required build files are missing. Please ensure all files are properly configured."
+                        )
+                        return False
+                else:
+                    return False
+            else:
+                return False
+
+        if not self.check_build_files():
+            dialog = SteamBuildSetupWizard(self)
+        # Create and execute upload dialog
         dialog = SteamUploadDialog(self.config, parent=parent)
         return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def save_credentials(self, username, password):
+        """Save username and password to the config and keyring"""
+        # Save username to config
+        self.config_manager.set("steam.username", username)
+        
+        # Save password to keyring
+        self.config_manager.set_secure(self.KEYRING_SERVICE, username, password)
+        
+        # Save config to disk
+        self.config_manager.save()
+        
+        # Update local variables
+        self.username = username
+        self.password = password
+        self.config["username"] = username
+        self.config["password"] = password

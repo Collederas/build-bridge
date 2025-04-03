@@ -285,10 +285,22 @@ class SettingsDialog(QDialog):
                 form_layout.addRow(QLabel("App ID:"), app_id)
 
                 # Username field
-                username = QLineEdit(
+                steam_username = QLineEdit(
                     self.stores_config_manager.get(f"{store_key}.username", "")
                 )
-                form_layout.addRow(QLabel("Username:"), username)
+                form_layout.addRow(QLabel("Username:"), steam_username)
+
+                username_str = self.stores_config_manager.get(f"{store_key}.username", "")
+
+                # Get password from keyring if user exists
+                steam_password = ""
+                if username_str:
+                    steam_password = self.vcs_config_manager.get_secure("BuildBridgeSteam", username_str) or ""
+
+                steam_password_input = QLineEdit(steam_password)
+                steam_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+                form_layout.addRow(QLabel("Steam Password:"), steam_password_input)
+
 
                 # Description field
                 description = QLineEdit(
@@ -369,9 +381,12 @@ class SettingsDialog(QDialog):
                 )
                 form_layout.addRow("", browse_btn)
 
+                print(steam_password_input)
+
                 self.store_forms[store_name] = {
                     "app_id": app_id,
-                    "username": username,
+                    "username": steam_username,
+                    "password": steam_password_input,
                     "description": description,
                     "depots_table": depots_table,
                     "builder_path": builder_path,
@@ -607,10 +622,9 @@ class SettingsDialog(QDialog):
                 self.stores_config_manager.set(
                     f"{store_key}.username", form["username"].text().strip()
                 )
-                self.stores_config_manager.set(
-                    f"{store_key}.description", form["description"].text().strip()
-                )
-
+                
+                self.stores_config_manager.set_secure("BuildBridgeSteam", form["username"].text().strip(), form["password"].text().strip())
+            
                 # Save depot mappings
                 depot_mappings = {}
                 depots_table = form["depots_table"]

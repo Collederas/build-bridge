@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
-import subprocess  # For opening file explorer
 
 from app_config import ConfigManager
 from builder.build_dialog import BuildWindowDialog
@@ -106,11 +105,18 @@ class BuildBridgeWindow(QMainWindow):
         builds_layout = QVBoxLayout(builds_widget)
         builds_layout.addWidget(QLabel("Existing Builds:"))
 
-        self.build_list_widget = BuildListWidget(self)
+        # Initialize build_list_widget without a directory initially
+        self.build_list_widget = BuildListWidget(None, self)
         self.build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(self.build_list_widget)
 
-        main_layout.addWidget(self.build_list_widget)
+        main_layout.addWidget(builds_widget)
+
+        if self.vcs_client:
+            self.refresh_branches()
+
+        # Connect branch selection to update builds
+        self.branch_list.itemSelectionChanged.connect(self.update_build_list)
 
         if self.vcs_client:
             self.refresh_branches()
@@ -164,8 +170,7 @@ class BuildBridgeWindow(QMainWindow):
             # having multiple builds. User might want to keep previous versions. This allows to
             # neatly have all versions of the project's build inside the same root dir.
             build_conf = ConfigManager("build")
-            build_dir = build_conf.get("unreal").get("archive_directory")
-            build_dest = unc_join_path(build_dir, selected_branch)
+            build_dest = self.get_build_dir(build_conf)
 
             if os.path.exists(build_dest):
                 response = QMessageBox.question(
@@ -214,6 +219,23 @@ class BuildBridgeWindow(QMainWindow):
         dialog = BuildWindowDialog(unreal_builder, parent=self)
         dialog.exec()
         self.build_list_widget.load_builds(select_build=selected_branch)
+
+    def update_build_list(self):
+        """Update the build list based on the selected branch."""
+        build_dir = self.get_build_dir(ConfigManager("build"))
+        self.build_list_widget.set_build_dir(build_dir)
+        self.build_list_widget.load_builds()
+    
+    def get_build_dir(self, build_conf):
+        """Return the build directory for the selected branch, or None if no branch is selected."""
+        selected_items = self.branch_list.selectedItems()
+        if not selected_items:
+            return None  # No branch selected, no build dir. They are tied
+        selected_branch = selected_items[0].text()
+        if selected_branch == "No release branches found.":
+            return None
+        build_dir = build_conf.get("unreal").get("archive_directory")
+        return unc_join_path(build_dir, selected_branch)
 
     def focusInEvent(self, a0):
         self.build_list_widget.load_builds()

@@ -2,14 +2,14 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QHBoxLayout, QPus
 from PyQt6.QtCore import Qt
 import os
 from app_config import ConfigManager
+from builder.unreal_builder import UnrealBuilder
 from publisher.steam.steam_publisher import SteamPublisher
 
 
 class BuildListWidget(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, build_dir:str, parent=None):
         super().__init__(parent)
-        build_conf = ConfigManager("build")
-        self.build_dir = build_conf.get("unreal").get("archive_directory")
+        self.build_dir = build_dir
 
         self.stores_conf = ConfigManager("stores")
 
@@ -36,9 +36,12 @@ class BuildListWidget(QWidget):
 
         self.setLayout(layout)
 
+    def set_build_dir(self, build_dir: str):
+        self.build_dir = build_dir
+
     def load_builds(self, select_build=None):
         self.build_list.clear()
-        if os.path.exists(self.build_dir):
+        if self.build_dir and os.path.exists(self.build_dir):
             builds = [d for d in os.listdir(self.build_dir) if os.path.isdir(os.path.join(self.build_dir, d))]
             self.build_list.addItems(builds)
             if select_build:
@@ -77,8 +80,9 @@ class BuildListWidget(QWidget):
                 # TODO: support multiple stores
 
         if self.stores_conf.get("steam"):
+
             publisher = SteamPublisher()
-            publisher.publish()
+            publisher.publish(build_path=self.build_dir)
 
     def update_button_state(self):
         """Enable/disable buttons based on selection."""

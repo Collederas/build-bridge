@@ -31,13 +31,13 @@ class UploadThread(QThread):
         self.config = config
 
     def run(self):
+        # TODO: try to run login to store token first. then run without password
         try:
             cmd = [
                 self.steamcmd_path,
                 "+login",
                 self.config["username"],
-                self.config["password"],
-                "+app_build",
+                "+run_app_build",
                 self.build_path,  # Assumes a VDF file exists
                 "+quit",
             ]
@@ -61,7 +61,7 @@ class UploadThread(QThread):
 
 
 class SteamUploadDialog(QDialog):
-    def __init__(self, config, steamcmd_path="C:/steamcmd/steamcmd.exe", parent=None):
+    def __init__(self, config, steamcmd_path="C:/steamworks_sdk_162/sdk/tools/ContentBuilder/builder/steamcmd.exe", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Upload to Steam")
 
@@ -141,16 +141,15 @@ class SteamPublisher(BasePublisher):
         if not depot_ids and self.app_id:
             depot_ids = [str(int(self.app_id) + 1)]
         
-        # Check if all depot VDF files exist
-        depot_vdf_exists = all(
-            os.path.exists(os.path.join(self.builder_path, f"depot_build_{depot_id}.vdf"))
-            for depot_id in depot_ids
-        ) if depot_ids else False
+        # # Check if all depot VDF files exist
+        # depot_vdf_exists = all(
+        #     os.path.exists(os.path.join(self.builder_path, f"depot_build_{depot_id}.vdf"))
+        #     for depot_id in depot_ids
+        # ) if depot_ids else False
         
         return (
             os.path.exists(self.builder_path)
             and os.path.exists(app_vdf_path)
-            and depot_vdf_exists
         )
 
     def configure(self, build_path, parent=None):
@@ -164,7 +163,7 @@ class SteamPublisher(BasePublisher):
             
         return False
 
-    def publish(self, parent=None):
+    def publish(self, build_path: str, parent=None):
         """Start the Steam publishing process"""
         # Check if we have necessary configuration
         if not self.app_id or not self.username:
@@ -176,12 +175,7 @@ class SteamPublisher(BasePublisher):
                 QMessageBox.StandardButton.Yes
             )
             
-            if msg == QMessageBox.StandardButton.Yes:
-                # Get the build path from caller
-                build_path = parent.get_build_path() if hasattr(parent, "get_build_path") else ""
-                if not build_path:
-                    build_path = os.getcwd()
-                
+            if msg == QMessageBox.StandardButton.Yes:               
                 # Open configuration wizard
                 if self.configure(build_path, parent):
                     # If configuration was successful, check build files
@@ -198,7 +192,8 @@ class SteamPublisher(BasePublisher):
                 return False
 
         if not self.check_build_files():
-            dialog = SteamBuildSetupWizard(self)
+            dialog = SteamBuildSetupWizard(build_path=build_path)
+            dialog.exec()
         # Create and execute upload dialog
         dialog = SteamUploadDialog(self.config, parent=parent)
         return dialog.exec() == QDialog.DialogCode.Accepted

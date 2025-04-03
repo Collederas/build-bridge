@@ -94,7 +94,7 @@ class ConfigManager:
                 "steam": {
                     "enabled": False,
                     "app_id": "",
-                    "depot_id": "",
+                    "depots_id": "",
                     "build_id": "",
                     "builder_path": ""
                 }

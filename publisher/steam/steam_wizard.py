@@ -19,10 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class SteamBuildSetupWizard(QWizard):
-    def __init__(self, parent=None):
+    def __init__(self, build_path:str, parent=None):
         super().__init__(parent)
+        self.build_path = build_path
         self.setWindowTitle("Steam Build Setup Wizard")
-        self.config_manager = ConfigManager("stores")
+        self.stores_config = ConfigManager("stores")
+        self.build_config = ConfigManager("build")
         self.depots = []
         self.setup_pages()
 
@@ -54,12 +56,12 @@ class SteamBuildSetupWizard(QWizard):
         form_layout = QFormLayout()
         
         # Use app_id from config if available
-        app_id = self.config_manager.get("steam.app_id", "")
+        app_id = self.stores_config.get("steam.app_id", "")
         self.app_id_input = QLineEdit(app_id)
         form_layout.addRow(QLabel("App ID:"), self.app_id_input)
         
         # Use description from config or default
-        description = self.config_manager.get("steam.description", "My Game Build v1.0")
+        description = self.stores_config.get("steam.description", "My Game Build v1.0")
         self.description_input = QLineEdit(description)
         form_layout.addRow(QLabel("Description:"), self.description_input)
         layout.addLayout(form_layout)
@@ -73,7 +75,7 @@ class SteamBuildSetupWizard(QWizard):
         
         # Get depot IDs from config if available
         self.depot_input = QTextEdit()
-        depots = self.config_manager.get("steam.depots", [])
+        depots = self.stores_config.get("steam.depots", [])
         if depots:
             self.depot_input.setPlainText("\n".join(depots))
         else:
@@ -117,11 +119,10 @@ class SteamBuildSetupWizard(QWizard):
         depot_ids = [d.strip() for d in depot_text.split("\n") if d.strip()]
         
         # Get depot paths from config if available
-        depot_paths = self.config_manager.get("steam.depot_paths", {})
+        depot_paths = self.stores_config.get("steam.depot_mappings", {})
         
         for depot_id in depot_ids:
-            # Use stored path if available, otherwise use build path
-            default_path = depot_paths.get(depot_id, self.build_path)
+            default_path = depot_paths.get(depot_id, self.build_config.get("unreal.archive_directory"))
             path_input = QLineEdit(default_path)
             
             browse_btn = QPushButton("Browse")
@@ -140,7 +141,7 @@ class SteamBuildSetupWizard(QWizard):
         layout = QVBoxLayout()
 
         # Use builder path from config or generate default
-        saved_builder_path = self.config_manager.get("steam.builder_path", "")
+        saved_builder_path = self.stores_config.get("steam.builder_path", "")
         if saved_builder_path:
             builder_path = saved_builder_path
         else:
@@ -150,7 +151,10 @@ class SteamBuildSetupWizard(QWizard):
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(
             lambda: (
-                self.builder_path_input.setText(selected) if (selected := QFileDialog.getExistingDirectory(self, "Select Builder Path", self.builder_path_input.text())) else None
+                self.builder_path_input.setText(selected) 
+                if (selected := QFileDialog.getExistingDirectory(self, "Select Builder Path", 
+                                                                 self.builder_path_input.text()))
+                else None
             )
         )
         form_layout = QFormLayout()
@@ -223,31 +227,31 @@ class SteamBuildSetupWizard(QWizard):
         try:
             # Save app ID
             app_id = self.field("app_id")
-            self.config_manager.set("steam.app_id", app_id)
+            self.stores_config.set("steam.app_id", app_id)
             
             # Save description
             description = self.description_input.text()
-            self.config_manager.set("steam.description", description)
+            self.stores_config.set("steam.description", description)
             
             # Save builder path
             builder_path = self.field("builder_path")
-            self.config_manager.set("steam.builder_path", builder_path)
+            self.stores_config.set("steam.builder_path", builder_path)
             
             # Save depots
             depot_ids = [depot_id for depot_id, _ in self.depots]
-            self.config_manager.set("steam.depots", depot_ids)
+            self.stores_config.set("steam.depots", depot_ids)
             
             # Save depot paths
             depot_paths = {}
             for depot_id, path_input in self.depots:
                 depot_paths[depot_id] = path_input.text()
-            self.config_manager.set("steam.depot_paths", depot_paths)
+            self.stores_config.set("steam.depot_paths", depot_paths)
             
             # Mark as enabled
-            self.config_manager.set("steam.enabled", True)
+            self.stores_config.set("steam.enabled", True)
             
             # Save the config to disk
-            return self.config_manager.save()
+            return self.stores_config.save()
             
         except Exception as e:
             logger.error(f"Failed to save config: {e}")
@@ -260,38 +264,95 @@ class SteamBuildSetupWizard(QWizard):
         builder_path = self.field("builder_path")
 
         try:
-            # Create builder directory if it doesn't exist
+            # Ensure builder directory exists
             os.makedirs(builder_path, exist_ok=True)
 
+            # Define content root and log directory
+            content_root = os.path.join(self.build_path, "Windows")
+            log_dir = os.path.join(builder_path, "BuildLogs")
+
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Get relative paths where possible, fallback to absolute if needed
+            try:
+                content_root_rel = os.path.relpath(content_root, builder_path)
+            except ValueError:
+                content_root_rel = content_root
+       
+            try:
+                log_dir_rel = os.path.relpath(log_dir, builder_path)
+            except ValueError:
+                log_dir_rel = log_dir
+
+            # Generate "Depots" section
+            depot_entries = "\n".join([
+                """        "{depot_id}" // your DepotID
+            {{
+                "FileMapping"
+                {{
+                    "LocalPath" "{depot_path}" // all files from contentroot folder
+                    "DepotPath" "." // mapped into the root of the depot
+                    "recursive" "1" // include all subfolders
+                }}
+            }}""".format(depot_id=depot_id, depot_path=os.path.relpath(depot_path.text().strip(), content_root).replace("//", "\\"))
+                for depot_id, depot_path in self.depots
+            ])
+
             # Generate app_build.vdf
-            app_vdf_content = f""""appbuild"
-{{
-    "appid" "{app_id}"
-    "desc" "{description}"
-    "buildoutput" "{builder_path}"
-    "depots"
+            app_vdf_content = """\
+    "AppBuild"
     {{
-        {chr(10).join([f'        "{depot_id}" "depot_build_{depot_id}.vdf"' for depot_id, _ in self.depots])}
-    }}
-}}"""
-            with open(os.path.join(builder_path, "app_build.vdf"), "w") as f:
+        "AppID" "{app_id}" // your AppID
+        "Desc" "{description}" // internal description for this build
+
+        "ContentRoot" "{content_root_rel}" // root content folder, relative to location of this file
+        "BuildOutput" "{log_dir_rel}" // build output folder for logs and cache files
+
+        "Depots"
+        {{
+    {depot_entries}
+        }}
+    }}""".format(
+                app_id=app_id,
+                description=description,
+                content_root_rel=content_root_rel.replace("//", "\\"),
+                log_dir_rel=log_dir_rel.replace("//", "\\"),
+                depot_entries=depot_entries
+            )
+
+            app_vdf_path = os.path.join(builder_path, "app_build.vdf")
+            with open(app_vdf_path, "w", encoding="utf-8") as f:
                 f.write(app_vdf_content)
 
-            # Generate depot_build.vdf for each depot
-            for depot_id, path_input in self.depots:
-                depot_path = path_input.text().replace("\\", "/")  # Steam uses forward slashes
-                depot_vdf_content = f""""depotbuild"
-{{
-    "depotid" "{depot_id}"
-    "contentroot" "{depot_path}"
-}}"""
-                with open(
-                    os.path.join(builder_path, f"depot_build_{depot_id}.vdf"), "w"
-                ) as f:
-                    f.write(depot_vdf_content)
+    #         # Generate depot_build.vdf for each depot
+    #         for depot_id, path_input in self.depots:
+    #             depot_path = path_input.text().replace("\\", "/")  # Convert to Steam's forward slashes
 
-            logger.info(f"Generated Steam build files in {builder_path}")
-            return True
+    #             try:
+    #                 depot_path_rel = os.path.relpath(depot_path, builder_path).replace("\\", "/")
+    #             except ValueError:
+    #                 depot_path_rel = depot_path  # Use absolute if different drives
+
+    #             depot_vdf_content = """\
+    # "DepotBuildConfig"
+    # {{
+    #     "DepotID" "{depot_id}"
+    #     "ContentRoot" "{depot_path_rel}"
+    #     "FileMapping"
+    #     {{
+    #         "LocalPath" "*" // all files from contentroot folder
+    #         "DepotPath" "." // mapped into the root of the depot
+    #         "recursive" "1" // include all subfolders
+    #     }}
+    # }}""".format(depot_id=depot_id, depot_path_rel=depot_path_rel)
+
+    #             depot_vdf_path = os.path.join(builder_path, f"depot_build_{depot_id}.vdf")
+    #             with open(depot_vdf_path, "w", encoding="utf-8") as f:
+    #                 f.write(depot_vdf_content)
+
+    #         logger.info(f"Generated Steam build files in {builder_path}")
+    #         return True
+
         except Exception as e:
             logger.error(f"Failed to generate files: {e}")
             QMessageBox.critical(

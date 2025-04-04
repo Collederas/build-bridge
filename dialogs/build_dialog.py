@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QProcess, QTimer
 
-from builder.buildlist_widget import BuildListWidget
+from widgets.buildlist_widget import BuildListWidget
 from builder.unreal_builder import UnrealBuilder  # Adjust import path as needed
 
 logger = logging.getLogger(__name__)
@@ -204,7 +204,7 @@ class BuildWindowDialog(QDialog):
         self.setWindowTitle("Build Management")
         self.output_text.setMaximumHeight(150)
         self.build_list_widget.setVisible(True)
-        self.build_list_widget.load_builds(os.path.basename(self.builder.build_dir))
+        self.build_list_widget.load_builds(os.path.basename(self.builder.output_dir))
         self.action_button.setText("Close")
         self.action_button.clicked.disconnect()
         self.action_button.clicked.connect(self.close)

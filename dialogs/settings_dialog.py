@@ -17,19 +17,22 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QListView,
     QHeaderView,
-    QTableWidgetItem
+    QTableWidgetItem,
 )
 
 from PyQt6.QtCore import Qt, QStringListModel
 
 from vcs.p4client import P4Client
-from conf.app_config import ConfigManager
+from conf.config_manager import ConfigManager
 
 
 class SettingsDialog(QDialog):
     stores = ("Steam",)
     unreal_configurations = ["Development", "Shipping", "Test", "Debug"]
-    unreal_platforms = ["Win64", "Win32",]
+    unreal_platforms = [
+        "Win64",
+        "Win32",
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,6 +40,8 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(600, 400)
 
         # Initialize config managers
+        self.project_config_manager = ConfigManager("project")
+
         self.vcs_config_manager = ConfigManager("vcs")
         self.build_config_manager = ConfigManager("build")
         self.stores_config_manager = ConfigManager("stores")
@@ -48,11 +53,12 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout()
 
         self.category_list = QListWidget()
-        self.category_list.addItems(["Version Control", "Build", "Publish"])
+        self.category_list.addItems(["Project", "Version Control", "Build", "Publish"])
         self.category_list.currentRowChanged.connect(self.switch_page)
         layout.addWidget(self.category_list, 1)
 
         self.stack = QStackedWidget()
+        self.stack.addWidget(self.create_project_page())
         self.stack.addWidget(self.create_vcs_page())
         self.stack.addWidget(self.create_unreal_build_page())
         self.stack.addWidget(self.create_publishing_page())
@@ -99,6 +105,14 @@ class SettingsDialog(QDialog):
 
         self.p4client_input = QLineEdit(p4client)
         form_layout.addRow(QLabel("P4 Client:"), self.p4client_input)
+
+        # Regex pattern section
+        regex_section_label = QLabel("Regex Pattern to find Release Name from VCS branches/streams")
+        regex_section_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        form_layout.addRow(regex_section_label)
+        release_pattern = self.vcs_config_manager.get("perforce.release_pattern", r"")
+        self.release_pattern_input = QLineEdit(release_pattern)
+        form_layout.addRow(QLabel("Release Pattern:"), self.release_pattern_input)
 
         layout.addLayout(form_layout)
         page.setLayout(layout)
@@ -248,7 +262,7 @@ class SettingsDialog(QDialog):
             lambda state: [
                 self.cook_dirs_list.setEnabled(state != Qt.CheckState.Checked.value),
                 add_dir_btn.setEnabled(state != Qt.CheckState.Checked.value),
-                remove_dir_btn.setEnabled(state != Qt.CheckState.Checked.value)
+                remove_dir_btn.setEnabled(state != Qt.CheckState.Checked.value),
             ]
         )
 
@@ -290,17 +304,23 @@ class SettingsDialog(QDialog):
                 )
                 form_layout.addRow(QLabel("Username:"), steam_username)
 
-                username_str = self.stores_config_manager.get(f"{store_key}.username", "")
+                username_str = self.stores_config_manager.get(
+                    f"{store_key}.username", ""
+                )
 
                 # Get password from keyring if user exists
                 steam_password = ""
                 if username_str:
-                    steam_password = self.vcs_config_manager.get_secure("BuildBridgeSteam", username_str) or ""
+                    steam_password = (
+                        self.vcs_config_manager.get_secure(
+                            "BuildBridgeSteam", username_str
+                        )
+                        or ""
+                    )
 
                 steam_password_input = QLineEdit(steam_password)
                 steam_password_input.setEchoMode(QLineEdit.EchoMode.Password)
                 form_layout.addRow(QLabel("Steam Password:"), steam_password_input)
-
 
                 # Description field
                 description = QLineEdit(
@@ -312,14 +332,24 @@ class SettingsDialog(QDialog):
 
                 # Create a table for depot ID to path mapping
                 depots_table = QTableWidget()
-                depots_table.setColumnCount(3)  # Changed to 3 columns: ID, Path, Browse button
+                depots_table.setColumnCount(
+                    3
+                )  # Changed to 3 columns: ID, Path, Browse button
                 depots_table.setHorizontalHeaderLabels(["Depot ID", "Path", ""])
-                depots_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-                depots_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                depots_table.horizontalHeader().setSectionResizeMode(
+                    1, QHeaderView.ResizeMode.Stretch
+                )
+                depots_table.horizontalHeader().setSectionResizeMode(
+                    2, QHeaderView.ResizeMode.ResizeToContents
+                )
 
                 # Get depot mappings from config
-                depot_mappings = self.stores_config_manager.get(f"{store_key}.depot_mappings", {})
-                depots_table.setRowCount(len(depot_mappings) + 1)  # Extra row for new entries
+                depot_mappings = self.stores_config_manager.get(
+                    f"{store_key}.depot_mappings", {}
+                )
+                depots_table.setRowCount(
+                    len(depot_mappings) + 1
+                )  # Extra row for new entries
 
                 # Fill existing depot mappings
                 row = 0
@@ -327,13 +357,17 @@ class SettingsDialog(QDialog):
                     depots_table.setItem(row, 0, QTableWidgetItem(depot_id))
                     depots_table.setItem(row, 1, QTableWidgetItem(path))
                     browse_btn = QPushButton("Browse")
-                    browse_btn.clicked.connect(lambda _, r=row: self.browse_depot_path(depots_table, r))
+                    browse_btn.clicked.connect(
+                        lambda _, r=row: self.browse_depot_path(depots_table, r)
+                    )
                     depots_table.setCellWidget(row, 2, browse_btn)
                     row += 1
 
                 # Add browse button to the empty row
                 browse_btn = QPushButton("Browse")
-                browse_btn.clicked.connect(lambda: self.browse_depot_path(depots_table, row))
+                browse_btn.clicked.connect(
+                    lambda: self.browse_depot_path(depots_table, row)
+                )
                 depots_table.setCellWidget(row, 2, browse_btn)
 
                 # Add controls for managing depots
@@ -348,8 +382,13 @@ class SettingsDialog(QDialog):
                 add_depot_btn = QPushButton("Add Row")
                 add_depot_btn.clicked.connect(lambda: self.add_depot_row(depots_table))
                 remove_depot_btn = QPushButton("Remove Selected")
-                remove_depot_btn.clicked.connect(lambda: depots_table.removeRow(depots_table.currentRow()) 
-                                            if depots_table.currentRow() >= 0 else None)
+                remove_depot_btn.clicked.connect(
+                    lambda: (
+                        depots_table.removeRow(depots_table.currentRow())
+                        if depots_table.currentRow() >= 0
+                        else None
+                    )
+                )
                 depot_buttons_layout.addWidget(add_depot_btn)
                 depot_buttons_layout.addWidget(remove_depot_btn)
                 depot_buttons_layout.addStretch()
@@ -358,9 +397,11 @@ class SettingsDialog(QDialog):
                 form_layout.addRow("", depots_container)
 
                 # Builder path field
-                build_dir = os.getcwd()
                 default_builder_path = os.path.normpath(
-                    os.path.join(build_dir, "Steam/builder")
+                    os.path.join(
+                        self.build_config_manager.get("unreal.archive_directory", "C:/Builds"),
+                        "Steam/builder",
+                    )
                 )
                 builder_path = QLineEdit(
                     self.stores_config_manager.get(
@@ -381,8 +422,6 @@ class SettingsDialog(QDialog):
                 )
                 form_layout.addRow("", browse_btn)
 
-                print(steam_password_input)
-
                 self.store_forms[store_name] = {
                     "app_id": app_id,
                     "username": steam_username,
@@ -392,7 +431,6 @@ class SettingsDialog(QDialog):
                     "builder_path": builder_path,
                 }
 
-            # Rest of the method remains the same...
             form_widget.setLayout(form_layout)
             form_widget.setVisible(is_enabled)
             checkbox.stateChanged.connect(
@@ -406,17 +444,33 @@ class SettingsDialog(QDialog):
         page.setLayout(layout)
         return page
 
+    def create_project_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        form_layout = QFormLayout()
+
+        # Project name field
+        project_name = self.project_config_manager.get("name", "")  # Correct key
+        self.project_name_input = QLineEdit(project_name)
+        form_layout.addRow(QLabel("Project Name:"), self.project_name_input)
+
+        layout.addLayout(form_layout)
+        page.setLayout(layout)
+        return page
+
     def browse_depot_path(self, table, row):
         """Browse and set depot path for a specific row."""
         current_path = ""
         path_item = table.item(row, 1)
         if path_item:
             current_path = path_item.text()
-        
+
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Depot Path", self.build_config_manager.get("unreal.archive_directory") or os.getcwd()
+            self,
+            "Select Depot Path",
+            self.build_config_manager.get("unreal.archive_directory") or os.getcwd(),
         )
-        
+
         if dir_path:
             # Ensure there's a depot ID item
             if not table.item(row, 0):
@@ -448,7 +502,12 @@ class SettingsDialog(QDialog):
         self.vcs_config_manager.set("perforce.p4port", port)
         self.vcs_config_manager.set_secure("BuildBridge", user, password)
 
-        # Try to establish connection with the new settings
+        release_pattern = self.release_pattern_input.text()
+
+        self.vcs_config_manager.set("perforce.release_pattern", release_pattern)
+
+        # Try to establish connection with the new settings before saving.
+        # I'm not sure this should be valid for project and release regex too though...
         try:
             # Test connection
             P4Client()
@@ -463,6 +522,8 @@ class SettingsDialog(QDialog):
                 "Connection Error",
                 "Connection Error. Check your Perforce connection settings and retry.",
             )
+
+
         return False
 
     def browse_engine_path(self):
@@ -494,10 +555,9 @@ class SettingsDialog(QDialog):
             current_platforms.pop(selected_index.row())
             self.target_platforms_model.setStringList(current_platforms)
 
-
     def add_cook_directory(self):
-        
-        #TODO: Remove this hack and find a better way to get proj root
+
+        # TODO: Remove this hack and find a better way to get proj root
         try:
             p4 = P4Client()
             proj_dir = p4.get_workspace_root()
@@ -515,7 +575,7 @@ class SettingsDialog(QDialog):
                 if self.cook_dirs_list.item(i).text() == dir_path:
                     exists = True
                     break
-            
+
             if not exists:
                 self.cook_dirs_list.addItem(dir_path)
 
@@ -523,7 +583,7 @@ class SettingsDialog(QDialog):
         selected_items = self.cook_dirs_list.selectedItems()
         if not selected_items:
             return
-            
+
         for item in selected_items:
             self.cook_dirs_list.takeItem(self.cook_dirs_list.row(item))
 
@@ -551,10 +611,8 @@ class SettingsDialog(QDialog):
             cook_dirs.append(self.cook_dirs_list.item(i).text())
         self.build_config_manager.set("unreal.cook_dirs", cook_dirs)
 
-
         # Update UAT options
         uat_options = self.build_config_manager.get("unreal.build_uat_options", [])
-
 
         # Ensure clientconfig matches build type
         client_config_index = next(
@@ -598,7 +656,6 @@ class SettingsDialog(QDialog):
 
         self.build_config_manager.set("unreal.build_uat_options", uat_options)
 
-
         # Save to file
         self.build_config_manager.save()
 
@@ -622,22 +679,33 @@ class SettingsDialog(QDialog):
                 self.stores_config_manager.set(
                     f"{store_key}.username", form["username"].text().strip()
                 )
-                
-                self.stores_config_manager.set_secure("BuildBridgeSteam", form["username"].text().strip(), form["password"].text().strip())
-            
+
+                self.stores_config_manager.set_secure(
+                    "BuildBridgeSteam",
+                    form["username"].text().strip(),
+                    form["password"].text().strip(),
+                )
+
                 # Save depot mappings
                 depot_mappings = {}
                 depots_table = form["depots_table"]
                 for row in range(depots_table.rowCount()):
                     depot_id_item = depots_table.item(row, 0)
                     path_item = depots_table.item(row, 1)
-                    
+
                     if depot_id_item and path_item and depot_id_item.text().strip():
                         depot_id = depot_id_item.text().strip()
                         path = path_item.text().strip()
                         depot_mappings[depot_id] = path
-                
-                self.stores_config_manager.set(f"{store_key}.depot_mappings", depot_mappings)
+
+                self.stores_config_manager.set(
+                    f"{store_key}.depot_mappings", depot_mappings
+                )
+
+                # Save builder path
+                self.stores_config_manager.set(
+                    f"{store_key}.builder_path", form["builder_path"].text().strip()
+                )
 
             elif store_name == "Epic" and store_name in self.store_forms:
                 form = self.store_forms[store_name]
@@ -651,6 +719,11 @@ class SettingsDialog(QDialog):
         # Save all store settings
         self.stores_config_manager.save()
 
+    def save_project_settings(self):
+        """Save project settings."""
+        self.project_config_manager.set("name", self.project_name_input.text().strip())  # Correct key
+        self.project_config_manager.save()
+
     def apply_settings(self):
         # Save VCS settings and verify connection
         vcs_saved = self.save_vcs_settings()
@@ -660,6 +733,9 @@ class SettingsDialog(QDialog):
 
         # Save Unreal build settings
         self.save_unreal_build_settings()
+
+        # Save project settings
+        self.save_project_settings()
 
         # Only accept if VCS connection was successful
         if vcs_saved:

@@ -154,6 +154,7 @@ class ConfigManager:
                 return True
             else:
                 # Create default config
+                print("creating")
                 self.config = self._get_default_config()
                 self.save()
                 return False

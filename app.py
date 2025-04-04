@@ -1,3 +1,5 @@
+from pathlib import Path
+import re
 import sys
 import os
 import shutil
@@ -15,21 +17,19 @@ from PyQt6.QtWidgets import (
     QMenu,
 )
 from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt
 
-from conf.app_config import ConfigManager
-from builder.build_dialog import BuildWindowDialog
-from builder.buildlist_widget import BuildListWidget
+from conf.config_manager import ConfigManager
+from dialogs.build_dialog import BuildWindowDialog
+from widgets.buildlist_widget import BuildListWidget
 from builder.unreal_builder import (
+    BuildAlreadyExistsError,
     EngineVersionError,
     ProjectFileNotFoundError,
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
-from dialogs.settings import SettingsDialog
-from publisher.steam.steam_publisher import SteamPublisher
+from dialogs.settings_dialog import SettingsDialog
 from utils.paths import unc_join_path
-import vcs
 from vcs.p4client import P4Client
 from vcs.vcsbase import MissingConfigException
 
@@ -40,6 +40,12 @@ class BuildBridgeWindow(QMainWindow):
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 500, 400)  # Slightly wider window
+
+        self.project_conf = ConfigManager("project")
+        self.vcs_conf = ConfigManager("vcs")
+        self.build_conf = ConfigManager("build")
+
+        self.project_name = self.project_conf.get("name")
 
         try:
             self.vcs_client = P4Client()
@@ -103,7 +109,7 @@ class BuildBridgeWindow(QMainWindow):
         # Builds Section
         builds_widget = QWidget()
         builds_layout = QVBoxLayout(builds_widget)
-        builds_layout.addWidget(QLabel("Existing Builds:"))
+        builds_layout.addWidget(QLabel("Available Builds:"))
 
         # Initialize build_list_widget without a directory initially
         self.build_list_widget = BuildListWidget(None, self)
@@ -116,16 +122,14 @@ class BuildBridgeWindow(QMainWindow):
             self.refresh_branches()
 
         # Connect branch selection to update builds
-        self.branch_list.itemSelectionChanged.connect(self.update_build_list)
-
-        if self.vcs_client:
-            self.refresh_branches()
+        self.branch_list.itemSelectionChanged.connect(self.on_branch_selected)
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.vcs_client = P4Client()
             self.refresh_branches()
+            self.project_name = self.project_conf.get("name")
 
     def refresh_branches(self):
         try:
@@ -138,16 +142,28 @@ class BuildBridgeWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
+
     def trigger_build(self):
-        selected_items = self.branch_list.selectedItems()
-        if not selected_items:
+        """
+        We use the VCS branch name (or tag/label, when that is supported) to name
+        each packaged build.
+        eg.:
+            BuildDir
+                |_ ProjectName
+                    |_ StoresConfig
+                        |_ Steam
+                        |_ Itch
+                    |_ Release1 (VCS branch/tag)
+                        |_ Development
+                        |_ Shipping
+                    |_ Release2 (VCS branch/tag)
+                        |_ Shipping
+        """
+        selected_branch = self.get_selected_branch()
+        if not selected_branch:
             QMessageBox.warning(
                 self, "Selection Error", "Please select a branch to build."
             )
-            return
-        selected_branch = selected_items[0].text()
-        if selected_branch == "No release branches found.":
-            QMessageBox.warning(self, "Selection Error", "No valid branch selected.")
             return
 
         try:
@@ -161,40 +177,64 @@ class BuildBridgeWindow(QMainWindow):
             )
             return
 
-        try:
+        # Extract the build parameters and validate requirements
+        builds_root = self.build_conf.get("unreal.archive_directory", "C:/Builds")
+        
+        release_match = re.match(
+            self.vcs_conf.get("perforce.release_pattern"), selected_branch
+        )
+        release_name = release_match.group(1) if release_match else None
 
-            # TODO: Either app.py owns all configs or the various classes (VCSClients, Builders, etc.) do. Like this is a mess
+        if not self.project_name:
+            QMessageBox.warning(
+                self,
+                "No Project Name.",
+                "Triggering builds depends on Project Name. Define one in File -> Settings -> Project",
+            )
+            return
+        if not release_name:
+            QMessageBox.warning(
+                self,
+                "Cannot get release name.",
+                "We need to store the release under a folder with the name of the release."
+                "We do so by inferring the release name from your release branch/stream using"
+                "the regex defined in Settings -> VCS -> Release Pattern."
+                "Ensure this is a valid regex that can extrapolate the release name from your" \
+                " branch naming convention.",
+            )
+            return
 
-            # We have opinions: we want to enforce structure where User can pick a Build dir
-            # but we use the VCS branch name (or tag/label, when that is supported) to allow
-            # having multiple builds. User might want to keep previous versions. This allows to
-            # neatly have all versions of the project's build inside the same root dir.
-            build_conf = ConfigManager("build")
-            build_dest = self.get_build_dir(build_conf)
-
-            if os.path.exists(build_dest):
-                response = QMessageBox.question(
+        project_build_dir_root = Path(unc_join_path(builds_root, self.project_name))
+        this_release_output_dir = project_build_dir_root / release_name / self.build_conf.get("unreal.build_type")
+        source_dir = self.vcs_client.get_workspace_root()
+        
+        # Check if build directory exists before trying to create the builder
+        if this_release_output_dir.exists():
+            response = QMessageBox.question(
+                self,
+                "Build Conflict",
+                f"A build already exists for release:\n{release_name}\n\nDo you want to proceed and overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if response == QMessageBox.StandardButton.No:
+                return
+                
+            try:
+                shutil.rmtree(this_release_output_dir)
+            except Exception as e:
+                QMessageBox.critical(
                     self,
-                    "Build Conflict",
-                    f"A build already exists at:\n{build_dest}\n\nDo you want to proceed and overwrite it?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No,
+                    "Cleanup Error",
+                    f"Failed to delete existing build directory:\n{str(e)}",
                 )
-                if response == QMessageBox.StandardButton.No:
-                    return
-                try:
-                    shutil.rmtree(build_dest)
-                except Exception as e:
-                    QMessageBox.critical(
-                        self,
-                        "Cleanup Error",
-                        f"Failed to delete existing build directory:\n{str(e)}",
-                    )
-                    return
-            
+                return
+        
+        # Create the builder after any potential cleanup
+        try:
             unreal_builder = UnrealBuilder(
-                root_directory=self.vcs_client.get_workspace_root(),
-                release_id=selected_branch.strip("//")
+                source_dir=source_dir,
+                output_dir=this_release_output_dir,
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(
@@ -212,30 +252,26 @@ class BuildBridgeWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Unreal Engine Not Found",
-                f"Unreal Engine not found at: {unreal_builder.ue_base_path}",
+                f"Unreal Engine not found at the expected path",
             )
             return
-
+        
+        # Continue with the build process
         dialog = BuildWindowDialog(unreal_builder, parent=self)
         dialog.exec()
         self.build_list_widget.load_builds(select_build=selected_branch)
-
-    def update_build_list(self):
-        """Update the build list based on the selected branch."""
-        build_dir = self.get_build_dir(ConfigManager("build"))
-        self.build_list_widget.set_build_dir(build_dir)
+        
+    def on_branch_selected(self):
+        """Do things you want to do when user selects a branch in the UI"""
+        build_dir = self.build_conf.get("unreal.archive_directory")
+        self.build_list_widget.project_builds_root = unc_join_path(build_dir, self.project_name)
         self.build_list_widget.load_builds()
-    
-    def get_build_dir(self, build_conf):
-        """Return the build directory for the selected branch, or None if no branch is selected."""
+
+    def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()
         if not selected_items:
-            return None  # No branch selected, no build dir. They are tied
-        selected_branch = selected_items[0].text()
-        if selected_branch == "No release branches found.":
             return None
-        build_dir = build_conf.get("unreal").get("archive_directory")
-        return unc_join_path(build_dir, selected_branch)
+        return selected_items[0].text()
 
     def focusInEvent(self, a0):
         self.build_list_widget.load_builds()

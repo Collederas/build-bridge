@@ -1,19 +1,15 @@
 import json
 import os
 import sys
-import logging
-from typing import Callable, Optional
+from typing import Optional
 
-from conf.app_config import ConfigManager
-
-logger = logging.getLogger(__name__)
+from conf.config_manager import ConfigManager
 
 
-class MultipleUprojectFoundError(Exception):
-    """Custom exception raised when multiple .uproject files are found."""
+class BuildAlreadyExistsError(Exception):
+    """Raised when a build with the same name/version exists."""
 
     pass
-
 
 class BuildError(Exception):
     """Base exception for build-related errors."""
@@ -45,27 +41,25 @@ class UATScriptNotFoundError(BuildError):
     pass
 
 
-class CleanupError(BuildError):
-    """Raised when cleanup of build artifacts fails."""
-
-    pass
-
-
 class UnrealBuilder:
     def __init__(
         self,
-        root_directory: str, # project dir, actually
-        release_id: str,
-        config_name: str = "build"
+        source_dir: str,
+        output_dir: str,
     ):
-        self.config_manager = ConfigManager(config_name)
-        
+        self.config_manager = ConfigManager("build")
         self.build_config = self.config_manager.get("unreal", {})
+
+        self.source_dir = source_dir
+
+        # Check if a build already exist for this release id
+        if os.path.exists(output_dir):
+            raise BuildAlreadyExistsError(f"{output_dir} already exists")
+        
+        self.output_dir = output_dir
         
         # Project path validation
-        self.project_path = self.find_unreal_project_root(root_directory)
         self.uproj_path = self.get_uproject_path()
-
         self.ue_base_path = self.build_config.get(
             "engine_path", 
         )
@@ -74,63 +68,38 @@ class UnrealBuilder:
         self.target_ue_version = self.get_engine_version_from_uproj()
         self.check_unreal_engine_installed()
 
-        build_dest = self.build_config.get("archive_directory", "C:/Builds")
-        self.build_dir = os.path.join(build_dest, release_id)
-
-    @staticmethod
-    def find_unreal_project_root(workspace_root):
+    def get_uproject_path(self, recurse_level: int = 1) -> str:
         """
-        Finds the Unreal Engine project root (containing the .uproject file)
-        within a given workspace root.
+        Finds the .uproject file in the source directory or its subdirectories.
 
         Args:
-            workspace_root (str): The path to the Perforce workspace root.
+            recurse_level (int): The depth of subdirectories to search. Default is 1.
 
         Returns:
-            str: The normalized path to the Unreal Engine project root
-                if exactly one .uproject file is found.
+            str: The path to the .uproject file.
 
         Raises:
-            NoUprojectFoundError: If no .uproject file is found.
-            MultipleUprojectFoundError: If more than one .uproject file is found.
+            ProjectFileNotFoundError: If no .uproject file is found.
         """
-        project_file_paths = []
-        for root, _, files in os.walk(workspace_root):
-            for file in files:
-                if file.endswith(".uproject"):
-                    project_file_paths.append(root)
+        if not os.path.isdir(self.source_dir):
+            # Assume self.source_dir is already the path to the .uproject file
+            return self.source_dir
 
-        if len(project_file_paths) == 1:
-            return os.path.normpath(project_file_paths[0])
-        elif len(project_file_paths) > 1:
-            raise MultipleUprojectFoundError(
-                f"Found multiple .uproject files in '{workspace_root}': {project_file_paths}. Please specify which project to use."
+        uproject_files = []
+        for root, _, files in os.walk(self.source_dir):
+            if os.path.relpath(root, self.source_dir).count(os.sep) >= recurse_level:
+                continue
+            uproject_files.extend(
+                os.path.join(root, f) for f in files if f.endswith(".uproject")
             )
-        else:
+
+        if not uproject_files:
             raise ProjectFileNotFoundError(
-                f"No .uproject file found in '{workspace_root}'."
+                f"No .uproject file found in: {self.source_dir} (recurse_level={recurse_level})"
             )
 
-    def get_uproject_path(self) -> str:
-        # If self.project_path is a directory, look for a .uproject file
-        if os.path.isdir(self.project_path):
-            # Find all .uproject files in the directory
-            uproject_files = [
-                f for f in os.listdir(self.project_path) if f.endswith(".uproject")
-            ]
-
-            if not uproject_files:
-                raise ProjectFileNotFoundError(
-                    f"No .uproject file found in: {self.project_path}"
-                )
-
-            # Use the first .uproject file found
-            uproj_path = os.path.join(self.project_path, uproject_files[0])
-        else:
-            # Assume self.project_path is already the path to the .uproject file
-            uproj_path = self.project_path
-
-        return uproj_path
+        # Use the first .uproject file found
+        return uproject_files[0]
 
     def get_engine_version_from_uproj(self) -> Optional[str]:
         """
@@ -143,9 +112,9 @@ class UnrealBuilder:
             ProjectFileNotFoundError: If the project file does not exist.
             EngineVersionError: If the engine version cannot be read or is missing.
         """
-        if not os.path.exists(self.project_path):
+        if not os.path.exists(self.uproj_path):
             raise ProjectFileNotFoundError(
-                f"Project file not found: {self.project_path}"
+                f"Project file not found: {self.uproj_path}"
             )
         try:
             with open(self.uproj_path, "r") as f:
@@ -207,7 +176,7 @@ class UnrealBuilder:
         command.append(f"-clientconfig={target_config}")
 
         # Add standard build options
-        command.extend(["-build", "-cook", "-stage", "-pak"])
+        command.extend(["-build", "-cook", "-stage", "-pak", "-prereqs"])
 
         # Add clean build if specified
         if self.build_config.get("clean_build", False):
@@ -216,22 +185,7 @@ class UnrealBuilder:
         # Add archive settings
         command.extend([
             "-archive",
-            f'-archivedirectory="{self.build_dir}"'
+            f'-archivedirectory="{self.output_dir}"'
         ])
 
         return command
-
-    def cleanup_build_artifacts(self):
-        """Cleans up build artifacts."""
-        if os.path.exists(self.build_dir):
-            try:
-                for root, dirs, files in os.walk(self.build_dir, topdown=False):
-                    for name in files:
-                        os.remove(os.path.join(root, name))
-                    for name in dirs:
-                        os.rmdir(os.path.join(root, name))
-                os.rmdir(self.build_dir)
-                logger.info(f"Cleaned up artifacts at {self.build_dir}")
-            except Exception as e:
-                logger.error(f"Cleanup failed: {str(e)}", exc_info=True)
-                raise CleanupError(f"Failed to clean up build artifacts: {str(e)}")

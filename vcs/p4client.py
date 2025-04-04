@@ -2,7 +2,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from vcs.vcsbase import VCSClient, VCSType
-from conf.app_config import (
+from conf.config_manager import (
     ConfigManager,
 )
 from P4 import P4, P4Exception

@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 from builder.build_dialog import BuildWindowDialog
 from builder.buildlist_widget import BuildListWidget
 from builder.unreal_builder import (

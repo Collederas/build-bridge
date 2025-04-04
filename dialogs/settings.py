@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QStringListModel
 
 from vcs.p4client import P4Client
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 
 
 class SettingsDialog(QDialog):

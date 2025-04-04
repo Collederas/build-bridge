@@ -1,13 +1,21 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QListWidget, QHBoxLayout, QPushButton, QMessageBox
+from PyQt6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QListWidget,
+    QHBoxLayout,
+    QPushButton,
+    QMessageBox,
+)
 from PyQt6.QtCore import Qt
 import os
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 from builder.unreal_builder import UnrealBuilder
+from exceptions import InvalidConfigurationError
 from publisher.steam.steam_publisher import SteamPublisher
 
 
 class BuildListWidget(QWidget):
-    def __init__(self, build_dir:str, parent=None):
+    def __init__(self, build_dir: str, parent=None):
         super().__init__(parent)
         self.build_dir = build_dir
 
@@ -30,7 +38,7 @@ class BuildListWidget(QWidget):
         publish_btn = QPushButton("Publish Selected")
         publish_btn.clicked.connect(self.handle_publish)
         button_layout.addWidget(publish_btn)
-        
+
         layout.addWidget(self.build_list)
         layout.addLayout(button_layout)
 
@@ -42,10 +50,16 @@ class BuildListWidget(QWidget):
     def load_builds(self, select_build=None):
         self.build_list.clear()
         if self.build_dir and os.path.exists(self.build_dir):
-            builds = [d for d in os.listdir(self.build_dir) if os.path.isdir(os.path.join(self.build_dir, d))]
+            builds = [
+                d
+                for d in os.listdir(self.build_dir)
+                if os.path.isdir(os.path.join(self.build_dir, d))
+            ]
             self.build_list.addItems(builds)
             if select_build:
-                items = self.build_list.findItems(select_build, Qt.MatchFlag.MatchExactly)
+                items = self.build_list.findItems(
+                    select_build, Qt.MatchFlag.MatchExactly
+                )
                 if items:
                     self.build_list.setCurrentItem(items[0])
         self.update_button_state()
@@ -69,7 +83,7 @@ class BuildListWidget(QWidget):
                 self, "Selection Error", "Please select a build to publish."
             )
             return
-        
+
         if not self.stores_conf:
             QMessageBox.warning(
                 self,
@@ -77,12 +91,21 @@ class BuildListWidget(QWidget):
                 "No publishing destinations enabled. Configure in Settings.",
             )
             return
-                # TODO: support multiple stores
+            # TODO: support multiple stores
 
         if self.stores_conf.get("steam"):
 
             publisher = SteamPublisher()
-            publisher.publish(build_path=self.build_dir)
+            try:
+                publisher.publish(build_path=self.build_dir)
+            except InvalidConfigurationError as e:
+                QMessageBox.warning(
+                    self,
+                    "Missing Publishing Configuration",
+                    "Cannot publish the selected project because " \
+                    "Publishing configuration is missing or incomplete. " \
+                    "Check your setup in File -> Settings -> Publish",
+                )
 
     def update_button_state(self):
         """Enable/disable buttons based on selection."""

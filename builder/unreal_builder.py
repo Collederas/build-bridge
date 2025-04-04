@@ -4,7 +4,7 @@ import sys
 import logging
 from typing import Callable, Optional
 
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 
 logger = logging.getLogger(__name__)
 

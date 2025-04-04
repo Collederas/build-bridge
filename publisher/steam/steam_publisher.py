@@ -1,23 +1,18 @@
 import os
 import subprocess
-import json
-import keyring
-import logging
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
-    QFormLayout,
-    QHBoxLayout,
     QPushButton,
-    QLineEdit,
     QLabel,
     QTextEdit,
-    QMessageBox,
 )
 from PyQt6.QtCore import QThread, pyqtSignal
+import build
+from exceptions import InvalidConfigurationError
 from publisher.base_publisher import BasePublisher
 from publisher.steam.steam_wizard import SteamBuildSetupWizard
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 
 
 class UploadThread(QThread):
@@ -61,7 +56,12 @@ class UploadThread(QThread):
 
 
 class SteamUploadDialog(QDialog):
-    def __init__(self, config, steamcmd_path="C:/steamworks_sdk_162/sdk/tools/ContentBuilder/builder/steamcmd.exe", parent=None):
+    def __init__(
+        self,
+        config,
+        steamcmd_path="C:/steamworks_sdk_162/sdk/tools/ContentBuilder/builder/steamcmd.exe",
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Upload to Steam")
 
@@ -104,96 +104,73 @@ class SteamUploadDialog(QDialog):
 class SteamPublisher(BasePublisher):
     KEYRING_SERVICE = "BuildBridgeSteam"
 
-    def __init__(self):        
+    def __init__(self):
         # Use ConfigManager for stores
         self.config_manager = ConfigManager("stores")
-        
+
         # Get basic config data
         self.app_id = self.config_manager.get("steam.app_id", "")
         self.username = self.config_manager.get("steam.username", "")
-        
+
         # Load password from keyring if username is available
         self.password = ""
         if self.username:
-            self.password = self.config_manager.get_secure(self.KEYRING_SERVICE, self.username) or ""
-        
+            self.password = (
+                self.config_manager.get_secure(self.KEYRING_SERVICE, self.username)
+                or ""
+            )
+
         # Load other config values
         self.builder_path = self.config_manager.get("steam.builder_path", "")
         self.depots = self.config_manager.get("steam.depots", [])
-        
+
         self.config = {
             "app_id": self.app_id,
             "username": self.username,
             "password": self.password,
             "depots": self.depots,
-            "builder_path": self.builder_path
+            "builder_path": self.builder_path,
         }
 
     def check_build_files(self) -> bool:
         """Check if necessary build files exist"""
         if not self.builder_path:
             return False
-            
+
         app_vdf_path = os.path.join(self.builder_path, "app_build.vdf")
-        
+
         # Get depot IDs or use default (app_id + 1)
         depot_ids = self.depots
         if not depot_ids and self.app_id:
             depot_ids = [str(int(self.app_id) + 1)]
-        
+
         # # Check if all depot VDF files exist
         # depot_vdf_exists = all(
         #     os.path.exists(os.path.join(self.builder_path, f"depot_build_{depot_id}.vdf"))
         #     for depot_id in depot_ids
         # ) if depot_ids else False
-        
-        return (
-            os.path.exists(self.builder_path)
-            and os.path.exists(app_vdf_path)
-        )
+
+        return os.path.exists(self.builder_path) and os.path.exists(app_vdf_path)
 
     def configure(self, build_path, parent=None):
         """Open the configuration wizard to set up Steam publishing"""
         wizard = SteamBuildSetupWizard(build_path, self.config, parent=parent)
-        
+
         if wizard.exec() == QDialog.DialogCode.Accepted:
             # Reload configuration after wizard completes
             self.__init__()  # Re-initialize to load updated config
             return True
-            
+
         return False
 
     def publish(self, build_path: str, parent=None):
         """Start the Steam publishing process"""
-        # Check if we have necessary configuration
-        if not self.app_id or not self.username:
-            msg = QMessageBox.question(
-                parent,
-                "Steam Configuration",
-                "Steam configuration is incomplete. Would you like to configure it now?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
-            
-            if msg == QMessageBox.StandardButton.Yes:               
-                # Open configuration wizard
-                if self.configure(build_path, parent):
-                    # If configuration was successful, check build files
-                    if not self.check_build_files():
-                        QMessageBox.warning(
-                            parent, 
-                            "Build Files Missing",
-                            "Some required build files are missing. Please ensure all files are properly configured."
-                        )
-                        return False
-                else:
-                    return False
-            else:
-                return False
-
+        print(build_path)
         if not self.check_build_files():
             dialog = SteamBuildSetupWizard(build_path=build_path)
-            dialog.exec()
+            if not dialog.exec():
+                raise InvalidConfigurationError("Publishing" \
+                " configuration is incomplete.")
         # Create and execute upload dialog
         dialog = SteamUploadDialog(self.config, parent=parent)
         return dialog.exec() == QDialog.DialogCode.Accepted
@@ -202,13 +179,13 @@ class SteamPublisher(BasePublisher):
         """Save username and password to the config and keyring"""
         # Save username to config
         self.config_manager.set("steam.username", username)
-        
+
         # Save password to keyring
         self.config_manager.set_secure(self.KEYRING_SERVICE, username, password)
-        
+
         # Save config to disk
         self.config_manager.save()
-        
+
         # Update local variables
         self.username = username
         self.password = password

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 from PyQt6.QtCore import Qt
-from app_config import ConfigManager
+from conf.app_config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -285,8 +285,15 @@ class SteamBuildSetupWizard(QWizard):
                 log_dir_rel = log_dir
 
             # Generate "Depots" section
-            depot_entries = "\n".join([
-                """        "{depot_id}" // your DepotID
+            depot_entries = "\n"
+
+            for depot, depot_path in self.depots:
+                depot_path_rel = os.path.relpath(depot_path.text().strip(), content_root)
+                if depot_path_rel == ".":
+                    depot_path_rel = "*"
+
+                depot_entries.join([
+                f"""        "{depot}" // your DepotID
             {{
                 "FileMapping"
                 {{
@@ -294,8 +301,7 @@ class SteamBuildSetupWizard(QWizard):
                     "DepotPath" "." // mapped into the root of the depot
                     "recursive" "1" // include all subfolders
                 }}
-            }}""".format(depot_id=depot_id, depot_path=os.path.relpath(depot_path.text().strip(), content_root).replace("//", "\\"))
-                for depot_id, depot_path in self.depots
+            }}"""
             ])
 
             # Generate app_build.vdf
@@ -323,35 +329,6 @@ class SteamBuildSetupWizard(QWizard):
             app_vdf_path = os.path.join(builder_path, "app_build.vdf")
             with open(app_vdf_path, "w", encoding="utf-8") as f:
                 f.write(app_vdf_content)
-
-    #         # Generate depot_build.vdf for each depot
-    #         for depot_id, path_input in self.depots:
-    #             depot_path = path_input.text().replace("\\", "/")  # Convert to Steam's forward slashes
-
-    #             try:
-    #                 depot_path_rel = os.path.relpath(depot_path, builder_path).replace("\\", "/")
-    #             except ValueError:
-    #                 depot_path_rel = depot_path  # Use absolute if different drives
-
-    #             depot_vdf_content = """\
-    # "DepotBuildConfig"
-    # {{
-    #     "DepotID" "{depot_id}"
-    #     "ContentRoot" "{depot_path_rel}"
-    #     "FileMapping"
-    #     {{
-    #         "LocalPath" "*" // all files from contentroot folder
-    #         "DepotPath" "." // mapped into the root of the depot
-    #         "recursive" "1" // include all subfolders
-    #     }}
-    # }}""".format(depot_id=depot_id, depot_path_rel=depot_path_rel)
-
-    #             depot_vdf_path = os.path.join(builder_path, f"depot_build_{depot_id}.vdf")
-    #             with open(depot_vdf_path, "w", encoding="utf-8") as f:
-    #                 f.write(depot_vdf_content)
-
-    #         logger.info(f"Generated Steam build files in {builder_path}")
-    #         return True
 
         except Exception as e:
             logger.error(f"Failed to generate files: {e}")

@@ -46,7 +46,7 @@ class BuildListWidget(QWidget):
 
         self.setLayout(layout)
 
-    def load_builds(self, select_build=None, max_depth=3):
+    def load_builds(self, select_build=None, max_depth=2):
         """Load builds into the tree widget, supporting configurable levels of subfolders."""
         self.build_tree.clear()
         if self.project_builds_root and os.path.exists(self.project_builds_root):

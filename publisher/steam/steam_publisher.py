@@ -50,11 +50,15 @@ class SteamPublisher(BasePublisher):
             # Generate or update the VDF file. 
             configurator.create_or_update_vdf_file(content_root=build_root)
 
+            steamcmd_path = self.config_manager.get('steam.steamcmd_path', '')
+            if not os.path.exists(steamcmd_path):
+                raise InvalidConfigurationError("SteamCMD path is invalid. Please check your configuration.")
+
             # Proceed with publishing
             dialog = SteamUploadDialog(
                 builder_path=self.builder_path, 
                 steam_username=self.username,
-                steamcmd_path=self.config_manager.get('steam.steamcmd_path')
+                steamcmd_path=steamcmd_path
             )
             return dialog.exec()
 

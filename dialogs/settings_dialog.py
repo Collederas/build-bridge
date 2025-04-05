@@ -681,6 +681,20 @@ class SettingsDialog(QDialog):
 
     def save_store_settings(self):
         """Save store settings."""
+
+        # Validate SteamCMD path before saving
+        for store_name, form in self.store_forms.items():
+            if store_name == "Steam":
+                steamcmd_path = form["steamcmd_path"].text().strip()
+                if not os.path.exists(steamcmd_path):
+                    QMessageBox.critical(
+                        self,
+                        "Invalid SteamCMD Path",
+                        "The provided SteamCMD path is invalid. Please select a valid executable.",
+                    )
+                    return  # Prevent saving if the path is invalid
+
+        # Save store settings
         for store_name, checkbox in self.store_checkboxes.items():
             store_key = store_name.lower()
             is_enabled = checkbox.isChecked()

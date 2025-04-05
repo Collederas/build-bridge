@@ -422,6 +422,25 @@ class SettingsDialog(QDialog):
                 )
                 form_layout.addRow("", browse_btn)
 
+                # SteamCMD Path field
+                steamcmd_path = QLineEdit(
+                    self.stores_config_manager.get(
+                        f"{store_key}.steamcmd_path", "C:/Program Files (x86)/Steam/steamcmd.exe"
+                    )
+                )
+                form_layout.addRow(QLabel("SteamCMD Path:"), steamcmd_path)
+
+                # Browse button for SteamCMD path
+                browse_steamcmd_btn = QPushButton("Browse")
+                browse_steamcmd_btn.clicked.connect(
+                    lambda _, p=steamcmd_path: p.setText(
+                        QFileDialog.getOpenFileName(
+                            self, "Select SteamCMD Executable", p.text(), "Executable Files (*.exe)"
+                        )[0] or p.text()
+                    )
+                )
+                form_layout.addRow("", browse_steamcmd_btn)
+
                 self.store_forms[store_name] = {
                     "app_id": app_id,
                     "username": steam_username,
@@ -429,6 +448,7 @@ class SettingsDialog(QDialog):
                     "description": description,
                     "depots_table": depots_table,
                     "builder_path": builder_path,
+                    "steamcmd_path": steamcmd_path,
                 }
 
             form_widget.setLayout(form_layout)
@@ -705,6 +725,11 @@ class SettingsDialog(QDialog):
                 # Save builder path
                 self.stores_config_manager.set(
                     f"{store_key}.builder_path", form["builder_path"].text().strip()
+                )
+
+                # Save SteamCMD path
+                self.stores_config_manager.set(
+                    f"{store_key}.steamcmd_path", form["steamcmd_path"].text().strip()
                 )
 
             elif store_name == "Epic" and store_name in self.store_forms:

@@ -29,7 +29,9 @@ class SteamPublisher(BasePublisher):
             )
 
         # Load other config values
-        self.builder_path = Path(self.config_manager.get("steam.builder_path", "")) / "Steam"
+        self.builder_path = (
+            Path(self.config_manager.get("steam.builder_path", "")) / "Steam"
+        )
         self.depots = self.config_manager.get("steam.depots", [])
 
         self.config = {
@@ -45,15 +47,21 @@ class SteamPublisher(BasePublisher):
         configurator = SteamPipeConfigurator()
 
         try:
-            # Generate or update the VDF file. Will validate and  
+            # Generate or update the VDF file. Will validate and
             configurator.create_or_update_vdf_file(content_root=build_root)
 
             # Proceed with publishing
-            dialog = SteamUploadDialog(builder_path=self.builder_path, steam_username=self.username)
+            dialog = SteamUploadDialog(
+                builder_path=self.builder_path, 
+                steam_username=self.username,
+                steamcmd_path=self.config_manager.get('steam.steamcmd_path')
+            )
             return dialog.exec()
 
         except Exception as e:
-            raise InvalidConfigurationError(f"Publishing configuration is incomplete: {e}")
+            raise InvalidConfigurationError(
+                f"Publishing configuration is incomplete: {e}"
+            )
 
     def save_credentials(self, username, password):
         """Save username and password to the config and keyring"""

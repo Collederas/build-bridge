@@ -1,6 +1,5 @@
 import os
 from jinja2 import Template
-from zipp import Path
 from conf.config_manager import ConfigManager
 
 

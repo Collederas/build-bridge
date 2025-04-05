@@ -180,9 +180,10 @@ class BuildBridgeWindow(QMainWindow):
         # Extract the build parameters and validate requirements
         builds_root = self.build_conf.get("unreal.archive_directory", "C:/Builds")
         
-        release_match = re.match(
+        release_match = re.search(
             self.vcs_conf.get("perforce.release_pattern"), selected_branch
         )
+
         release_name = release_match.group(1) if release_match else None
 
         if not self.project_name:

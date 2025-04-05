@@ -10,10 +10,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
-from PyQt6.QtCore import QProcess, QTimer
+from PyQt6.QtCore import QProcess
 
 from widgets.buildlist_widget import BuildListWidget
-from builder.unreal_builder import UnrealBuilder  # Adjust import path as needed
+from builder.unreal_builder import UnrealBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,6 @@ class BuildWindowDialog(QDialog):
 
             pid = self.process.processId()
             if platform.system() == "Windows":
-                # Use taskkill to kill the process and all children
                 result = subprocess.run(
                     f"taskkill /F /T /PID {pid}",
                     shell=True,

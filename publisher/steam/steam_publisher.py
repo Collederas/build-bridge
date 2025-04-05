@@ -47,7 +47,7 @@ class SteamPublisher(BasePublisher):
         configurator = SteamPipeConfigurator()
 
         try:
-            # Generate or update the VDF file. Will validate and
+            # Generate or update the VDF file. 
             configurator.create_or_update_vdf_file(content_root=build_root)
 
             # Proceed with publishing

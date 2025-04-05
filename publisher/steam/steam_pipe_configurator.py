@@ -23,10 +23,19 @@ class SteamPipeConfigurator:
         if not os.path.exists(self.TEMPLATE_FILE):
             raise FileNotFoundError(f"Template file not found: {self.TEMPLATE_FILE}")
 
+        self.validate_depot_mappings()
+    
+    def validate_depot_mappings(self):
+        """
+        Validate depot mappings to ensure all paths exist.
+
+        Raises:
+            ValueError: If any depot path does not exist.
+        """
         depot_mappings = self.config_manager.get("steam.depot_mappings", {})
         for depot_id, depot_path in depot_mappings.items():
             if not os.path.exists(depot_path):
-                raise ValueError(f"Depot path {depot_path} for depot {depot_id} is invalid.")
+                raise ValueError(f"Depot path {depot_path} for depot {depot_id} does not exist.")
 
     def create_or_update_vdf_file(self, content_root: str):
         """
@@ -35,24 +44,32 @@ class SteamPipeConfigurator:
         configured in Settings.
 
         Args:
-            content_root (str): The content root directory to set in the VDF file.
+            content_root (str): The content root directory of the build to publish.
         """
         # Perform validation as a guard step
         self.validate_configuration()
-        builder_path = self.config_manager.get("steam.builder_path", "")
-        steam_builder_path = os.path.join(builder_path, "Steam")
 
+        # Get conf
+        builder_path = self.config_manager.get("steam.builder_path", "")
+
+        # Append store name to the user provided path (..meh)
+        steam_builder_path = os.path.join(builder_path, "Steam")
         app_id = self.config_manager.get("steam.app_id", "1000")
         description = self.config_manager.get("steam.description", "")
         depot_mappings = self.config_manager.get("steam.depot_mappings", {})
 
-        # Create necessary directories and files if needed
+        # Create necessary directories and files if don't exist
+        # <UserDefinedPath>
+        #   \_ Steam
+        #       \_ BuildLogs
+        #       \_ app_build.vdf
+        #       \_ ...
+         
         os.makedirs(steam_builder_path, exist_ok=True)
         log_dir = os.path.join(steam_builder_path, "BuildLogs")
         os.makedirs(log_dir, exist_ok=True)
 
         # Ensure folders are relative to builder_path
-       
         content_root_rel = os.path.relpath(content_root, steam_builder_path)
         log_dir_rel = os.path.relpath(log_dir, steam_builder_path)
 
@@ -75,15 +92,3 @@ class SteamPipeConfigurator:
             vdf_file.write(vdf_content)
 
         print(f"VDF file generated at: {app_build_vdf_path}")
-
-    def validate_depot_mappings(self):
-        """
-        Validate depot mappings to ensure all paths exist.
-
-        Raises:
-            ValueError: If any depot path is invalid.
-        """
-        depot_mappings = self.config_manager.get("steam.depot_mappings", {})
-        for depot_id, depot_path in depot_mappings.items():
-            if not os.path.exists(depot_path):
-                raise ValueError(f"Depot path {depot_path} for depot {depot_id} is invalid.")

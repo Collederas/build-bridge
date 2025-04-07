@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt
 from conf.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)

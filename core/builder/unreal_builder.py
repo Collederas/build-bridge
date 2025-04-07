@@ -188,4 +188,7 @@ class UnrealBuilder:
             f'-archivedirectory="{self.output_dir}"'
         ])
 
+        # if config->optimized for steam
+        command.extend(["-patchpaddingalign=1048576", "-blocksize=1048576"])
+
         return command

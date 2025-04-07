@@ -1,12 +1,12 @@
 import os
 from pathlib import Path
 
-from dialogs.steam_upload_dialog import SteamUploadDialog
+from views.dialogs.steam_upload_dialog import SteamUploadDialog
 from exceptions import InvalidConfigurationError
-from publisher.base_publisher import BasePublisher
-from publisher.steam.steam_wizard import SteamBuildSetupWizard
+from core.publisher.base_publisher import BasePublisher
+from core.publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
+
 from conf.config_manager import ConfigManager
-from publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
 
 
 class SteamPublisher(BasePublisher):
@@ -47,18 +47,20 @@ class SteamPublisher(BasePublisher):
         configurator = SteamPipeConfigurator()
 
         try:
-            # Generate or update the VDF file. 
+            # Generate or update the VDF file.
             configurator.create_or_update_vdf_file(content_root=build_root)
 
-            steamcmd_path = self.config_manager.get('steam.steamcmd_path', '')
+            steamcmd_path = self.config_manager.get("steam.steamcmd_path", "")
             if not os.path.exists(steamcmd_path):
-                raise InvalidConfigurationError("SteamCMD path is invalid. Please check your configuration.")
+                raise InvalidConfigurationError(
+                    "SteamCMD path is invalid. Please check your configuration."
+                )
 
             # Proceed with publishing
             dialog = SteamUploadDialog(
-                builder_path=self.builder_path, 
+                builder_path=self.builder_path,
                 steam_username=self.username,
-                steamcmd_path=steamcmd_path
+                steamcmd_path=steamcmd_path,
             )
             return dialog.exec()
 

@@ -28,21 +28,15 @@ class SteamUploadDialog(QDialog):
 
     def setup_process(self):
         self.process = QProcess(self)
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
-        self.process.readyReadStandardOutput.connect(self.read_stdout)
-        self.process.readyReadStandardError.connect(self.read_stderr)
+        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)  # Merge stdout and stderr
+        self.process.readyRead.connect(self.read_realtime_output)  # Connect to unified output signal
         self.process.finished.connect(self.handle_process_finished)
         self.process.errorOccurred.connect(self.handle_process_error)
 
-    def read_stdout(self):
-        data = self.process.readAllStandardOutput().data().decode(errors="ignore")
+    def read_realtime_output(self):
+        data = self.process.readAll().data().decode(errors="ignore").strip()
         if data:
-            self.log_display.append(f"STDOUT: {data}")
-
-    def read_stderr(self):
-        data = self.process.readAllStandardError().data().decode(errors="ignore")
-        if data:
-            self.log_display.append(f"STDERR: {data}")
+            self.log_display.append(data)
 
     def start_full_workflow(self):
         self.log_display.append("Starting SteamCMD workflow...")
@@ -51,11 +45,11 @@ class SteamUploadDialog(QDialog):
         command = [
             self.steamcmd_path,
             "+login", self.steam_username, passw,
-            "+run_app_build", f'"{self.vdf_file}"',  # Quote the VDF path explicitly
+            "+run_app_build", str(self.vdf_file),  # No need for extra quotes here
             "+quit"
         ]
-        self.log_display.append("Please check Steam Guard on your phone if prompted.")
         self.run_command(command, self.handle_workflow_result)
+        self.log_display.append("Please check Steam Guard on your phone if prompted.")
 
     def handle_workflow_result(self, exit_code):
         output = self.log_display.toPlainText()
@@ -74,9 +68,7 @@ class SteamUploadDialog(QDialog):
             return
         self.process.finished.disconnect()
         self.process.finished.connect(lambda exit_code, _: callback(exit_code))
-        # Join the command with spaces and ensure the quoted VDF path is preserved
-        full_command = f'& {command[0]} {" ".join(str(arg) for arg in command[1:])}'
-        self.process.start("powershell.exe", ["-Command", full_command])
+        self.process.start(command[0], command[1:])
 
     def cancel_process(self):
         if self.process.state() == QProcess.ProcessState.Running:

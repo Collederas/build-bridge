@@ -12,8 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QProcess
 
-from widgets.buildlist_widget import BuildListWidget
-from builder.unreal_builder import UnrealBuilder
+from core.builder.unreal_builder import UnrealBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +44,6 @@ class BuildWindowDialog(QDialog):
         self.action_button.clicked.connect(self.cancel_build)
         self.button_layout.addStretch()
         self.button_layout.addWidget(self.action_button)
-
-        # Build list widget (hidden until build completes)
-        self.build_list_widget = BuildListWidget(None, self)
-        self.build_list_widget.setVisible(False)
-        self.layout.addWidget(self.build_list_widget)
 
         self.layout.addLayout(self.button_layout)
         self.setLayout(self.layout)
@@ -199,11 +193,3 @@ class BuildWindowDialog(QDialog):
         except Exception as e:
             logger.error(f"Error updating GUI: {str(e)}", exc_info=True)
 
-    def transition_to_build_management(self):
-        self.setWindowTitle("Build Management")
-        self.output_text.setMaximumHeight(150)
-        self.build_list_widget.setVisible(True)
-        self.build_list_widget.load_builds(os.path.basename(self.builder.output_dir))
-        self.action_button.setText("Close")
-        self.action_button.clicked.disconnect()
-        self.action_button.clicked.connect(self.close)

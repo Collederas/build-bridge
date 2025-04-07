@@ -1,7 +1,7 @@
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
-from vcs.vcsbase import VCSClient, VCSType
+from core.vcs.vcsbase import VCSClient, VCSType
 from conf.config_manager import (
     ConfigManager,
 )

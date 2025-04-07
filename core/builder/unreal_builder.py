@@ -3,6 +3,8 @@ import os
 import sys
 from typing import Optional
 
+from models import BuildTargetPlatformEnum, BuildTypeEnum
+
 
 
 class BuildAlreadyExistsError(Exception):
@@ -44,12 +46,20 @@ class UnrealBuilder:
     def __init__(
         self,
         source_dir: str,
+        engine_path: str,
+        target_platform: BuildTargetPlatformEnum,
+        target_config: BuildTypeEnum,
         output_dir: str,
+        clean: bool = False,
+        valve_package_pad: bool = False
     ):
-        self.config_manager = "ConfigManager("")"
-        self.build_config = self.config_manager.get("unreal", {})
 
         self.source_dir = source_dir
+        self.engine_path = engine_path
+        self.target_platform = target_platform
+        self.target_config = target_config
+        self.clean = clean
+        self.valve_package_pad = valve_package_pad
 
         # Check if a build already exist for this release id
         if os.path.exists(output_dir):
@@ -59,9 +69,7 @@ class UnrealBuilder:
         
         # Project path validation
         self.uproj_path = self.get_uproject_path()
-        self.ue_base_path = self.build_config.get(
-            "engine_path", 
-        )
+        
 
         # Determine engine version and validate
         self.target_ue_version = self.get_engine_version_from_uproj()
@@ -138,7 +146,7 @@ class UnrealBuilder:
             UnrealEngineNotInstalledError: If the engine is not installed (optional handling).
         """
         ue_version_path = os.path.join(
-            self.ue_base_path, f"UE_{self.target_ue_version}"
+            self.engine_path, f"UE_{self.target_ue_version}"
         )
         if os.path.exists(ue_version_path):
             return True
@@ -149,7 +157,7 @@ class UnrealBuilder:
 
     def get_build_command(self):
         """Returns the UAT command as a list for QProcess using config settings."""
-        ue_version_path = os.path.join(self.ue_base_path, f"UE_{self.target_ue_version}")
+        ue_version_path = os.path.join(self.engine_path, f"UE_{self.target_ue_version}")
         uat_script = os.path.join(
             ue_version_path,
             "Engine/Build/BatchFiles/RunUAT.bat" if sys.platform == "win32" else "Engine/Build/BatchFiles/RunUAT.sh"
@@ -167,18 +175,16 @@ class UnrealBuilder:
         ]
 
         # Add platform from config
-        target_platforms = self.build_config.get("target_platforms", ["Win64"])
-        command.append(f"-platform={target_platforms[0]}")
+        command.append(f"-platform={self.target_platform}")
 
         # Add configuration from config
-        target_config = self.build_config.get("target_config", "Development")
-        command.append(f"-clientconfig={target_config}")
+        command.append(f"-clientconfig={self.target_config}")
 
         # Add standard build options
         command.extend(["-build", "-cook", "-stage", "-pak", "-prereqs"])
 
         # Add clean build if specified
-        if self.build_config.get("clean_build", False):
+        if self.clean:
             command.append("-clean")
 
         # Add archive settings
@@ -187,7 +193,7 @@ class UnrealBuilder:
             f'-archivedirectory="{self.output_dir}"'
         ])
 
-        # if config->optimized for steam
-        command.extend(["-patchpaddingalign=1048576", "-blocksize=1048576"])
+        if self.valve_package_pad:
+            command.extend(["-patchpaddingalign=1048576", "-blocksize=1048576"])
 
         return command

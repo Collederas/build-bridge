@@ -1,46 +1,28 @@
 import os
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFormLayout,
-    QLabel,
-    QLineEdit,
-    QComboBox,
-    QPushButton,
-    QFileDialog,
-    QCheckBox,
-    QStackedWidget,
-    QWidget,
-    QMessageBox,
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
+    QComboBox, QPushButton, QFileDialog, QCheckBox, QStackedWidget, QMessageBox, QWidget
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 
 from core.vcs.p4client import P4Client
 from models import (
-    BuildTarget,
-    Project,
-    BuildTargetPlatformEnum,
-    BuildTypeEnum,
-    VCSConfig,
-    VCSTypeEnum,
+    BuildTarget, PerforceConfig, Project, BuildTargetPlatformEnum,
+    BuildTypeEnum, VCSTypeEnum
 )
 from database import SessionFactory
-from views.dialogs.settings_dialog import SettingsDialog
 
 
 class BuildTargetSetupDialog(QDialog):
+    vcs_clients = {VCSTypeEnum.perforce: P4Client}
 
-    def __init__(self, build_target_id: id = None):
+    def __init__(self, build_target_id: int = None):
         super().__init__()
         self.setWindowTitle("Build Target Setup")
         self.setMinimumSize(800, 500)
 
-        # -- SESSION SETUP --
-        # The Dialog owns the session here.
-        # Session is managed at widget level (closed on dialog close, committed on accept)
         self.session = SessionFactory()
-
         if build_target_id:
             self.build_target = self.session.query(BuildTarget).get(build_target_id)
             self.session.add(self.build_target)
@@ -48,19 +30,8 @@ class BuildTargetSetupDialog(QDialog):
             self.build_target = None
 
         self.session_project = self.get_or_create_session_project(self.session)
-        # -- END SESSION SETUP
-
-        # -- VCS SETUP --
-        if self.build_target and self.build_target.vcs_config:
-            self.vcs_client = self.vcs_clients.get(
-                self.build_target.vcs_config.vcs_type,
-            )(self.build_target.vcs_config)
-        else:
-            self.vcs_client = None
-        # Cached flag to determine versioning model (if vcs is connected, which we discover in initialize_form below)
-        # then we can try to use tags/labels/streams for versioning.
+        self.vcs_client = None
         self.vcs_connected = False
-        # -- END VCS SETUP
 
         self.stack = QStackedWidget()
         self.page1 = self.create_page1()
@@ -69,37 +40,23 @@ class BuildTargetSetupDialog(QDialog):
         self.stack.addWidget(self.page1)
         self.stack.addWidget(self.page2)
 
-        self.main_layout = QVBoxLayout(self)
+        self.main_layout = QVBoxLayout()
         self.main_layout.addLayout(self.add_header("Build Target"))
         self.main_layout.addWidget(self.stack)
         self.main_layout.addLayout(self.create_footer())
+        self.setLayout(self.main_layout)
 
         self.initialize_form()
 
     def get_or_create_session_project(self, session):
-        """
-        Populate project data and create default if no project exists.
-        Adds it to the given session.
-        """
-        # Get project from build target if we have one already and we
-        # are just editing
         if self.build_target and self.build_target.project:
             session_project = self.build_target.project
         else:
-            # See if there is one project in db
             session_project = session.query(Project).first()
-
             if not session_project:
-                # If no project exists, we create a default (this is also done in settings)
-                # so a project is created either there or here, depending on where user
-                # gets first
-                session_project = Project()
-                session_project.name = "My Game"
-
+                session_project = Project(name="My Game")
         session.add(session_project)
-        print(
-            f"Added {session_project.name} - ID: {session_project.id} to the session."
-        )
+        print(f"Added {session_project.name} - ID: {session_project.id} to the session.")
         return session_project
 
     def add_header(self, title_text):
@@ -113,357 +70,321 @@ class BuildTargetSetupDialog(QDialog):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Page title
-        page1_title = QLabel("Project")
-        page1_title.setStyleSheet("font-weight: bold; font-size: 18px;")
-        layout.addWidget(page1_title)
-
-        # Project info
+        # Project section
+        layout.addWidget(QLabel("Project").setStyleSheet("font-weight: bold; font-size: 18px;"))
         project_form = QFormLayout()
-
         self.project_combo = QComboBox()
-
         self.source_edit = QLineEdit()
         browse_button = QPushButton("Browse")
         browse_button.clicked.connect(self.browse_folder)
-
         source_layout = QHBoxLayout()
         source_layout.addWidget(self.source_edit)
         source_layout.addWidget(browse_button)
-
         project_form.addRow("Project:", self.project_combo)
         project_form.addRow("Project Source", source_layout)
-
         layout.addLayout(project_form)
         layout.addSpacing(20)
 
-        # VCS Section (now below project section)
+        # VCS Section
         vcs_title = QLabel("VCS")
         vcs_title.setStyleSheet("font-weight: bold;")
-        vcs_desc = QLabel(
-            "You can setup VCS to let BuildBridge switch automatically to "
-            "target branch and try to look for tags to tag the release package."
-        )
+        vcs_desc = QLabel("Configure VCS to enable branch switching and tagging for releases.")
         vcs_desc.setWordWrap(True)
         vcs_desc.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addWidget(vcs_title)
+        layout.addWidget(vcs_desc)
+        layout.addSpacing(10)
 
+        # VCS Type (Perforce only)
         self.vcs_combo = QComboBox()
         vcs_type_layout = QHBoxLayout()
         vcs_type_layout.addWidget(QLabel("VCS Type:"))
         vcs_type_layout.addWidget(self.vcs_combo)
+        layout.addLayout(vcs_type_layout)
 
-        vcs_settings_button = QPushButton("Setup VCS")
-        vcs_settings_button.clicked.connect(self.open_vcs_settings)
-        vcs_type_layout.addWidget(vcs_settings_button)
+        # Perforce Config (no stack needed)
+        self.perforce_config_widget = self.create_perforce_config_widget()
+        layout.addWidget(self.perforce_config_widget)
 
+        # Test Connection Button
+        self.test_connection_button = QPushButton("Test Connection")
+        self.test_connection_button.clicked.connect(self.test_connection)
+        layout.addWidget(self.test_connection_button)
+
+        self.connection_status_label = QLabel("")
+        self.connection_status_label.setWordWrap(True)
+        self.connection_status_label.setStyleSheet("font-size: 12px;")
+        layout.addWidget(self.connection_status_label)
+
+        # Branch and Auto-sync
         self.branch_combo = QComboBox()
         branch_layout = QHBoxLayout()
         branch_layout.addWidget(QLabel("Target Branch:"))
         branch_layout.addWidget(self.branch_combo)
+        layout.addLayout(branch_layout)
 
-        # Add auto sync checkbox
         self.auto_sync_checkbox = QCheckBox("Automatically sync branch before build")
-        self.auto_sync_hint = QLabel(
-            "When enabled, will automatically sync/pull the target branch before building"
-        )
+        self.auto_sync_hint = QLabel("When enabled, will automatically sync/pull the target branch before building")
         self.auto_sync_hint.setStyleSheet("color: gray; font-size: 10px;")
         self.auto_sync_hint.setWordWrap(True)
-
         auto_sync_layout = QVBoxLayout()
         auto_sync_layout.addWidget(self.auto_sync_checkbox)
         auto_sync_layout.addWidget(self.auto_sync_hint)
+        layout.addLayout(auto_sync_layout)
 
-        layout.addWidget(vcs_title)
-        layout.addWidget(vcs_desc)
-        layout.addSpacing(10)
-        layout.addLayout(vcs_type_layout)
-        layout.addLayout(branch_layout)
-        layout.addLayout(auto_sync_layout)  # Add the auto sync checkbox
         layout.addStretch()
+        return widget
 
+    def create_perforce_config_widget(self):
+        widget = QWidget()
+        layout = QFormLayout(widget)
+        self.p4_user_edit = QLineEdit()
+        self.p4_server_edit = QLineEdit()
+        self.p4_client_edit = QLineEdit()
+        self.p4_password_edit = QLineEdit()
+        self.p4_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addRow("User:", self.p4_user_edit)
+        layout.addRow("Server Address:", self.p4_server_edit)
+        layout.addRow("Client:", self.p4_client_edit)
+        layout.addRow("Password:", self.p4_password_edit)
         return widget
 
     def create_page2(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-
-        # Title for Page 2
-        page2_title = QLabel("Build Config")
-        page2_title.setStyleSheet("font-weight: bold; font-size: 18px;")
-        layout.addWidget(page2_title)
-
+        layout.addWidget(QLabel("Build Config").setStyleSheet("font-weight: bold; font-size: 18px;"))
         form = QFormLayout()
         self.build_type_combo = QComboBox()
         self.target_platform_combo = QComboBox()
-
+        self.archive_directory_edit = QLineEdit()  # New field for archive_directory
+        browse_archive_button = QPushButton("Browse")
+        browse_archive_button.clicked.connect(self.browse_archive_directory)
+        archive_layout = QHBoxLayout()
+        archive_layout.addWidget(self.archive_directory_edit)
+        archive_layout.addWidget(browse_archive_button)
         self.optimize_checkbox = QCheckBox("Optimize Packaging for Steam")
-        self.optimize_hint = QLabel(
-            "Will build using Valve\nRecommended padding alignment values"
-        )
+        self.optimize_hint = QLabel("Will build using Valve\nRecommended padding alignment values")
         self.optimize_hint.setStyleSheet("color: gray; font-size: 10px;")
-        self.optimize_hint.setWordWrap(True)
-
         optimize_layout = QVBoxLayout()
         optimize_layout.addWidget(self.optimize_checkbox)
         optimize_layout.addWidget(self.optimize_hint)
-
         form.addRow("Build Type", self.build_type_combo)
         form.addRow("Target Platform", self.target_platform_combo)
+        form.addRow("Archive Directory", archive_layout)  # Add archive_directory field
         form.addRow(optimize_layout)
-
         layout.addLayout(form)
         layout.addStretch()
-
         return widget
 
+    def browse_archive_directory(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory", self.archive_directory_edit.text() or "")
+        if folder:
+            self.archive_directory_edit.setText(folder)
+
     def create_footer(self):
-        self.footer_layout = QHBoxLayout()
-        self.footer_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-
+        footer_layout = QHBoxLayout()
+        footer_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.page1_label = QLabel("1")
-        self.page1_label.setStyleSheet(
-            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
-        )
+        self.page1_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
         self.page1_label.mousePressEvent = self.page1_clicked
-
         self.page2_label = QLabel("2")
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
         self.page2_label.mousePressEvent = self.page2_clicked
-
         self.next_button = QPushButton("Next")
         self.next_button.clicked.connect(self.next_page)
-
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.accept)
         self.save_button.hide()
-
-        self.footer_layout.addStretch()
-        self.footer_layout.addWidget(self.page1_label)
-        self.footer_layout.addWidget(self.page2_label)
-        self.footer_layout.addSpacing(20)
-        self.footer_layout.addWidget(self.next_button)
-        self.footer_layout.addWidget(self.save_button)
-
-        return self.footer_layout
+        footer_layout.addStretch()
+        footer_layout.addWidget(self.page1_label)
+        footer_layout.addWidget(self.page2_label)
+        footer_layout.addSpacing(20)
+        footer_layout.addWidget(self.next_button)
+        footer_layout.addWidget(self.save_button)
+        return footer_layout
 
     def page1_clicked(self, event):
-        """Switch to page 1 on label click"""
         self.stack.setCurrentIndex(0)
-        self.page1_label.setStyleSheet(
-            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
-        )
+        self.page1_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
-
         self.next_button.show()
         self.save_button.hide()
 
     def page2_clicked(self, event):
-        """Switch to page 2 on label click"""
         self.stack.setCurrentIndex(1)
         self.page1_label.setStyleSheet("color: gray; margin-right: 8px;")
-        self.page2_label.setStyleSheet(
-            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
-        )
-
+        self.page2_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
         self.next_button.hide()
         self.save_button.show()
 
     def next_page(self):
         if self.stack.currentIndex() == 0:
-            self.page2_clicked(None)  # Simulate click to page 2
+            self.page2_clicked(None)
 
     def browse_folder(self):
-        start_dir = (
-            self.source_edit.text() if os.path.isdir(self.source_edit.text()) else ""
-        )
-
-        folder = QFileDialog.getExistingDirectory(
-            self, "Select Project Folder", start_dir
-        )
+        folder = QFileDialog.getExistingDirectory(self, "Select Project Folder", self.source_edit.text() or "")
         if folder:
             self.source_edit.setText(folder)
 
-    def open_vcs_settings(self):
-        settings_dialog = SettingsDialog(default_page=1)
-        result = settings_dialog.exec()
-        if result == QDialog.DialogCode.Accepted:
-            self.vc
+    def display_connection_status(self, message, color):
+        self.connection_status_label.setText(message)
+        self.connection_status_label.setStyleSheet(f"font-size: 12px; color: {color.name()};")
+
+    def test_connection(self):
+        vcs_type = VCSTypeEnum(self.vcs_combo.currentText().lower())
+        vcs_client_class = self.vcs_clients.get(vcs_type)
+
+        if not vcs_client_class:
+            self.display_connection_status(f"Unsupported VCS type: {vcs_type.value}", QColor("red"))
+            return
+
+        try:
+            config = PerforceConfig(
+                user=self.p4_user_edit.text().strip(),
+                server_address=self.p4_server_edit.text().strip(),
+                client=self.p4_client_edit.text().strip()
+            )
+            config.p4password = self.p4_password_edit.text().strip()
+            client = vcs_client_class(config)
+            client.ensure_connected()
+            self.display_connection_status("Connection successful", QColor("green"))
+            self.on_vcs_changed()
+        except Exception as e:
+            self.on_vcs_changed()
+            self.display_connection_status(f"Connection failed: {str(e)}", QColor("red"))
+
+    def on_vcs_changed(self):
+        vcs_type = VCSTypeEnum(self.vcs_combo.currentText().lower())
+        self.branch_combo.clear()
+        self.branch_combo.setEnabled(False)
+
+        if vcs_client_class := self.vcs_clients.get(vcs_type):
+            try:
+                config = PerforceConfig(
+                    user=self.p4_user_edit.text(),
+                    server_address=self.p4_server_edit.text(),
+                    client=self.p4_client_edit.text()
+                )
+                config.p4password = self.p4_password_edit.text()
+                self.vcs_client = vcs_client_class(config)
+                self.vcs_connected = True
+                branches = self.vcs_client.get_branches() or []
+                if branches:
+                    self.branch_combo.addItems(branches)
+                    self.branch_combo.setEnabled(True)
+                    default_branch = self.build_target.target_branch if self.build_target else branches[0]
+                    self.branch_combo.setCurrentText(default_branch)
+                    print(f"Branches loaded: {branches}")
+                else:
+                    print(f"No branches found for {vcs_type}")
+            except ConnectionError as e:
+                self.vcs_client = None
+                self.vcs_connected = False
+                print(f"VCS connection failed: {e}")
+        else:
+            self.vcs_client = None
+            self.vcs_connected = False
+            print(f"Unsupported VCS type: {vcs_type}")
 
     def initialize_form(self):
-        """One-time initialization of all UI elements with their values"""
-
-        # VCS Type
         self.vcs_combo.clear()
-        self.vcs_combo.addItems([e.value.capitalize() for e in VCSTypeEnum])
+        self.vcs_combo.addItems(["Perforce"])  # Only Perforce supported
+        self.vcs_combo.currentTextChanged.connect(self.on_vcs_changed)
+        if self.build_target and self.build_target.vcs_config:
+            self.vcs_combo.setCurrentText("Perforce")  # Only option
 
         if self.build_target and self.build_target.vcs_config:
-            current_vcs = (
-                self.build_target.vcs_config.vcs_type.value.capitalize()
-                if self.build_target
-                else VCSTypeEnum.perforce.value.capitalize()
-            )
-            self.vcs_combo.setCurrentText(current_vcs)
+            p4conf = self.build_target.vcs_config
+            self.p4_user_edit.setText(p4conf.user)
+            self.p4_server_edit.setText(p4conf.server_address)
+            self.p4_client_edit.setText(p4conf.client)
+            self.p4_password_edit.setText(p4conf.p4password or "")
 
-        # VCS Branches
+        self.on_vcs_changed()
 
-        # If we have a valid client (and is configured well)
-        # add all branches to the combobox. And then set default if
-        # we already have a build target configured in the db
-        if self.vcs_client:
-            branches = self.vcs_client.get_branches()
-
-            if branches:
-                self.vcs_connected = True
-        else:
-            branches = []
-            self.vcs_connected = False
-
-        self.branch_combo.clear()
-
-        # Set default
-        current_branch = self.build_target.target_branch if self.build_target else ""
-        if current_branch:
-            self.branch_combo.addItem(current_branch)
-        self.branch_combo.setCurrentText(current_branch)
-
-        # Auto sync branch
         self.auto_sync_checkbox.setChecked(
             bool(self.build_target.auto_sync_branch) if self.build_target else False
         )
 
-        # Build Type
         self.build_type_combo.clear()
         self.build_type_combo.addItems([e.value for e in BuildTypeEnum])
-        current_build = (
-            self.build_target.build_type.value
-            if self.build_target
-            else BuildTypeEnum.prod.value
-        )
+        current_build = self.build_target.build_type.value if self.build_target else BuildTypeEnum.prod.value
         self.build_type_combo.setCurrentText(current_build)
 
-        # Platform
         self.target_platform_combo.clear()
-        platforms = [platform.value for platform in BuildTargetPlatformEnum]
-        self.target_platform_combo.addItems(platforms)
+        self.target_platform_combo.addItems([p.value for p in BuildTargetPlatformEnum])
+        current_platform = self.build_target.target_platform if self.build_target else BuildTargetPlatformEnum.win_64.value
+        self.target_platform_combo.setCurrentText(current_platform)
 
-        if self.build_target:
-            current_platform = self.build_target.target_platform
-            self.target_platform_combo.setCurrentText(current_platform)
-        else:
-            self.target_platform_combo.setCurrentIndex(0)
-
-        # Extra build fields
         self.optimize_checkbox.setChecked(
             bool(self.build_target.optimize_for_steam) if self.build_target else True
         )
 
-        # Project section
         projects = self.session.query(Project).all()
-
-        for project in projects:
-            self.project_combo.addItem(project.name)
-
+        self.project_combo.clear()
+        self.project_combo.addItems([p.name for p in projects])
         index = self.project_combo.findText(self.session_project.name)
-        if index >= 0:  # If found
+        if index >= 0:
             self.project_combo.setCurrentIndex(index)
-
-        # Set the default value of the source_dir field
         self.source_edit.setText(self.session_project.source_dir)
 
-        # Add the session project to the session so it will be updated/saved when
-        # user accepts dialog
-        self.session.add(self.session_project)
+        self.archive_directory_edit.setText(
+            self.build_target.archive_directory if self.build_target else ""
+        )
 
     def accept(self):
         try:
             if not self.session_project:
-                raise Exception(
-                    "No session project! We need one to accept this dialog."
-                )
+                raise Exception("No session project available!")
 
-            # Create a new BuildTarget if it doesn't exist
             if not self.build_target:
-                self.build_target = BuildTarget()
-                self.build_target.project = self.session_project
+                self.build_target = BuildTarget(project=self.session_project)
                 self.session.add(self.build_target)
 
-            # Map to an existing VCSConfig
-            selected_vcs_type = VCSTypeEnum(self.vcs_combo.currentText().lower())
-            existing_vcs_config = (
-                self.session.query(VCSConfig)
-                .filter_by(
-                    vcs_type=selected_vcs_type, build_target_id=self.build_target.id
-                )
-                .first()
-            )
-            if existing_vcs_config:
-                self.build_target.vcs_config = existing_vcs_config
-            else:
-                self.build_target.vcs_config = (
-                    None  # Unlink if no matching config exists
-                )
+            vcs_type = VCSTypeEnum(self.vcs_combo.currentText().lower())
+            vcs_config = self.build_target.vcs_config or PerforceConfig()
+            vcs_config.user = self.p4_user_edit.text()
+            vcs_config.server_address = self.p4_server_edit.text()
+            vcs_config.client = self.p4_client_edit.text()
+            vcs_config.p4password = self.p4_password_edit.text()
+            vcs_config.vcs_type = vcs_type
+            self.build_target.vcs_config = vcs_config
+            self.session.add(vcs_config)
 
-            # Update BuildTarget fields
             self.build_target.auto_sync_branch = self.auto_sync_checkbox.isChecked()
             self.build_target.target_branch = self.branch_combo.currentText()
-
-            build_type_text = self.build_type_combo.currentText().lower()
-            self.build_target.build_type = (
-                BuildTypeEnum.dev
-                if build_type_text == "development"
-                else BuildTypeEnum.prod
-            )
-
-            platform_text = self.target_platform_combo.currentText()
-            self.build_target.target_platform = BuildTargetPlatformEnum(platform_text)
-
+            self.build_target.build_type = BuildTypeEnum(self.build_type_combo.currentText().capitalize())
+            self.build_target.target_platform = BuildTargetPlatformEnum(self.target_platform_combo.currentText())
             self.build_target.optimize_for_steam = self.optimize_checkbox.isChecked()
             self.build_target.project.source_dir = self.source_edit.text()
+            self.build_target.archive_directory = self.archive_directory_edit.text()  # Save archive_directory
 
-            # Commit to DB
             self.session.commit()
-
-            print(
-                f"BuildTarget {self.build_target.id} saved for project: {self.build_target.project.name}, target platform: {self.build_target.target_platform}"
-            )
+            print(f"BuildTarget {self.build_target.id} - {self.build_target.target_platform} saved.")
             super().accept()
-
         except Exception as e:
+            self.session.rollback()
+            QMessageBox.critical(self, "Error", f"Failed to save: {str(e)}")
             self.reject()
-            QMessageBox.critical(
-                self, "Error", f"Failed to save configuration: {str(e)}"
-            )
-        finally:
-            if self.vcs_client:
-                self.vcs_client._disconnect()
 
     def reject(self):
-        """User clicked Cancel - rollback any changes"""
-        print("User canceled Build Target Setup. Discard settings.")
-        try:
-            self.session.rollback()
-        except:
-            pass  # Session might already be invalid
-        finally:
-            self.session.close()
-            super().reject()
-
-    def closeEvent(self, event):
+        self.session.rollback()
+        self.session.close()
         if self.vcs_client:
             self.vcs_client._disconnect()
+        super().reject()
 
-        if self.session.dirty:  # Example: Check if there are uncommitted changes
+    def closeEvent(self, event):
+        if self.session.dirty:
             reply = QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes. Close anyway?",
-                QMessageBox.Yes | QMessageBox.No,
+                self, "Unsaved Changes", "You have unsaved changes. Close anyway?",
+                QMessageBox.Yes | QMessageBox.No
             )
             if reply == QMessageBox.Yes:
-                self.reject()  # Rollback and close
+                self.reject()
                 event.accept()
             else:
-                event.ignore()  # Keep the dialog open
+                event.ignore()
         else:
-            self.reject()  # No changes, just rollback and close
+            self.reject()
             event.accept()

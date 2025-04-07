@@ -16,7 +16,8 @@ from PyQt6.QtGui import QIcon
 
 from core.vcs.p4client import P4Client
 from core.vcs.vcsbase import MissingConfigException
-from database import initialize_database
+from database import SessionFactory, initialize_database
+from models import BuildTarget
 from views.dialogs.build_dialog import BuildWindowDialog
 from views.widgets.build_targets_widget import BuildTargetListWidget
 from views.widgets.build_list_widget import BuildListWidget
@@ -38,6 +39,11 @@ class BuildBridgeWindow(QMainWindow):
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 500, 400)
+
+        self.session = SessionFactory()
+
+        # Single build target setup. For now.
+        self.build_target = self.session.query(BuildTarget).order_by(BuildTarget.id.desc()).first()
 
         self.vcs_client = None
 
@@ -73,7 +79,7 @@ class BuildBridgeWindow(QMainWindow):
         main_layout.setSpacing(10)  # Add some spacing between sections
 
         # Build Targt Section
-        build_target_widget = BuildTargetListWidget(self)
+        build_target_widget = BuildTargetListWidget(build_target=self.build_target, parent=self)
         main_layout.addWidget(build_target_widget)
 
         # Builds Section
@@ -95,128 +101,6 @@ class BuildBridgeWindow(QMainWindow):
         dialog = SettingsDialog(self)
         dialog.exec()
 
-    def trigger_build(self):
-        """
-        We use the VCS branch name (or tag/label, when that is supported) to name
-        each packaged build.
-        eg.:
-            BuildDir
-                |_ ProjectName
-                    |_ StoresConfig
-                        |_ Steam
-                        |_ Itch
-                    |_ Release1 (VCS branch/tag)
-                        |_ Development
-                        |_ Shipping
-                    |_ Release2 (VCS branch/tag)
-                        |_ Shipping
-        """
-        selected_branch = self.get_selected_branch()
-        if not selected_branch:
-            QMessageBox.warning(
-                self, "Selection Error", "Please select a branch to build."
-            )
-            return
-
-        try:
-            self.vcs_client.switch_to_ref(selected_branch)
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Branch Switch Failed",
-                f"Could not switch to branch '{selected_branch}':\n\n{str(e)}\n\n"
-                "Check your Perforce connection settings or ensure no pending changes exist.",
-            )
-            return
-
-        # Extract the build parameters and validate requirements
-        builds_root = self.build_conf.get("unreal.archive_directory", "C:/Builds")
-
-        release_match = re.search(
-            self.vcs_conf.get("perforce.release_pattern"), selected_branch
-        )
-
-        release_name = release_match.group(1) if release_match else None
-
-        if not self.project_name:
-            QMessageBox.warning(
-                self,
-                "No Project Name.",
-                "Triggering builds depends on Project Name. Define one in File -> Settings -> Project",
-            )
-            return
-        if not release_name:
-            QMessageBox.warning(
-                self,
-                "Cannot get release name.",
-                "We need to store the release under a folder with the name of the release."
-                "We do so by inferring the release name from your release branch/stream using"
-                "the regex defined in Settings -> VCS -> Release Pattern."
-                "Ensure this is a valid regex that can extrapolate the release name from your"
-                " branch naming convention.",
-            )
-            return
-
-        project_build_dir_root = Path(unc_join_path(builds_root, self.project_name))
-        this_release_output_dir = (
-            project_build_dir_root
-            / release_name
-            / self.build_conf.get("unreal.build_type")
-        )
-        source_dir = self.vcs_client.get_workspace_root()
-
-        # Check if build directory exists before trying to create the builder
-        if this_release_output_dir.exists():
-            response = QMessageBox.question(
-                self,
-                "Build Conflict",
-                f"A build already exists for release:\n{release_name}\n\nDo you want to proceed and overwrite it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if response == QMessageBox.StandardButton.No:
-                return
-
-            try:
-                shutil.rmtree(this_release_output_dir)
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Cleanup Error",
-                    f"Failed to delete existing build directory:\n{str(e)}",
-                )
-                return
-
-        # Create the builder after any potential cleanup
-        try:
-            unreal_builder = UnrealBuilder(
-                source_dir=source_dir,
-                output_dir=this_release_output_dir,
-            )
-        except ProjectFileNotFoundError as e:
-            QMessageBox.critical(
-                self, "Project File Error", f"Project file not found: {str(e)}"
-            )
-            return
-        except EngineVersionError as e:
-            QMessageBox.critical(
-                self,
-                "Engine Version Error",
-                f"Could not determine Unreal Engine version: {str(e)}",
-            )
-            return
-        except UnrealEngineNotInstalledError as e:
-            QMessageBox.critical(
-                self,
-                "Unreal Engine Not Found",
-                f"Unreal Engine not found at the expected path",
-            )
-            return
-
-        # Continue with the build process
-        dialog = BuildWindowDialog(unreal_builder, parent=self)
-        dialog.exec()
-        self.build_list_widget.load_builds(select_build=selected_branch)
 
     def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()

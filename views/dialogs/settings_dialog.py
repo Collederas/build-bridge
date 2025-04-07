@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 from PyQt6.QtGui import QColor
-from core.vcs.p4client import P4Client  # Import P4Client
+from core.vcs.p4client import P4Client
 
 from database import SessionFactory
 from models import Project, PerforceConfig
@@ -118,7 +118,6 @@ class SettingsDialog(QDialog):
         # Load or create Perforce configuration
         self.perforce_config = (
             self.session.query(PerforceConfig)
-            .filter_by(build_target_id=None)
             .first()
         )
         if not self.perforce_config:

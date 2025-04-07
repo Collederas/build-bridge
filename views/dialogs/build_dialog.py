@@ -173,7 +173,8 @@ class BuildWindowDialog(QDialog):
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
             self.append_output("\nBUILD COMPLETED SUCCESSFULLY")
             logger.info("Build completed successfully")
-            self.transition_to_build_management()
+            self.action_button.setText("Close")
+            self.action_button.clicked.connect(self.accept)
         else:
             self.append_output(f"\nBUILD FAILED (Exit code: {exit_code})")
             logger.warning(f"Build failed with exit code {exit_code}")

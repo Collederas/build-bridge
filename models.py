@@ -46,6 +46,7 @@ class BuildTarget(Base):
     optimize_for_steam = Column(Boolean, nullable=False, default=True)
 
     auto_sync_branch = Column(Boolean, nullable=False, default=False)
+    archive_directory = Column(String, nullable=False, default="")
 
     def __repr__(self):
         return f"<BuildTarget(project_name={self.project.name}, platform={self.target_platform})>"

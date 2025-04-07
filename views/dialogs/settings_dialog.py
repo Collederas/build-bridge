@@ -118,6 +118,7 @@ class SettingsDialog(QDialog):
         # Load or create Perforce configuration
         self.perforce_config = (
             self.session.query(PerforceConfig)
+            .order_by(PerforceConfig.id.desc())
             .first()
         )
         if not self.perforce_config:

@@ -49,7 +49,7 @@ class BuildTarget(Base):
     archive_directory = Column(String, nullable=False, default="")
 
     def __repr__(self):
-        return f"<BuildTarget(project_name={self.project.name}, platform={self.target_platform})>"
+        return f"{self.project.name} - {self.target_platform.value}"
     
 
 class VCSConfig(Base):

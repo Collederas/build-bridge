@@ -3,7 +3,7 @@ import shutil
 from PyQt6.QtWidgets import (
     QWidget,
     QLabel,
-    QComboBox,
+    QLineEdit,
     QPushButton,
     QHBoxLayout,
     QMessageBox,
@@ -11,7 +11,12 @@ from PyQt6.QtWidgets import (
     QFrame,
 )
 
-from core.builder.unreal_builder import EngineVersionError, ProjectFileNotFoundError, UnrealBuilder, UnrealEngineNotInstalledError
+from core.builder.unreal_builder import (
+    EngineVersionError,
+    ProjectFileNotFoundError,
+    UnrealBuilder,
+    UnrealEngineNotInstalledError,
+)
 from database import session_scope
 from models import BuildTarget
 from views.dialogs.build_dialog import BuildWindowDialog
@@ -51,11 +56,10 @@ class BuildTargetListWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
 
-        self.label = QLabel("Project Name - Platform - Shipping")
+        self.label = QLabel("Missing Build Target")
 
         # Branches
-        self.branches_combo = QComboBox()
-        self.branches_combo.addItems(["release/0.2", "release/0.3"])
+        self.build_version = QLineEdit("0.1")
 
         self.build_button = QPushButton("Build")
         self.edit_button = QPushButton("Edit")
@@ -64,31 +68,16 @@ class BuildTargetListWidget(QWidget):
 
         if self.build_target:
             self.build_button.setEnabled(True)
+            self.label.setText(self.build_target.__repr__())
         else:
-            self.build_button.setEnabled(False)   
+            self.build_button.setEnabled(False)
 
         layout.addWidget(self.label)
-        layout.addWidget(self.branches_combo)
+        layout.addWidget(self.build_version)
         layout.addWidget(self.edit_button)
         layout.addWidget(self.build_button)
 
         outer_layout.addWidget(contrast_frame)
-
-        self.refresh_branches()
-
-    def refresh_branches(self):
-        if not self.vcs_client:
-            return
-
-        try:
-            self.branches_combo.clear()
-            branches = self.vcs_client.get_branches()
-            if not branches:
-                self.branches_combo.addItem("No release branches found.")
-            else:
-                self.branches_combo.addItems(branches)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
     def open_edit_dialog(self):
         # If a target exists use that. Else it will be created at the end
@@ -108,15 +97,14 @@ class BuildTargetListWidget(QWidget):
                         |_ Steam
                         |_ Itch
                     |_ Release1 (VCS branch/tag)
-                        |_ Development
-                        |_ Shipping
                     |_ Release2 (VCS branch/tag)
-                        |_ Shipping
         """
         builds_root = self.build_target.archive_directory
-        release_name = "0.1"
+        release_name = self.build_version.text().strip()
 
-        project_build_dir_root = Path(builds_root) / self.build_target.project.name / release_name
+        project_build_dir_root = (
+            Path(builds_root) / self.build_target.project.name / release_name
+        )
 
         source_dir = self.build_target.project.source_dir
 
@@ -151,7 +139,7 @@ class BuildTargetListWidget(QWidget):
                 target_config=self.build_target.build_type.value,
                 output_dir=project_build_dir_root,
                 clean=False,
-                valve_package_pad=self.build_target.optimize_for_steam
+                valve_package_pad=self.build_target.optimize_for_steam,
             )
         except ProjectFileNotFoundError as e:
             QMessageBox.critical(
@@ -172,7 +160,7 @@ class BuildTargetListWidget(QWidget):
                 f"Unreal Engine not found at the expected path",
             )
             return
-        
+
         # Continue with the build process
         dialog = BuildWindowDialog(unreal_builder, parent=self)
         dialog.exec()

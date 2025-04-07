@@ -1,4 +1,3 @@
-import os
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -11,12 +10,14 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QMessageBox,
+    QFileDialog,
+    QTextEdit,
 )
+from PyQt6.QtGui import QColor
+from core.vcs.p4client import P4Client  # Import P4Client
 
-from PyQt6.QtCore import Qt
-from sqlalchemy.orm import Session
 from database import SessionFactory
-from models.project import Project
+from models import Project, PerforceConfig
 
 
 class SettingsDialog(QDialog):
@@ -26,10 +27,37 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(600, 400)
         self.default_page = default_page
 
-        # Initialize SQLAlchemy session
-        self.session: Session = SessionFactory()
+        # Dialog managed session
+        self.session = SessionFactory()
 
+        # Query for project and ensure it exists
+        self.load_project()
         self.setup_ui()
+        self.load_form_data()  # Load data into UI fields after setting up UI
+
+    def load_project(self):
+        """Ensure project exists and is attached to session"""
+        try:
+            # Query for existing project
+            self.project = self.session.query(Project).first()
+
+            # If no project exists, create one
+            if not self.project:
+                print("No project found, creating new project")
+                self.project = Project()
+                self.project.name = ""
+                self.project.source_dir = ""
+                self.project.dest_dir = ""
+                self.session.add(self.project)
+                self.session.commit()  # Save immediately to ensure it has an ID
+            else:
+                print(f"Found existing project: '{self.project.name}'")
+                # Ensure project is attached to our session
+                if self.project not in self.session:
+                    self.session.add(self.project)
+        except Exception as e:
+            print(f"Error loading project: {str(e)}")
+            self.project = None
 
     def setup_ui(self):
         layout = QHBoxLayout()
@@ -65,17 +93,18 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
         form_layout = QFormLayout()
 
-        # Project name field
-        self.project_name_input = QLineEdit(self.project.name)
+        self.project_name_input = QLineEdit()
+        self.source_dir_input = QLineEdit()
+        self.dest_dir_input = QLineEdit()
+
+        # Project Name field
         form_layout.addRow(QLabel("Project Name:"), self.project_name_input)
 
         # Source directory field
-        self.source_dir_input = QLineEdit(self.project.source_dir)
         form_layout.addRow(QLabel("Source Directory:"), self.source_dir_input)
-
-        # Destination directory field
-        self.dest_dir_input = QLineEdit(self.project.dest_dir)
-        form_layout.addRow(QLabel("Destination Directory:"), self.dest_dir_input)
+        browse_button = QPushButton("Browse")
+        browse_button.clicked.connect(self.browse_project_folder)
+        form_layout.addWidget(browse_button)
 
         layout.addLayout(form_layout)
         page.setLayout(layout)
@@ -86,41 +115,182 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
         form_layout = QFormLayout()
 
-        # VCS settings
-        vcs_config = self.vcs_config
-        self.vcs_user_input = QLineEdit(vcs_config.vcs_user or "")
-        form_layout.addRow(QLabel("VCS User:"), self.vcs_user_input)
+        # Load or create Perforce configuration
+        self.perforce_config = (
+            self.session.query(PerforceConfig)
+            .filter_by(build_target_id=None)
+            .first()
+        )
+        if not self.perforce_config:
+            self.perforce_config = PerforceConfig()
+            self.session.add(self.perforce_config)
 
-        self.vcs_password_input = QLineEdit(vcs_config.vcs_password or "")
-        self.vcs_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        form_layout.addRow(QLabel("VCS Password:"), self.vcs_password_input)
+        # Perforce settings
+        self.p4_user_input = QLineEdit(self.perforce_config.user or "")
+        form_layout.addRow(QLabel("Perforce User:"), self.p4_user_input)
 
-        self.vcs_port_input = QLineEdit(vcs_config.vcs_port or "")
-        form_layout.addRow(QLabel("VCS Port:"), self.vcs_port_input)
+        self.p4_password_input = QLineEdit(self.perforce_config.p4password or "")
+        self.p4_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        form_layout.addRow(QLabel("Perforce Password:"), self.p4_password_input)
 
-        self.vcs_client_input = QLineEdit(vcs_config.vcs_client or "")
-        form_layout.addRow(QLabel("VCS Client:"), self.vcs_client_input)
+        # Add note about keyring usage with better styling
+        keyring_note = QLabel(
+            "Note: The Perforce password is securely stored using the system keyring and will not be saved in the application database."
+        )
+        keyring_note.setWordWrap(True)
+        keyring_note.setStyleSheet("font-style: italic; color: gray;")  # Subtle styling
+        form_layout.addRow("", keyring_note)  # Empty label for alignment
+
+        self.p4_server_input = QLineEdit(self.perforce_config.server_address or "")
+        form_layout.addRow(QLabel("Perforce Server:"), self.p4_server_input)
+
+        self.p4_client_input = QLineEdit(self.perforce_config.client or "")
+        form_layout.addRow(QLabel("Perforce Client:"), self.p4_client_input)
+
+        # Test Connection Button with spacing
+        self.test_connection_btn = QPushButton("Test Connection")
+        self.test_connection_btn.clicked.connect(self.test_p4_connection)
+        form_layout.addRow("", self.test_connection_btn)  # Empty label for alignment
+        form_layout.setSpacing(10)  # Add spacing between rows
+
+        # Connection Status Display with slight padding
+        self.connection_status_display = QTextEdit()
+        self.connection_status_display.setReadOnly(True)
+        self.connection_status_display.setMaximumHeight(50)
+        self.connection_status_display.setStyleSheet("padding: 5px;")  # Add padding
+        form_layout.addRow("", self.connection_status_display)  # Empty label for alignment
 
         layout.addLayout(form_layout)
+        layout.addStretch()  # Push content to top, leaving space below
         page.setLayout(layout)
         return page
+
+    def test_p4_connection(self):
+        """Test the Perforce connection and display the result."""
+        try:
+            # Create a temporary Perforce client with the current settings
+            temp_config = PerforceConfig(
+                user=self.p4_user_input.text().strip(),
+                server_address=self.p4_server_input.text().strip(),
+                client=self.p4_client_input.text().strip(),
+            )
+            temp_config.p4password = self.p4_password_input.text().strip()
+
+            p4_client = P4Client(config=temp_config)
+            p4_client.ensure_connected()  # Test connection
+
+            # Display success message
+            self.display_connection_status("Connection successful", QColor("green"))
+        except Exception as e:
+            # Display error message
+            self.display_connection_status(f"Connection failed: {str(e)}", QColor("red"))
+
+    def display_connection_status(self, message, color):
+        """Display a connection status message with the specified color."""
+        self.connection_status_display.setTextColor(color)
+        self.connection_status_display.setText(message)
+
+    def load_form_data(self):
+        """Load existing data from database into UI fields"""
+        if not self.project:
+            print("Warning: No project available to load data from")
+            return
+
+        try:
+            # Explicitly refresh from database to ensure we have latest data
+            self.session.refresh(self.project)
+
+            # Load data into form fields
+            print(
+                f"Loading form data - Name: '{self.project.name}', Source: '{self.project.source_dir}'"
+            )
+
+            self.project_name_input.setText(self.project.name or "")
+            self.source_dir_input.setText(self.project.source_dir or "")
+        except Exception as e:
+            print(f"Error loading form data: {str(e)}")
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
 
+    def browse_project_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Project Folder")
+        if folder:
+            self.source_dir_input.setText(folder)
+
     def apply_settings(self):
         # Save project settings
-        self.project.name = self.project_name_input.text().strip()
-        self.project.source_dir = self.source_dir_input.text().strip()
-        self.project.dest_dir = self.dest_dir_input.text().strip()
+        try:
+            if not self.project:
+                self.project = Project()
+                self.session.add(self.project)
 
-        # Save VCS settings
-        vcs_config = self.vcs_config
-        vcs_config.vcs_user = self.vcs_user_input.text().strip()
-        vcs_config.vcs_password = self.vcs_password_input.text().strip()
-        vcs_config.vcs_port = self.vcs_port_input.text().strip()
-        vcs_config.vcs_client = self.vcs_client_input.text().strip()
+            # Update project with form values
+            self.project.name = self.project_name_input.text().strip()
+            self.project.source_dir = self.source_dir_input.text().strip()
+            self.project.dest_dir = self.dest_dir_input.text().strip()
 
-        # Commit changes to the database
-        self.session.commit()
-        self.accept()
+            # Debug values being saved
+            print(
+                f"Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Dest: '{self.project.dest_dir}'"
+            )
+
+            # Save Perforce settings
+            try:
+                self.perforce_config.user = self.p4_user_input.text().strip()
+                self.perforce_config.p4password = self.p4_password_input.text().strip()
+                self.perforce_config.server_address = self.p4_server_input.text().strip()
+                self.perforce_config.client = self.p4_client_input.text().strip()
+                self.session.add(self.perforce_config)
+                print(f"saving vcs settings: user {self.p4_user_input.text().strip()}")
+
+            except Exception as e:
+                print(f"Error saving Perforce settings: {str(e)}")
+                QMessageBox.critical(self, "Error", f"Failed to save Perforce settings: {str(e)}")
+
+            # Make sure object is in session
+            if self.project not in self.session:
+                self.session.add(self.project)
+
+            # Commit changes to the database and ensure they're flushed
+            self.session.commit()
+            self.session.flush()
+
+            print(f"VCS Saved: user {self.perforce_config.user}")
+            print(
+                f"Project saved: '{self.project.name}' (ID: {self.project.id if hasattr(self.project, 'id') else 'unknown'})"
+            )
+
+            self.accept()
+        except Exception as e:
+            print(f"Error saving settings: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to save settings: {str(e)}")
+            self.reject()
+
+    def accept(self):
+        """User clicked Apply - close dialog but keep session open"""
+        # Close session if we created it
+        try:
+            self.session.close()
+        except:
+            pass
+        super().accept()
+
+    def reject(self):
+        """User clicked Cancel - rollback any changes"""
+        try:
+            self.session.rollback()
+        except:
+            pass  # Session might already be invalid
+        finally:
+            # Only close the session if we created it
+            try:
+                self.session.close()
+            except:
+                pass
+            super().reject()
+
+    def closeEvent(self, event):
+        """Handle window close button (same as reject)"""
+        self.reject()
+        event.accept()

@@ -9,10 +9,10 @@ from PyQt6.QtWidgets import (
     QFrame,
 )
 
-from views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 from core.vcs.p4client import P4Client
-from core.vcs.vcsbase import MissingConfigException
-
+from database import session_scope
+from models import BuildTarget
+from views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 
 
 class BuildTargetListWidget(QWidget):
@@ -81,5 +81,14 @@ class BuildTargetListWidget(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to load branches: {str(e)}")
 
     def open_edit_dialog(self):
-        dialog = BuildTargetSetupDialog(self.parent.project_model)
+        # TODO: this is a hack until multiple build targets are supported.
+        # right now the app only supports one.
+        with session_scope() as session:
+            build_target = session.query(BuildTarget).first()
+
+            # If a target exists use that. Else it will be created at the end
+            # of the dialog, when accepted.
+            build_target_id = build_target.id if build_target else None
+            dialog = BuildTargetSetupDialog(build_target_id=build_target_id)
+
         dialog.exec()

@@ -1,6 +1,5 @@
 import os
 from jinja2 import Template
-from conf.config_manager import ConfigManager
 
 
 class SteamPipeConfigurator:
@@ -16,7 +15,7 @@ class SteamPipeConfigurator:
         Raises:
             ValueError: If any configuration or path is invalid.
         """
-        builder_path = self.config_manager.get("steam.builder_path", "")
+        builder_path = "" if True else self.config_manager.get("steam.builder_path", "")
         if not builder_path:
             raise ValueError("Builder path is not configured in settings.")
 

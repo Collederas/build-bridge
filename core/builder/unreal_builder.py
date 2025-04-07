@@ -3,7 +3,6 @@ import os
 import sys
 from typing import Optional
 
-from conf.config_manager import ConfigManager
 
 
 class BuildAlreadyExistsError(Exception):
@@ -47,7 +46,7 @@ class UnrealBuilder:
         source_dir: str,
         output_dir: str,
     ):
-        self.config_manager = ConfigManager("build")
+        self.config_manager = "ConfigManager("")"
         self.build_config = self.config_manager.get("unreal", {})
 
         self.source_dir = source_dir

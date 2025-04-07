@@ -1,10 +1,10 @@
+from contextlib import contextmanager
 import os
 import platform
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Enum
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
-import enum
 
 Base = declarative_base()
 
@@ -30,25 +30,24 @@ SessionFactory = sessionmaker(bind=engine)
 
 def initialize_database():
     if db_path.exists():
+        # os.remove(db_path)
         print(f"Database '{db_path}' already exists.")
         return
-
+    
     app_data_location.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
     print(f"Database '{db_path}' created successfully.")
 
 
-class SessionContext:
-    def __init__(self):
-        self.session = None
-    
-    def __enter__(self):
-        self.session = SessionFactory()
-        return self.session
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self.session.rollback()
-        else:
-            self.session.commit()
-        self.session.close()
+@contextmanager
+def session_scope():
+    """Provide a transactional scope around a series of operations."""
+    session = SessionFactory()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()

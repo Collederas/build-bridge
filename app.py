@@ -1,26 +1,22 @@
 from pathlib import Path
 import re
 import sys
-import os
 import shutil
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
     QVBoxLayout,
-
     QLabel,
     QMessageBox,
     QMenu,
 )
 from PyQt6.QtGui import QIcon
 
-from conf.config_manager import ConfigManager
 
 from core.vcs.p4client import P4Client
 from core.vcs.vcsbase import MissingConfigException
-from database import SessionFactory, initialize_database
-from models.project import Project
+from database import initialize_database
 from views.dialogs.build_dialog import BuildWindowDialog
 from views.widgets.build_targets_widget import BuildTargetListWidget
 from views.widgets.build_list_widget import BuildListWidget
@@ -35,17 +31,13 @@ from utils.paths import unc_join_path
 
 
 class BuildBridgeWindow(QMainWindow):
-    vcs_clients = (P4Client, )
+    vcs_clients = (P4Client,)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
         self.setGeometry(100, 100, 500, 400)
-
-        self.vcs_conf = None
-        self.session = SessionFactory()
-        self.project_model = self.session.query(Project).first()
 
         self.vcs_client = None
 
@@ -89,10 +81,11 @@ class BuildBridgeWindow(QMainWindow):
         builds_layout = QVBoxLayout(builds_widget)
         builds_layout.addWidget(QLabel("Available Builds:"))
 
-        # Initialize build_list_widget without a directory initially
-        self.build_list_widget = BuildListWidget(
-            self.project_model.dest_dir
-        )
+        # Initialize build_list_widget
+ 
+        self.build_list_widget = BuildListWidget()
+
+
         self.build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(self.build_list_widget)
 
@@ -238,7 +231,7 @@ class BuildBridgeWindow(QMainWindow):
     def closeEvent(self, event):
         if self.vcs_client:
             self.vcs_client._disconnect()
-        self.session.close()
+
         super().closeEvent(event)
 
 

@@ -2,7 +2,7 @@ from pathlib import Path
 from PyQt6.QtCore import QProcess
 from PyQt6.QtWidgets import QVBoxLayout, QTextEdit, QLabel, QPushButton, QDialog
 
-from conf.config_manager import ConfigManager
+
 
 class SteamUploadDialog(QDialog):
     def __init__(self, builder_path: str, steam_username: str, steamcmd_path="C:/steamcmd/steamcmd.exe"):
@@ -40,7 +40,7 @@ class SteamUploadDialog(QDialog):
 
     def start_full_workflow(self):
         self.log_display.append("Starting SteamCMD workflow...")
-        conf = ConfigManager("store")
+        conf = None
         passw = conf.get_secure("BuildBridgeSteam", self.steam_username)
         command = [
             self.steamcmd_path,

@@ -6,7 +6,6 @@ from exceptions import InvalidConfigurationError
 from core.publisher.base_publisher import BasePublisher
 from core.publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
 
-from conf.config_manager import ConfigManager
 
 
 class SteamPublisher(BasePublisher):
@@ -14,7 +13,7 @@ class SteamPublisher(BasePublisher):
 
     def __init__(self):
         # Use ConfigManager for stores
-        self.config_manager = ConfigManager("stores")
+        self.config_manager = None if True else ConfigManager("stores")
 
         # Get basic config data
         self.app_id = self.config_manager.get("steam.app_id", "")

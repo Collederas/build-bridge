@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 import os
-from conf.config_manager import ConfigManager
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 
@@ -19,7 +18,7 @@ class BuildListEntryWidget(QWidget):
     def __init__(self, build_root):
         super().__init__()
         self.build_src = build_root
-        self.publish_conf = ConfigManager("publish")
+        self.publish_conf = None
 
         layout = QHBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
@@ -84,7 +83,7 @@ class BuildListEntryWidget(QWidget):
 
 
 class BuildListWidget(QWidget):
-    def __init__(self, base_path):
+    def __init__(self, builds_dir:str = None):
         super().__init__()
         self.setWindowTitle("Available Builds")
         self.setMinimumSize(600, 400)
@@ -105,7 +104,7 @@ class BuildListWidget(QWidget):
         main_layout.addWidget(scroll_area)
 
         # Populate with subdirectory widgets
-        self.load_builds(base_path)
+        self.load_builds(builds_dir)
 
     def load_builds(self, path):
         if not path:

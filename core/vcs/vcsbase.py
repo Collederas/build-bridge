@@ -16,15 +16,10 @@ def vcs_session(config_path="vcsconfig.json"):
     finally:
         client.close()
 
-class VCSType(Enum):
-    NONE = ""
-    PERFORCE = "perforce"
-    GIT = "git"
 
 class VCSClient(ABC):
     """Base class to abstract connection to different VCS."""
 
-    vcs_type = VCSType.NONE
 
     @abstractmethod
     def get_branches(self, pattern: Optional[str] = None) -> List[str]:

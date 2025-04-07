@@ -20,7 +20,8 @@ dependencies = [
     "pywin32-ctypes (==0.2.3)",
     "setuptools (==78.1.0)",
     "pytest (>=8.3.5,<9.0.0)",
-    "keyring (>=25.6.0,<26.0.0)"
+    "keyring (>=25.6.0,<26.0.0)",
+    "jinja2 (>=3.1.6,<4.0.0)"
 ]
 
 

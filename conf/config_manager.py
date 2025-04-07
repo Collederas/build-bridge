@@ -94,7 +94,7 @@ class ConfigManager:
                 "steam": {
                     "enabled": False,
                     "app_id": "",
-                    "depot_id": "",
+                    "depots_id": "",
                     "build_id": "",
                     "builder_path": ""
                 }
@@ -154,6 +154,7 @@ class ConfigManager:
                 return True
             else:
                 # Create default config
+                print("creating")
                 self.config = self._get_default_config()
                 self.save()
                 return False

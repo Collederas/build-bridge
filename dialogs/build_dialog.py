@@ -10,10 +10,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
-from PyQt6.QtCore import QProcess, QTimer
+from PyQt6.QtCore import QProcess
 
-from builder.buildlist_widget import BuildListWidget
-from builder.unreal_builder import UnrealBuilder  # Adjust import path as needed
+from widgets.buildlist_widget import BuildListWidget
+from builder.unreal_builder import UnrealBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class BuildWindowDialog(QDialog):
         self.button_layout.addWidget(self.action_button)
 
         # Build list widget (hidden until build completes)
-        self.build_list_widget = BuildListWidget(self)
+        self.build_list_widget = BuildListWidget(None, self)
         self.build_list_widget.setVisible(False)
         self.layout.addWidget(self.build_list_widget)
 
@@ -110,7 +110,6 @@ class BuildWindowDialog(QDialog):
 
             pid = self.process.processId()
             if platform.system() == "Windows":
-                # Use taskkill to kill the process and all children
                 result = subprocess.run(
                     f"taskkill /F /T /PID {pid}",
                     shell=True,
@@ -204,7 +203,7 @@ class BuildWindowDialog(QDialog):
         self.setWindowTitle("Build Management")
         self.output_text.setMaximumHeight(150)
         self.build_list_widget.setVisible(True)
-        self.build_list_widget.load_builds(os.path.basename(self.builder.build_dir))
+        self.build_list_widget.load_builds(os.path.basename(self.builder.output_dir))
         self.action_button.setText("Close")
         self.action_button.clicked.disconnect()
         self.action_button.clicked.connect(self.close)

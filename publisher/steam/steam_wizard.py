@@ -10,18 +10,21 @@ from PyQt6.QtWidgets import (
     QLabel,
     QTextEdit,
     QFileDialog,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt
+from conf.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
 
 class SteamBuildSetupWizard(QWizard):
-    def __init__(self, build_path, config, parent=None):
+    def __init__(self, project_builds_root: str, parent=None):
         super().__init__(parent)
+        self.project_builds_root = project_builds_root
         self.setWindowTitle("Steam Build Setup Wizard")
-        self.build_path = os.path.normpath(build_path)
-        self.config = config
+        self.stores_config = ConfigManager("stores")
+        self.build_config = ConfigManager("build")
         self.depots = []
         self.setup_pages()
 
@@ -51,9 +54,15 @@ class SteamBuildSetupWizard(QWizard):
         layout = QVBoxLayout()
 
         form_layout = QFormLayout()
-        self.app_id_input = QLineEdit(self.config.get("app_id", ""))
+
+        # Use app_id from config if available
+        app_id = self.stores_config.get("steam.app_id", "")
+        self.app_id_input = QLineEdit(app_id)
         form_layout.addRow(QLabel("App ID:"), self.app_id_input)
-        self.description_input = QLineEdit("My Game Build v1.0")
+
+        # Use description from config or default
+        description = self.stores_config.get("steam.description", "My Game Build v1.0")
+        self.description_input = QLineEdit(description)
         form_layout.addRow(QLabel("Description:"), self.description_input)
         layout.addLayout(form_layout)
 
@@ -63,8 +72,15 @@ class SteamBuildSetupWizard(QWizard):
                 "Steamworks App Admin panel, then enter their IDs below (one per line):"
             )
         )
+
+        # Get depot IDs from config if available
         self.depot_input = QTextEdit()
-        self.depot_input.setPlaceholderText("1234561\n1234562")
+        depots = self.stores_config.get("steam.depots", [])
+        if depots:
+            self.depot_input.setPlainText("\n".join(depots))
+        else:
+            self.depot_input.setPlaceholderText("1234561\n1234562")
+
         self.depot_input.setFixedHeight(100)  # Limit height for readability
         layout.addWidget(self.depot_input)
 
@@ -86,7 +102,7 @@ class SteamBuildSetupWizard(QWizard):
     def create_depot_page(self):
         page = QWizardPage()
         page.setTitle("Configure Depot Content")
-        self.depot_layout = QFormLayout()  # Change to QFormLayout
+        self.depot_layout = QFormLayout()
         page.setLayout(self.depot_layout)
         page.initializePage = self.initialize_depot_page
         return page
@@ -94,17 +110,37 @@ class SteamBuildSetupWizard(QWizard):
     def initialize_depot_page(self):
         # Clear existing layout contents
         for i in reversed(range(self.depot_layout.count())):
-            self.depot_layout.takeAt(i).widget().deleteLater() if self.depot_layout.itemAt(i) else None
+            widget = (
+                self.depot_layout.itemAt(i).widget()
+                if self.depot_layout.itemAt(i)
+                else None
+            )
+            if widget:
+                widget.deleteLater()
 
         self.depots.clear()
         depot_text = self.depot_input.toPlainText().strip()
         depot_ids = [d.strip() for d in depot_text.split("\n") if d.strip()]
+
+        # Get depot paths from config if available
+        depot_paths = self.stores_config.get("steam.depot_mappings", {})
+
         for depot_id in depot_ids:
-            path_input = QLineEdit(self.build_path)
+            default_path = depot_paths.get(
+                depot_id, self.build_config.get("unreal.archive_directory")
+            )
+            path_input = QLineEdit(default_path)
+
             browse_btn = QPushButton("Browse")
             browse_btn.clicked.connect(
                 lambda _, p=path_input: (
-                    p.setText(selected) if (selected := QFileDialog.getExistingDirectory(self, "Select Depot Path", self.build_path)) else None
+                    p.setText(selected)
+                    if (
+                        selected := QFileDialog.getExistingDirectory(
+                            self, "Select Depot Path", p.text()
+                        )
+                    )
+                    else None
                 )
             )
             self.depot_layout.addRow(QLabel(f"Depot {depot_id} Path:"), path_input)
@@ -116,12 +152,26 @@ class SteamBuildSetupWizard(QWizard):
         page.setTitle("Set Up Builder Folder")
         layout = QVBoxLayout()
 
-        builder_path = os.path.normpath(os.path.join(self.build_path, "Steam/builder"))
+        # Use builder path from config or generate default
+        saved_builder_path = self.stores_config.get("steam.builder_path", "")
+        if saved_builder_path:
+            builder_path = saved_builder_path
+        else:
+            builder_path = os.path.normpath(
+                os.path.join(self.project_builds_root, "Steam/builder")
+            )
+
         self.builder_path_input = QLineEdit(builder_path)
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(
             lambda: (
-                self.builder_path_input.setText(selected) if (selected := QFileDialog.getExistingDirectory(self, "Select Builder Path", builder_path)) else None
+                self.builder_path_input.setText(selected)
+                if (
+                    selected := QFileDialog.getExistingDirectory(
+                        self, "Select Builder Path", self.builder_path_input.text()
+                    )
+                )
+                else None
             )
         )
         form_layout = QFormLayout()
@@ -148,8 +198,18 @@ class SteamBuildSetupWizard(QWizard):
         page = QWizardPage()
         page.setTitle("Review and Generate")
         self.review_label = QLabel()
+        self.review_label.setWordWrap(True)
+
         layout = QVBoxLayout()
         layout.addWidget(self.review_label)
+
+        # Add a note about saving to config
+        save_note = QLabel(
+            "The configuration will be saved to the application's configuration when you click Finish."
+        )
+        save_note.setWordWrap(True)
+        layout.addWidget(save_note)
+
         page.setLayout(layout)
         page.initializePage = self.update_review
         return page
@@ -169,37 +229,131 @@ class SteamBuildSetupWizard(QWizard):
             f"{depot_summary}\n\nSet up builder folder at: {builder_path}"
         )
 
-    def generate_files(self):
+    def accept(self):
+        """Override accept to save config before closing the wizard"""
+        if self.save_config():
+            self.generate_files()
+            super().accept()
+        else:
+            QMessageBox.warning(
+                self,
+                "Configuration Error",
+                "Failed to save configuration. Please check your inputs.",
+            )
+
+    def save_config(self):
+        """Save the configuration values to the ConfigManager"""
+        try:
+            # Save app ID
+            app_id = self.field("app_id")
+            self.stores_config.set("steam.app_id", app_id)
+
+            # Save description
+            description = self.description_input.text()
+            self.stores_config.set("steam.description", description)
+
+            # Save builder path
+            builder_path = self.field("builder_path")
+            self.stores_config.set("steam.builder_path", builder_path)
+
+            # Save depots
+            depot_ids = [depot_id for depot_id, _ in self.depots]
+            self.stores_config.set("steam.depots", depot_ids)
+
+            # Save depot paths
+            depot_paths = {}
+            for depot_id, path_input in self.depots:
+                depot_paths[depot_id] = path_input.text()
+            self.stores_config.set("steam.depot_paths", depot_paths)
+
+            # Mark as enabled
+            self.stores_config.set("steam.enabled", True)
+
+            # Save the config to disk
+            return self.stores_config.save()
+
+        except Exception as e:
+            logger.error(f"Failed to save config: {e}")
+            return False
+
+    def generate_files(self, content_root: str):
+        """Generate the VDF files needed for Steam deployment"""
         app_id = self.field("app_id")
         description = self.description_input.text()
         builder_path = self.field("builder_path")
 
-        os.makedirs(builder_path, exist_ok=True)
+        try:
+            # Ensure builder directory exists
+            os.makedirs(builder_path, exist_ok=True)
 
-        # Generate app_build.vdf
-        app_vdf_content = f""""appbuild"
-{{
-    "appid" "{app_id}"
-    "desc" "{description}"
-    "buildoutput" "{builder_path}"
-    "depots"
+            log_dir = os.path.join(builder_path, "BuildLogs")
+
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Get relative paths where possible, fallback to absolute if needed
+            try:
+                content_root_rel = os.path.relpath(content_root, builder_path)
+            except ValueError:
+                content_root_rel = content_root
+
+            try:
+                log_dir_rel = os.path.relpath(log_dir, builder_path)
+            except ValueError:
+                log_dir_rel = log_dir
+
+            # Generate "Depots" section
+            depot_entries = "\n"
+
+            for depot, depot_path in self.depots:
+                depot_path_rel = os.path.relpath(
+                    depot_path.text().strip(), content_root
+                )
+                if depot_path_rel == ".":
+                    depot_path_rel = "*"
+
+                depot_entries.join(
+                    f"""        "{depot}" // your DepotID
+            {{
+                "FileMapping"
+                {{
+                    "LocalPath" "{depot_path}" // all files from contentroot folder
+                    "DepotPath" "." // mapped into the root of the depot
+                    "recursive" "1" // include all subfolders
+                }}
+            }}"""
+                )
+
+            # Generate app_build.vdf
+            app_vdf_content = """\
+    "AppBuild"
     {{
-        {chr(10).join([f'        "{depot_id}" "depot_build_{depot_id}.vdf"' for depot_id, _ in self.depots])}
-    }}
-}}"""
-        with open(os.path.join(builder_path, "app_build.vdf"), "w") as f:
-            f.write(app_vdf_content)
+        "AppID" "{app_id}" // your AppID
+        "Desc" "{description}" // internal description for this build
 
-        # Generate depot_build.vdf for each depot
-        for depot_id, path_input in self.depots:
-            depot_vdf_content = f""""depotbuild"
-{{
-    "depotid" "{depot_id}"
-    "contentroot" "{path_input.text()}"
-}}"""
-            with open(
-                os.path.join(builder_path, f"depot_build_{depot_id}.vdf"), "w"
-            ) as f:
-                f.write(depot_vdf_content)
+        "ContentRoot" "{content_root_rel}" // root content folder, relative to location of this file
+        "BuildOutput" "{log_dir_rel}" // build output folder for logs and cache files
 
-        logger.info(f"Generated Steam build files in {builder_path}")
+        "Depots"
+        {{
+    {depot_entries}
+        }}
+    }}""".format(
+                app_id=app_id,
+                description=description,
+                content_root_rel=content_root_rel.replace("//", "\\"),
+                log_dir_rel=log_dir_rel.replace("//", "\\"),
+                depot_entries=depot_entries,
+            )
+
+            app_vdf_path = os.path.join(builder_path, "app_build.vdf")
+            with open(app_vdf_path, "w", encoding="utf-8") as f:
+                f.write(app_vdf_content)
+
+        except Exception as e:
+            logger.error(f"Failed to generate files: {e}")
+            QMessageBox.critical(
+                self,
+                "File Generation Error",
+                f"Failed to generate Steam build files: {str(e)}",
+            )
+            return False

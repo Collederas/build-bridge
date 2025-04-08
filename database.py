@@ -40,14 +40,27 @@ def initialize_database():
 
 
 @contextmanager
-def session_scope():
-    """Provide a transactional scope around a series of operations."""
+def session_scope(commit_on_success=True): # Added flag
+    """Provide a transactional scope around a series of operations.
+       Commit is optional on successful completion of the block.
+    """
     session = SessionFactory()
+    success = False
     try:
         yield session
-        session.commit()
-    except:
+        success = True # Mark as success only if yield completes without error
+    except Exception:
         session.rollback()
         raise
     finally:
+        if success and commit_on_success:
+            try:
+                session.commit()
+            except Exception:
+                # print("Commit failed, rolling back.") # Optional debug
+                session.rollback()
+                raise # Re-raise the exception during commit
+        # If 'success' is False, rollback already happened in the 'except' block.
+        # If 'commit_on_success' is False, we intentionally skip commit.
+        # print("Closing session.") # Optional debug
         session.close()

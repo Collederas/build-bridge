@@ -2,14 +2,16 @@ from pathlib import Path
 from PyQt6.QtCore import QProcess
 from PyQt6.QtWidgets import QVBoxLayout, QTextEdit, QLabel, QPushButton, QDialog
 
+# from models import SteamConfig
+
 
 
 class SteamUploadDialog(QDialog):
-    def __init__(self, builder_path: str, steam_username: str, steamcmd_path="C:/steamcmd/steamcmd.exe"):
+    def __init__(self, builder_path: str, steam_config, steamcmd_path="C:/steamcmd/steamcmd.exe"):
         super().__init__()
         self.vdf_file = Path(builder_path) / "app_build.vdf"
         self.steamcmd_path = steamcmd_path
-        self.steam_username = steam_username
+        self.auth = steam_config
         self.setup_ui()
         self.setup_process()
         self.setWindowTitle("Upload to Steam")
@@ -40,11 +42,10 @@ class SteamUploadDialog(QDialog):
 
     def start_full_workflow(self):
         self.log_display.append("Starting SteamCMD workflow...")
-        conf = None
-        passw = conf.get_secure("BuildBridgeSteam", self.steam_username)
+        
         command = [
             self.steamcmd_path,
-            "+login", self.steam_username, passw,
+            "+login", self.auth.username, self.auth.password,
             "+run_app_build", str(self.vdf_file),  # No need for extra quotes here
             "+quit"
         ]

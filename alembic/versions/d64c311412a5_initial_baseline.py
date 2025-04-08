@@ -1,8 +1,8 @@
-"""initial migration
+"""initial baseline
 
-Revision ID: f0c70761b718
+Revision ID: d64c311412a5
 Revises: 
-Create Date: 2025-04-07 14:47:12.354794
+Create Date: 2025-04-08 18:16:40.287871
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f0c70761b718'
+revision: str = 'd64c311412a5'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -25,6 +25,14 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('source_dir', sa.String(), nullable=False),
+    sa.Column('archive_directory', sa.String(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('steam_config',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('builder_path', sa.String(), nullable=True),
+    sa.Column('steamcmd_path', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('build_targets',
@@ -38,8 +46,21 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('steam_publish_profile',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('build_id', sa.String(), nullable=False),
+    sa.Column('project_id', sa.Integer(), nullable=False),
+    sa.Column('app_id', sa.Integer(), nullable=False),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('depots', sa.JSON(), nullable=False),
+    sa.Column('steam_config_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+    sa.ForeignKeyConstraint(['steam_config_id'], ['steam_config.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('build_id')
+    )
     op.create_table('vcs_configs',
-    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('vcs_type', sa.Enum('perforce', 'git', name='vcstypeenum'), nullable=False),
     sa.Column('build_target_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['build_target_id'], ['build_targets.id'], ),
@@ -69,6 +90,8 @@ def downgrade() -> None:
     op.drop_table('p4config')
     op.drop_table('gitconfig')
     op.drop_table('vcs_configs')
+    op.drop_table('steam_publish_profile')
     op.drop_table('build_targets')
+    op.drop_table('steam_config')
     op.drop_table('project')
     # ### end Alembic commands ###

@@ -40,6 +40,7 @@ class P4Client(VCSClient):
                 self.p4.connect()
                 if self.p4.password:  # Only run login if a password is set
                     self.p4.run_login()
+                    print(f"p4 connection established. Logged in as {self.p4.user}")
             except P4Exception as e:
                 print(e)
                 raise ConnectionError(f"P4 connection error: {e}")

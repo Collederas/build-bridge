@@ -99,7 +99,7 @@ class BuildTargetListWidget(QWidget):
                     |_ Release1 (VCS branch/tag)
                     |_ Release2 (VCS branch/tag)
         """
-        builds_root = self.build_target.archive_directory
+        builds_root = self.build_target.project.archive_directory
         release_name = self.build_version.text().strip()
 
         project_build_dir_root = (

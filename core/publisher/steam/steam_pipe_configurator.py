@@ -24,11 +24,11 @@ class SteamPipeConfigurator:
         # Get conf
         builder_path = self.publish_profile.builder_path
 
-        # Append store name to the user provided path (..meh)
+        # Append store name to the user provided path (..maybe this should be done somewhere else)
         steam_builder_path = os.path.join(builder_path, "Steam")
         app_id = self.publish_profile.app_id
-        description = self.publish_profile.app_id
-        depot_mappings = self.config_manager.get("steam.depot_mappings", {})
+        description = self.publish_profile.description
+        depot_mappings = self.publish_profile.depots
 
         # Create necessary directories and files if don't exist
         # <UserDefinedPath>

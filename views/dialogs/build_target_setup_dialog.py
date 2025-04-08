@@ -335,7 +335,7 @@ class BuildTargetSetupDialog(QDialog):
         self.source_edit.setText(self.session_project.source_dir)
 
         self.archive_directory_edit.setText(
-            self.build_target.archive_directory if self.build_target else ""
+            self.build_target.project.archive_directory if self.build_target else ""
         )
 
     def accept(self):
@@ -363,7 +363,6 @@ class BuildTargetSetupDialog(QDialog):
             self.build_target.target_platform = BuildTargetPlatformEnum(self.target_platform_combo.currentText())
             self.build_target.optimize_for_steam = self.optimize_checkbox.isChecked()
             self.build_target.project.source_dir = self.source_edit.text()
-            self.build_target.archive_directory = self.archive_directory_edit.text()  # Save archive_directory
 
             self.session.commit()
             print(f"BuildTarget {self.build_target.id} - {self.build_target.target_platform} saved.")

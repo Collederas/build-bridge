@@ -14,9 +14,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
+from database import SessionFactory, session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 from models import StoreEnum
+from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileDialog
 
 
 class PublishTargetEntry(QWidget):
@@ -25,7 +27,7 @@ class PublishTargetEntry(QWidget):
     def __init__(self, build_root):
         super().__init__()
         self.build_root = build_root
-        self.entry_name = os.path.basename(build_root)
+        self.build_id = os.path.basename(build_root)
         self.publish_conf = None
 
         # Main horizontal layout
@@ -34,7 +36,7 @@ class PublishTargetEntry(QWidget):
         layout.setSpacing(15)
 
         # Left: Build label
-        self.label = QLabel(self.entry_name)
+        self.label = QLabel(self.build_id)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.label.setFixedWidth(80)
 
@@ -47,7 +49,7 @@ class PublishTargetEntry(QWidget):
 
         self.platform_menu = QMenu()
         self.platforms = {}
-        for name in ["Steam", "itch.io"]:
+        for name in [StoreEnum.itch.value, StoreEnum.steam.value]:
             action = QAction(name, self)
             action.setCheckable(True)
             action.setChecked(True)
@@ -63,8 +65,9 @@ class PublishTargetEntry(QWidget):
         browse_archive_button.setFixedHeight(28)
         browse_archive_button.clicked.connect(self.browse_archive_directory)
 
-        self.edit_button = QPushButton("Edit")
+        self.edit_button = QPushButton("Manage Publish Profile")
         self.edit_button.setFixedHeight(28)
+        self.edit_button.clicked.connect(self.edit_publish_profile)
 
         self.publish_button = QPushButton("Publish")
         self.publish_button.setFixedHeight(28)
@@ -84,6 +87,11 @@ class PublishTargetEntry(QWidget):
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
+
+    def edit_publish_profile(self):
+        session = SessionFactory()
+        dialog = SteamPublishProfileDialog(session=session, build_id=self.build_id)
+        dialog.exec()
 
     def update_platform_button_text(self):
         selected = [
@@ -106,7 +114,7 @@ class PublishTargetEntry(QWidget):
         except Exception as e:
             print(e)
 
-    def handle_publish(self, store: StoreEnum):
+    def handle_publish(self):
         # Support only one store now. Maybe queues in the future (or parallel uploads)
 
         if not self.build_root:
@@ -134,9 +142,14 @@ class PublishTargetEntry(QWidget):
                 f"The build_src provided: {self.build_root} is not a valid application folder."
             )
 
-        # Check we have a valid store publisher
+        # Check we have a valid store publisher. For now we only support steam
+        selected_platforms = self.get_selected_platforms()
+        if StoreEnum.itch.value in selected_platforms:
+            QMessageBox.warning(self, "Unsupported Store", f"{StoreEnum.itch.value} is not (yet!) supported!")
 
-        publisher = self.store_publishers.get(store.value)
+        if StoreEnum.steam.value in selected_platforms:
+            publisher = self.store_publishers.get(StoreEnum.steam)()
+
         if not publisher:
             QMessageBox.warning(
                 self,
@@ -146,7 +159,7 @@ class PublishTargetEntry(QWidget):
             return
 
         try:
-            publisher.publish(content_dir=self.build_root)
+            publisher.publish(content_dir=self.build_id)
         except InvalidConfigurationError as e:
             QMessageBox.warning(
                 self,
@@ -156,8 +169,6 @@ class PublishTargetEntry(QWidget):
 
 
 class PublishTargetsListWidget(QWidget):
-    store_ids = ("Steam", "Itch")
-
     def __init__(self, builds_dir: str = None):
         super().__init__()
         self.setWindowTitle("Available Builds")
@@ -178,11 +189,19 @@ class PublishTargetsListWidget(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.addWidget(scroll_area)
 
+        # Message label for empty builds
+        self.empty_message_label = QLabel("No builds available")
+        self.empty_message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_message_label.setVisible(False)
+        main_layout.addWidget(self.empty_message_label)
+
         # Populate with subdirectory widgets
         self.refresh_builds(builds_dir)
 
     def refresh_builds(self, path):
         if not path or not os.path.exists(path):
+            print(f"No build path: {path}")
+            self.empty_message_label.setVisible(True)
             return
 
         # Clear existing widgets in the layout
@@ -191,10 +210,17 @@ class PublishTargetsListWidget(QWidget):
             if child.widget():
                 child.widget().deleteLater()
 
+        builds_found = False
         for entry in sorted(os.listdir(path)):
             full_path = os.path.join(path, entry)
+            print(f"Checking builds in {full_path}")
+
 
             # Exclude store config directories
-            if os.path.isdir(full_path) and not entry in self.store_ids:
+            if os.path.isdir(full_path) and not entry in [store.value for store in StoreEnum]:
                 widget = PublishTargetEntry(full_path)
                 self.vbox.addWidget(widget)
+                builds_found = True
+
+        # Show or hide the empty message label
+        self.empty_message_label.setVisible(not builds_found)

@@ -33,10 +33,14 @@ class Project(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False, default="My Project")
     source_dir = Column(String, nullable=False, default="")
+    archive_directory = Column(String, nullable=False, default="")
 
     build_targets = relationship("BuildTarget", back_populates="project", cascade="all, delete-orphan")
+    publish_profiles = relationship("SteamPublishProfile", back_populates="project", cascade="all, delete-orphan")
+    
+    def get_builds_path(self):
+        return Path(self.archive_directory) / self.name
 
-# BuildTarget model
 class BuildTarget(Base):
     __tablename__ = "build_targets"
     
@@ -53,14 +57,84 @@ class BuildTarget(Base):
     optimize_for_steam = Column(Boolean, nullable=False, default=True)
 
     auto_sync_branch = Column(Boolean, nullable=False, default=False)
-    archive_directory = Column(String, nullable=False, default="")
 
     def __repr__(self):
         return f"{self.project.name} - {self.target_platform.value}"
+        
+
+class SteamPublishProfile(Base):
+    __tablename__ = "steam_publish_profile"
     
-    def get_builds_path(self):
-        return Path(self.archive_directory) / self.project.name
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    build_id = Column(String, unique=True, nullable=False)  # Normally, the version
+
+    project_id = Column(Integer, ForeignKey('project.id'), nullable=False)
+    project = relationship("Project", back_populates="publish_profiles")
+
+    app_id = Column(Integer, nullable=False, default=480)
+    description = Column(String, nullable=True)
+    depots = Column(JSON, nullable=False, default=dict)
+
+    steam_config_id = Column(Integer, ForeignKey('steam_config.id'))
+    steam_config = relationship("SteamConfig", back_populates="publish_profiles")
     
+    @validates('depots')
+    def validate_depots(self, key, depots):
+        """
+        Validate depot mappings to ensure all paths exist.
+
+        Raises:
+            ValueError: If any depot path does not exist.
+        """
+        for depot_id, depot_path in depots.items():
+            if not os.path.exists(depot_path):
+                raise ValueError(f"Depot path {depot_path} for depot {depot_id} does not exist.")
+        
+        return depots
+
+
+
+class SteamConfig(Base):
+    __tablename__ = "steam_config"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, nullable=False)
+
+    builder_path = Column(String, nullable=True)
+    steamcmd_path = Column(String, nullable=True)
+
+    publish_profiles = relationship("SteamPublishProfile", back_populates="steam_config")
+    
+    @property
+    def _keyring_service_id(self):
+        return f"BuildBridgeSteamAuth:{self.id}:{self.username}"
+
+    @property
+    def password(self):
+        if self._password is None:
+            self._password = keyring.get_password(self._keyring_service_id, self.username)
+        return self._password
+
+    @password.setter
+    def password(self, value):
+        try:
+            keyring.set_password(self._keyring_service_id, self.username, value)
+            self._password = value
+        except keyring.errors.KeyringError as e:
+            raise RuntimeError(f"Failed to store Steam password: {e}") from e
+
+    @validates("builder_path")
+    def validate_builder_path(self, key, builder_path):
+        if not os.path.exists(builder_path):
+            raise ValueError("Builder path is not valid or does not exist.")
+        return builder_path
+    
+    @validates("steamcmd_path")
+    def validate_steamcmd_path(self, key, steamcmd_path):
+        if not os.path.exists(steamcmd_path):
+            raise ValueError("SteamCMD path is not valid or does not exist.")
+        return steamcmd_path
+
 
 class VCSConfig(Base):
     """Each build target can have its own vcs."""
@@ -115,63 +189,3 @@ class GitConfig(VCSConfig):
     __mapper_args__ = {
         'polymorphic_identity': VCSTypeEnum.git
     }
-
-class SteamBuildPublishProfile(Base):
-    __tablename__ = "steam_publish_profile"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    build_id = Column(String, unique=True, nullable=False)  # Normally, the version
-    app_id = Column(Integer, nullable=False, default=480)
-    depots = Column(JSON, nullable=False, default=dict)
-    builder_path = Column(String, nullable=False)
-
-    steam_auth_profile_id = Column(Integer, ForeignKey('steam_auth_profile.id'))
-    steam_auth_profile = relationship("SteamAuthProfile", backref="publish_profiles")
-    
-    @validates('depots')
-    def validate_depots(self, key, depot_mappings):
-        """
-        Validate depot mappings to ensure all paths exist.
-
-        Raises:
-            ValueError: If any depot path does not exist.
-        """
-        for depot_id, depot_path in depot_mappings.items():
-            if not os.path.exists(depot_path):
-                raise ValueError(f"Depot path {depot_path} for depot {depot_id} does not exist.")
-        
-        return depot_mappings
-    
-    @validates("builder_path")
-    def validate_builder_path(self, key, builder_path):
-        if not os.path.isdir(builder_path):
-            raise ValueError("Builder path is not a valid directory.")
-        
-
-class SteamAuthProfile(Base):
-    __tablename__ = "steam_auth_profile"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, nullable=False)
-    _password = None  # Internal cache for password
-
-    publish_profiles = relationship("SteamBuildPublishProfile", backref="steam_auth_profile")
-
-    
-    @property
-    def _keyring_service_id(self):
-        return f"BuildBridgeSteamAuth:{self.id}:{self.username}"
-
-    @property
-    def password(self):
-        if self._p4password is None:
-            self._p4password = keyring.get_password(self._keyring_service_id, self.user)
-        return self._p4password
-
-    @password.setter
-    def password(self, value):
-        try:
-            keyring.set_password(self._keyring_service_id, self.user, value)
-            self._p4password = value
-        except keyring.errors.KeyringError as e:
-            raise RuntimeError(f"Failed to store Steam password: {e}") from e

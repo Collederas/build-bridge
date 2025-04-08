@@ -18,6 +18,7 @@ from core.vcs.p4client import P4Client
 
 from database import SessionFactory
 from models import Project, PerforceConfig
+from views.widgets.steam_config_widget import SteamConfigWidget
 
 
 class SettingsDialog(QDialog):
@@ -48,6 +49,7 @@ class SettingsDialog(QDialog):
                 self.project.name = ""
                 self.project.source_dir = ""
                 self.project.dest_dir = ""
+                self.project.archive_directory = ""
                 self.session.add(self.project)
                 self.session.commit()  # Save immediately to ensure it has an ID
             else:
@@ -63,12 +65,14 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout()
 
         self.category_list = QListWidget()
-        self.category_list.addItems(["Project", "Version Control"])
+        self.category_list.addItems(["Project", "Version Control", "Steam"])
         layout.addWidget(self.category_list, 1)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.create_project_page())
         self.stack.addWidget(self.create_vcs_page())
+        self.steam_config_widget = SteamConfigWidget(self.session)
+        self.stack.addWidget(self.steam_config_widget)
 
         layout.addWidget(self.stack, 3)
 
@@ -96,19 +100,37 @@ class SettingsDialog(QDialog):
         self.project_name_input = QLineEdit()
         self.source_dir_input = QLineEdit()
         self.dest_dir_input = QLineEdit()
+        self.archive_dir_input = QLineEdit()
 
         # Project Name field
         form_layout.addRow(QLabel("Project Name:"), self.project_name_input)
 
         # Source directory field
         form_layout.addRow(QLabel("Source Directory:"), self.source_dir_input)
-        browse_button = QPushButton("Browse")
-        browse_button.clicked.connect(self.browse_project_folder)
-        form_layout.addWidget(browse_button)
+        source_browse_button = QPushButton("Browse")
+        source_browse_button.clicked.connect(self.browse_project_folder)
+        form_layout.addWidget(source_browse_button)
+
+        # Archive directory field
+        form_layout.addRow(QLabel("Archive Directory:"), self.archive_dir_input)
+        archive_browse_button = QPushButton("Browse")
+        archive_browse_button.clicked.connect(self.browse_archive_directory)
+        form_layout.addWidget(archive_browse_button)
 
         layout.addLayout(form_layout)
         page.setLayout(layout)
         return page
+
+    def browse_project_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Project Folder")
+        if folder:
+            self.source_dir_input.setText(folder)
+
+    def browse_archive_directory(self):
+        """Open a file dialog to select the archive directory."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory")
+        if folder:
+            self.archive_dir_input.setText(folder)
 
     def create_vcs_page(self):
         page = QWidget()
@@ -202,21 +224,17 @@ class SettingsDialog(QDialog):
 
             # Load data into form fields
             print(
-                f"Loading form data - Name: '{self.project.name}', Source: '{self.project.source_dir}'"
+                f"Loading form data - Name: '{self.project.name}', Source: '{self.project.source_dir}', Archive: '{self.project.archive_directory}'"
             )
 
             self.project_name_input.setText(self.project.name or "")
             self.source_dir_input.setText(self.project.source_dir or "")
+            self.archive_dir_input.setText(self.project.archive_directory or "")
         except Exception as e:
             print(f"Error loading form data: {str(e)}")
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
-
-    def browse_project_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Project Folder")
-        if folder:
-            self.source_dir_input.setText(folder)
 
     def apply_settings(self):
         # Save project settings
@@ -229,10 +247,11 @@ class SettingsDialog(QDialog):
             self.project.name = self.project_name_input.text().strip()
             self.project.source_dir = self.source_dir_input.text().strip()
             self.project.dest_dir = self.dest_dir_input.text().strip()
+            self.project.archive_directory = self.archive_dir_input.text().strip()
 
             # Debug values being saved
             print(
-                f"Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Dest: '{self.project.dest_dir}'"
+                f"Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Dest: '{self.project.dest_dir}', Archive: '{self.project.archive_directory}'"
             )
 
             # Save Perforce settings
@@ -251,6 +270,8 @@ class SettingsDialog(QDialog):
             # Make sure object is in session
             if self.project not in self.session:
                 self.session.add(self.project)
+
+            self.steam_config_widget.save_settings()
 
             # Commit changes to the database and ensure they're flushed
             self.session.commit()
@@ -271,6 +292,7 @@ class SettingsDialog(QDialog):
         """User clicked Apply - close dialog but keep session open"""
         # Close session if we created it
         try:
+            self.steam_config_widget.cleanup()
             self.session.close()
         except:
             pass
@@ -278,6 +300,7 @@ class SettingsDialog(QDialog):
 
     def reject(self):
         """User clicked Cancel - rollback any changes"""
+        self.steam_config_widget.cleanup()
         try:
             self.session.rollback()
         except:

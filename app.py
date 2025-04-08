@@ -11,12 +11,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 from httpx import head
+from requests import session
 
 
 from core.vcs.p4client import P4Client
 from core.vcs.vcsbase import MissingConfigException
-from database import SessionFactory, initialize_database
-from models import BuildTarget
+from database import SessionFactory, initialize_database, session_scope
+from models import BuildTarget, Project
 from views.widgets.build_targets_widget import BuildTargetListWidget
 from views.widgets.publish_targets_widget import PublishTargetsListWidget
 from views.dialogs.settings_dialog import SettingsDialog
@@ -52,8 +53,6 @@ class BuildBridgeWindow(QMainWindow):
                 "VCS is misconfigured. Check details in File->Settings->VCS",
             )
 
-        self.project_name = None
-
         self.build_list_widget = None
         self.init_ui()
 
@@ -84,7 +83,10 @@ class BuildBridgeWindow(QMainWindow):
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         builds_layout.addWidget(heading_label)
 
-        build_list_widget = PublishTargetsListWidget(self.build_target.get_builds_path() if self.build_target else "")
+            # One day, support multiproject setup. For now, this will do.
+        self.project = self.session.query(Project).first()
+        print(self.project.get_builds_path())
+        build_list_widget = PublishTargetsListWidget(self.project.get_builds_path() if self.project else "")
 
         build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(build_list_widget)

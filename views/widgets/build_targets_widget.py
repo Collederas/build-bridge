@@ -22,7 +22,6 @@ from models import BuildTarget
 from views.dialogs.build_dialog import BuildWindowDialog
 from views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 
-
 class BuildTargetListWidget(QWidget):
     """Lists the available Build Targets"""
 
@@ -35,12 +34,15 @@ class BuildTargetListWidget(QWidget):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(10, 10, 10, 10)
 
+        # Heading
+        heading_label = QLabel("Build Target")
+        heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        outer_layout.addWidget(heading_label)
+
         # Contrast frame
         contrast_frame = QFrame()
         contrast_frame.setObjectName("contrastFrame")
         contrast_frame.setFrameShape(QFrame.Shape.StyledPanel)
-
-        # Scoped style just to this frame
         contrast_frame.setStyleSheet(
             """
             QFrame#contrastFrame {
@@ -55,14 +57,9 @@ class BuildTargetListWidget(QWidget):
         layout = QHBoxLayout(contrast_frame)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-        layout.addWidget(QLabel("Builds:"))
-
 
         self.label = QLabel("Missing Build Target")
-
-        # Branches
         self.build_version = QLineEdit("0.1")
-
         self.build_button = QPushButton("Build")
         self.edit_button = QPushButton("Edit")
         self.edit_button.clicked.connect(self.open_edit_dialog)
@@ -80,6 +77,7 @@ class BuildTargetListWidget(QWidget):
         layout.addWidget(self.build_button)
 
         outer_layout.addWidget(contrast_frame)
+
 
     def open_edit_dialog(self):
         # If a target exists use that. Else it will be created at the end

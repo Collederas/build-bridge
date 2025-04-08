@@ -1,40 +1,13 @@
 import os
+from re import S
 from jinja2 import Template
 
 
 class SteamPipeConfigurator:
     TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), "app_build_template.vdf")
 
-    def __init__(self):
-        self.config_manager = ConfigManager("stores")
-
-    def validate_configuration(self):
-        """
-        Validate the configuration to ensure all required settings and paths are valid.
-
-        Raises:
-            ValueError: If any configuration or path is invalid.
-        """
-        builder_path = "" if True else self.config_manager.get("steam.builder_path", "")
-        if not builder_path:
-            raise ValueError("Builder path is not configured in settings.")
-
-        if not os.path.exists(self.TEMPLATE_FILE):
-            raise FileNotFoundError(f"Template file not found: {self.TEMPLATE_FILE}")
-
-        self.validate_depot_mappings()
-    
-    def validate_depot_mappings(self):
-        """
-        Validate depot mappings to ensure all paths exist.
-
-        Raises:
-            ValueError: If any depot path does not exist.
-        """
-        depot_mappings = self.config_manager.get("steam.depot_mappings", {})
-        for depot_id, depot_path in depot_mappings.items():
-            if not os.path.exists(depot_path):
-                raise ValueError(f"Depot path {depot_path} for depot {depot_id} does not exist.")
+    def __init__(self, publish_profile):
+        self.publish_profile = publish_profile
 
     def create_or_update_vdf_file(self, content_root: str):
         """
@@ -45,16 +18,16 @@ class SteamPipeConfigurator:
         Args:
             content_root (str): The content root directory of the build to publish.
         """
-        # Perform validation as a guard step
-        self.validate_configuration()
+        if not os.path.exists(self.TEMPLATE_FILE):
+            raise FileNotFoundError(f"Template file not found: {self.TEMPLATE_FILE}")
 
         # Get conf
-        builder_path = self.config_manager.get("steam.builder_path", "")
+        builder_path = self.publish_profile.builder_path
 
         # Append store name to the user provided path (..meh)
         steam_builder_path = os.path.join(builder_path, "Steam")
-        app_id = self.config_manager.get("steam.app_id", "1000")
-        description = self.config_manager.get("steam.description", "")
+        app_id = self.publish_profile.app_id
+        description = self.publish_profile.app_id
         depot_mappings = self.config_manager.get("steam.depot_mappings", {})
 
         # Create necessary directories and files if don't exist

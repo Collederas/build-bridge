@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
 
+from database import SessionFactory
+from models import SteamBuildPublishProfile
 from views.dialogs.steam_upload_dialog import SteamUploadDialog
 from exceptions import InvalidConfigurationError
 from core.publisher.base_publisher import BasePublisher
 from core.publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
-
 
 
 class SteamPublisher(BasePublisher):
@@ -13,7 +14,7 @@ class SteamPublisher(BasePublisher):
 
     def __init__(self):
         # Use ConfigManager for stores
-        self.config_manager = None if True else ConfigManager("stores")
+        self.session = SessionFactory()
 
         # Get basic config data
         self.app_id = self.config_manager.get("steam.app_id", "")
@@ -41,8 +42,18 @@ class SteamPublisher(BasePublisher):
             "builder_path": self.builder_path,
         }
 
-    def publish(self, content_dir: str):
+    def publish(self, content_dir: str, build_id: str):
         """Start the Steam publishing process."""
+        
+        self.publish_profile = self.session.query(SteamBuildPublishProfile).filter(
+            SteamBuildPublishProfile.build_id == build_id
+        )
+
+        if not self.publish_profile:
+            raise InvalidConfigurationError(
+                f"Cannot find publish profile for build: {build_id}"
+            )
+
         configurator = SteamPipeConfigurator()
 
         try:

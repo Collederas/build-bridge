@@ -71,7 +71,10 @@ class BuildTargetSetupDialog(QDialog):
         layout = QVBoxLayout(widget)
 
         # Project section
-        layout.addWidget(QLabel("Project").setStyleSheet("font-weight: bold; font-size: 18px;"))
+        proj_label =  QLabel("Project")
+        proj_label.setStyleSheet("font-weight: bold; font-size: 18px;")
+        layout.addWidget(proj_label)
+
         project_form = QFormLayout()
         self.project_combo = QComboBox()
         self.source_edit = QLineEdit()
@@ -152,7 +155,10 @@ class BuildTargetSetupDialog(QDialog):
     def create_page2(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.addWidget(QLabel("Build Config").setStyleSheet("font-weight: bold; font-size: 18px;"))
+        build_conf_label = QLabel("Build Config")
+        build_conf_label.setStyleSheet("font-weight: bold; font-size: 18px;")
+        layout.addWidget(build_conf_label)
+        
         form = QFormLayout()
         self.build_type_combo = QComboBox()
         self.target_platform_combo = QComboBox()
@@ -277,7 +283,7 @@ class BuildTargetSetupDialog(QDialog):
                     print(f"Branches loaded: {branches}")
                 else:
                     print(f"No branches found for {vcs_type}")
-            except ConnectionError as e:
+            except (ConnectionError, RuntimeError) as e:
                 self.vcs_client = None
                 self.vcs_connected = False
                 print(f"VCS connection failed: {e}")

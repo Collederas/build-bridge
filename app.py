@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QMenu,
 )
 from PyQt6.QtGui import QIcon
+from httpx import head
 
 
 from core.vcs.p4client import P4Client
@@ -17,7 +18,7 @@ from core.vcs.vcsbase import MissingConfigException
 from database import SessionFactory, initialize_database
 from models import BuildTarget
 from views.widgets.build_targets_widget import BuildTargetListWidget
-from views.widgets.build_list_widget import BuildListWidget
+from views.widgets.publish_targets_widget import PublishTargetsListWidget
 from views.dialogs.settings_dialog import SettingsDialog
 
 
@@ -74,15 +75,16 @@ class BuildBridgeWindow(QMainWindow):
         build_target_widget = BuildTargetListWidget(
             build_target=self.build_target, parent=self
         )
-        build_target_layout = QVBoxLayout(build_target_widget)
         main_layout.addWidget(build_target_widget)
 
         # Builds Section
         builds_widget = QWidget()
         builds_layout = QVBoxLayout(builds_widget)
-        builds_layout.addWidget(QLabel("Available Builds:"))
+        heading_label = QLabel("Available Builds")
+        heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        builds_layout.addWidget(heading_label)
 
-        build_list_widget = BuildListWidget(self.build_target.get_builds_path())
+        build_list_widget = PublishTargetsListWidget(self.build_target.get_builds_path() if self.build_target else "")
 
         build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(build_list_widget)

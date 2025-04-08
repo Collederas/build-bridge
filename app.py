@@ -1,7 +1,4 @@
-from pathlib import Path
-import re
 import sys
-import shutil
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -18,17 +15,9 @@ from core.vcs.p4client import P4Client
 from core.vcs.vcsbase import MissingConfigException
 from database import SessionFactory, initialize_database
 from models import BuildTarget
-from views.dialogs.build_dialog import BuildWindowDialog
 from views.widgets.build_targets_widget import BuildTargetListWidget
 from views.widgets.build_list_widget import BuildListWidget
-from core.builder.unreal_builder import (
-    EngineVersionError,
-    ProjectFileNotFoundError,
-    UnrealBuilder,
-    UnrealEngineNotInstalledError,
-)
 from views.dialogs.settings_dialog import SettingsDialog
-from utils.paths import unc_join_path
 
 
 class BuildBridgeWindow(QMainWindow):
@@ -89,7 +78,7 @@ class BuildBridgeWindow(QMainWindow):
 
         # Initialize build_list_widget
  
-        self.build_list_widget = BuildListWidget()
+        self.build_list_widget = BuildListWidget(self.build_target.archive_directory)
 
 
         self.build_list_widget.setMinimumHeight(100)

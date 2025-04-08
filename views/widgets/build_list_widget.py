@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QVBoxLayout,
+    QFileDialog
 )
 from PyQt6.QtCore import Qt
 import os
@@ -17,13 +18,18 @@ from core.publisher.steam.steam_publisher import SteamPublisher
 class BuildListEntryWidget(QWidget):
     def __init__(self, build_root):
         super().__init__()
-        self.build_src = build_root
+        self.build_root = build_root
         self.publish_conf = None
 
         layout = QHBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
 
         self.label = QLabel(build_root)
+
+        browse_archive_button = QPushButton("Browse")
+        browse_archive_button.clicked.connect(self.browse_archive_directory)
+        
+
         self.combo = QComboBox()
         self.combo.addItems(["Steam", "itch.io"])  # Example targets
 
@@ -33,25 +39,33 @@ class BuildListEntryWidget(QWidget):
         layout.addWidget(self.label)
         layout.addWidget(self.combo)
         layout.addStretch()
+        layout.addWidget(browse_archive_button  )
         layout.addWidget(self.edit_button)
         layout.addWidget(self.publish_button)
 
         self.setLayout(layout)
 
+
+    def browse_archive_directory(self):
+        try:
+            os.startfile(self.build_root)  # Windows-only
+        except Exception as e:
+            print(e)
+
     def handle_publish(self):
-        if not self.build_src:
+        if not self.build_root:
             raise InvalidConfigurationError(
                 "The build entry widget has no source dir to build."
             )
 
         has_exe_in_root = any(
-            file.endswith(".exe") for file in os.listdir(self.build_src)
+            file.endswith(".exe") for file in os.listdir(self.build_root)
         )
         first_subfolder = next(
             (
-                os.path.join(self.build_src, subfolder)
-                for subfolder in os.listdir(self.build_src)
-                if os.path.isdir(os.path.join(self.build_src, subfolder))
+                os.path.join(self.build_root, subfolder)
+                for subfolder in os.listdir(self.build_root)
+                if os.path.isdir(os.path.join(self.build_root, subfolder))
             ),
             None,
         )
@@ -59,7 +73,7 @@ class BuildListEntryWidget(QWidget):
             file.endswith(".exe") for file in os.listdir(first_subfolder)
         )
         if not has_exe_in_root and not has_exe_in_subfolder:
-            raise InvalidConfigurationError(f"The build_src provided: {self.build_src} is not a valid application folder.")
+            raise InvalidConfigurationError(f"The build_src provided: {self.build_root} is not a valid application folder.")
 
         if not self.publish_conf:
             QMessageBox.warning(
@@ -73,7 +87,7 @@ class BuildListEntryWidget(QWidget):
         if self.stores_conf.get("steam"):
             publisher = SteamPublisher()
             try:
-                publisher.publish(build_root=self.build_src)
+                publisher.publish(build_root=self.build_root)
             except InvalidConfigurationError as e:
                 QMessageBox.warning(
                     self,

@@ -156,7 +156,7 @@ class BuildTargetSetupDialog(QDialog):
         form = QFormLayout()
         self.build_type_combo = QComboBox()
         self.target_platform_combo = QComboBox()
-        self.archive_directory_edit = QLineEdit()  # New field for archive_directory
+        self.archive_directory_edit = QLineEdit()
         browse_archive_button = QPushButton("Browse")
         browse_archive_button.clicked.connect(self.browse_archive_directory)
         archive_layout = QHBoxLayout()
@@ -170,7 +170,7 @@ class BuildTargetSetupDialog(QDialog):
         optimize_layout.addWidget(self.optimize_hint)
         form.addRow("Build Type", self.build_type_combo)
         form.addRow("Target Platform", self.target_platform_combo)
-        form.addRow("Archive Directory", archive_layout)  # Add archive_directory field
+        form.addRow("Archive Directory", archive_layout)
         form.addRow(optimize_layout)
         layout.addLayout(form)
         layout.addStretch()

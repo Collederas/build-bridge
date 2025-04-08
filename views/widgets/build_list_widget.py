@@ -1,3 +1,4 @@
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget,
     QLabel,
@@ -25,6 +26,7 @@ class BuildListEntryWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
 
         self.label = QLabel(build_root)
+        self.label.setMinimumWidth(200)
 
         browse_archive_button = QPushButton("Browse")
         browse_archive_button.clicked.connect(self.browse_archive_directory)
@@ -87,7 +89,7 @@ class BuildListEntryWidget(QWidget):
         if self.stores_conf.get("steam"):
             publisher = SteamPublisher()
             try:
-                publisher.publish(build_root=self.build_root)
+                publisher.publish(content_dir=self.build_root)
             except InvalidConfigurationError as e:
                 QMessageBox.warning(
                     self,
@@ -118,15 +120,21 @@ class BuildListWidget(QWidget):
         main_layout.addWidget(scroll_area)
 
         # Populate with subdirectory widgets
-        self.load_builds(builds_dir)
+        self.refresh_builds(builds_dir)
 
-    def load_builds(self, path):
-        if not path:
+    def refresh_builds(self, path):
+        if not path or not os.path.exists(path):
             return
-        if not (os.path.exists(path)):
-            return
-        for entry in os.listdir(path):
+
+        # Clear existing widgets in the layout
+        while self.vbox.count():
+            child = self.vbox.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        for entry in sorted(os.listdir(path)):
             full_path = os.path.join(path, entry)
             if os.path.isdir(full_path):
                 widget = BuildListEntryWidget(entry)
                 self.vbox.addWidget(widget)
+

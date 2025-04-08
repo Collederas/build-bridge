@@ -1,5 +1,6 @@
 import enum
 
+from anyio import Path
 from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 import keyring
@@ -50,6 +51,9 @@ class BuildTarget(Base):
 
     def __repr__(self):
         return f"{self.project.name} - {self.target_platform.value}"
+    
+    def get_builds_path(self):
+        return Path(self.archive_directory) / self.project.name
     
 
 class VCSConfig(Base):

@@ -1,3 +1,4 @@
+from pathlib import Path
 import sys
 from PyQt6.QtWidgets import (
     QApplication,
@@ -32,7 +33,9 @@ class BuildBridgeWindow(QMainWindow):
         self.session = SessionFactory()
 
         # Single build target setup. For now.
-        self.build_target = self.session.query(BuildTarget).order_by(BuildTarget.id.desc()).first()
+        self.build_target = (
+            self.session.query(BuildTarget).order_by(BuildTarget.id.desc()).first()
+        )
 
         self.vcs_client = None
 
@@ -68,7 +71,10 @@ class BuildBridgeWindow(QMainWindow):
         main_layout.setSpacing(10)  # Add some spacing between sections
 
         # Build Targt Section
-        build_target_widget = BuildTargetListWidget(build_target=self.build_target, parent=self)
+        build_target_widget = BuildTargetListWidget(
+            build_target=self.build_target, parent=self
+        )
+        build_target_layout = QVBoxLayout(build_target_widget)
         main_layout.addWidget(build_target_widget)
 
         # Builds Section
@@ -76,20 +82,16 @@ class BuildBridgeWindow(QMainWindow):
         builds_layout = QVBoxLayout(builds_widget)
         builds_layout.addWidget(QLabel("Available Builds:"))
 
-        # Initialize build_list_widget
- 
-        self.build_list_widget = BuildListWidget(self.build_target.archive_directory)
+        build_list_widget = BuildListWidget(self.build_target.get_builds_path())
 
-
-        self.build_list_widget.setMinimumHeight(100)
-        builds_layout.addWidget(self.build_list_widget)
+        build_list_widget.setMinimumHeight(100)
+        builds_layout.addWidget(build_list_widget)
 
         main_layout.addWidget(builds_widget)
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
         dialog.exec()
-
 
     def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()
@@ -98,7 +100,7 @@ class BuildBridgeWindow(QMainWindow):
         return selected_items[0].text()
 
     def focusInEvent(self, a0):
-        self.build_list_widget.load_builds()
+        self.build_list_widget.refresh_builds()
         return super().focusInEvent(a0)
 
     def closeEvent(self, event):

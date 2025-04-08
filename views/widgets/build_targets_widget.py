@@ -55,6 +55,8 @@ class BuildTargetListWidget(QWidget):
         layout = QHBoxLayout(contrast_frame)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
+        layout.addWidget(QLabel("Builds:"))
+
 
         self.label = QLabel("Missing Build Target")
 

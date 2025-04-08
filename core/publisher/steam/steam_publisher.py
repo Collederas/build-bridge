@@ -41,13 +41,13 @@ class SteamPublisher(BasePublisher):
             "builder_path": self.builder_path,
         }
 
-    def publish(self, build_root: str):
+    def publish(self, content_dir: str):
         """Start the Steam publishing process."""
         configurator = SteamPipeConfigurator()
 
         try:
             # Generate or update the VDF file.
-            configurator.create_or_update_vdf_file(content_root=build_root)
+            configurator.create_or_update_vdf_file(content_root=content_dir)
 
             steamcmd_path = self.config_manager.get("steam.steamcmd_path", "")
             if not os.path.exists(steamcmd_path):

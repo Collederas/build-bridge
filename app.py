@@ -1,4 +1,4 @@
-from pathlib import Path
+import os
 import sys
 from PyQt6.QtWidgets import (
     QApplication,
@@ -10,13 +10,11 @@ from PyQt6.QtWidgets import (
     QMenu,
 )
 from PyQt6.QtGui import QIcon
-from httpx import head
-from requests import session
 
 
 from core.vcs.p4client import P4Client
 from core.vcs.vcsbase import MissingConfigException
-from database import SessionFactory, initialize_database, session_scope
+from database import SessionFactory, initialize_database
 from models import BuildTarget, Project
 from views.widgets.build_targets_widget import BuildTargetListWidget
 from views.widgets.publish_targets_widget import PublishTargetsListWidget
@@ -34,7 +32,10 @@ class BuildBridgeWindow(QMainWindow):
 
         self.session = SessionFactory()
 
-        # Single build target setup. For now.
+        # One day, support multiproject. For now, this will do.
+        self.project = self.session.query(Project).first()
+
+        # Single build target setup too.     
         self.build_target = (
             self.session.query(BuildTarget).order_by(BuildTarget.id.desc()).first()
         )
@@ -83,19 +84,18 @@ class BuildBridgeWindow(QMainWindow):
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         builds_layout.addWidget(heading_label)
 
-            # One day, support multiproject setup. For now, this will do.
-        self.project = self.session.query(Project).first()
-        print(self.project.get_builds_path())
-        build_list_widget = PublishTargetsListWidget(self.project.get_builds_path() if self.project else "")
+        self.build_list_widget = PublishTargetsListWidget(self.project.builds_path if self.project else "")
 
-        build_list_widget.setMinimumHeight(100)
-        builds_layout.addWidget(build_list_widget)
+        self.build_list_widget.setMinimumHeight(100)
+        builds_layout.addWidget(self.build_list_widget)
 
         main_layout.addWidget(builds_widget)
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
-        dialog.exec()
+        result = dialog.exec()
+        if result:
+            self.build_list_widget.refresh_builds(self.project.builds_path)
 
     def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()

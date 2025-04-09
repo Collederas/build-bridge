@@ -38,7 +38,8 @@ class Project(Base):
     build_targets = relationship("BuildTarget", back_populates="project", cascade="all, delete-orphan")
     publish_profiles = relationship("SteamPublishProfile", back_populates="project", cascade="all, delete-orphan")
     
-    def get_builds_path(self):
+    @property
+    def builds_path(self):
         return Path(self.archive_directory) / self.name
 
 class BuildTarget(Base):
@@ -91,16 +92,20 @@ class SteamPublishProfile(Base):
                 raise ValueError(f"Depot path {depot_path} for depot {depot_id} does not exist.")
         
         return depots
-
-
+    
+    @property
+    def builder_path(self):
+        """This is built dynamically based on project"""
+        if self.project is not None:
+            return str(Path(self.project.builds_path) / "Steam")
 
 class SteamConfig(Base):
     __tablename__ = "steam_config"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, nullable=False)
+    _password = None  # Internal cache for password
 
-    builder_path = Column(String, nullable=True)
     steamcmd_path = Column(String, nullable=True)
 
     publish_profiles = relationship("SteamPublishProfile", back_populates="steam_config")

@@ -1,15 +1,10 @@
-import sys
-import subprocess
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QFormLayout, QMessageBox, QApplication, QFileDialog
 )
-from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtCore import Qt, QProcess, QIODevice # Removed QTimer, pyqtSignal
+from PyQt6.QtCore import QProcess
 
 from sqlalchemy.orm import Session
-# Assuming SteamConfig model exists and has:
-# steamcmd_path, builder_path (added), username, password (store securely!)
 from models import SteamConfig
 
 class SteamConfigWidget(QWidget):
@@ -17,8 +12,9 @@ class SteamConfigWidget(QWidget):
     Manages the single Steam configuration (paths, username, password).
     Provides a button to test the connection using steamcmd.
 
-    SECURITY GOTHCA: The login method passes passwords on the command line, which
-    is generally insecure.
+    !! The login method passes passwords on the command line, which
+    is generally insecure !!
+    
     CAVEAT: Does not handle Steam Guard (2FA) prompts automatically.
     """
 
@@ -31,27 +27,23 @@ class SteamConfigWidget(QWidget):
         # Store initial loaded values for reset capability
         self._initial_username = ""
         self._initial_steamcmd_path = ""
-        self._initial_builder_path = ""
         # Password field always starts blank, no initial value needed in UI
 
         # --- QProcess ---
         self.process: QProcess | None = None
-        self._accumulated_output = "" # Store output from test run
+        self._accumulated_output = ""
 
         # --- UI Elements ---
         # Configuration Inputs
         self.username_input = QLineEdit()
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_input.setPlaceholderText("Enter password to set/change") # Clarify purpose
+        self.password_input.setPlaceholderText("Enter password to set/change")
 
         self.steamcmd_path_input = QLineEdit()
-        self.builder_path_input = QLineEdit() # Added builder path
 
         steamcmd_browse_button = QPushButton("Browse...")
         steamcmd_browse_button.clicked.connect(lambda: self._browse_file(self.steamcmd_path_input, "Select SteamCMD Executable"))
-        builder_browse_button = QPushButton("Browse...") # Assuming it's a path
-        builder_browse_button.clicked.connect(lambda: self._browse_directory(self.builder_path_input, "Select Builder Directory")) # Or _browse_file
 
         # Test Button
         self.test_button = QPushButton("Test Connection")
@@ -79,12 +71,6 @@ class SteamConfigWidget(QWidget):
         steamcmd_layout.addWidget(self.steamcmd_path_input)
         steamcmd_layout.addWidget(steamcmd_browse_button)
         form_layout.addRow("SteamCMD Path:", steamcmd_layout)
-
-        # Builder Path with Browse
-        builder_layout = QHBoxLayout()
-        builder_layout.addWidget(self.builder_path_input)
-        builder_layout.addWidget(builder_browse_button)
-        form_layout.addRow("Builder Path:", builder_layout) # Adjust label as needed
 
         main_layout.addLayout(form_layout)
         main_layout.addSpacing(15)
@@ -123,26 +109,22 @@ class SteamConfigWidget(QWidget):
             if not self.steam_config:
                 print("SteamConfigWidget: No config found, creating new one in session.")
                 self.steam_config = SteamConfig()
-                # Set defaults for initial values if desired
                 self._initial_username = ""
                 self._initial_steamcmd_path = ""
-                self._initial_builder_path = ""
             else:
                  if self.steam_config not in self.session:
                      self.session.add(self.steam_config)
                  # Store initial values from loaded config
                  self._initial_username = self.steam_config.username or ""
                  self._initial_steamcmd_path = self.steam_config.steamcmd_path or ""
-                 self._initial_builder_path = self.steam_config.builder_path or "" # Added
 
             # Populate UI fields from initial values (or defaults if new)
             self.username_input.setText(self._initial_username)
             self.steamcmd_path_input.setText(self._initial_steamcmd_path)
-            self.builder_path_input.setText(self._initial_builder_path) # Added
             self.password_input.clear() # Always clear password field on load
 
             print(f"SteamConfigWidget: Loaded config. User: {self._initial_username}")
-            self._reset_status_label() # Set status to 'Not tested'
+            self._reset_status_label()
 
         except Exception as e:
             print(f"SteamConfigWidget: Error loading settings: {e}")
@@ -172,16 +154,13 @@ class SteamConfigWidget(QWidget):
             # --- Update config object from UI fields ---
             new_username = self.username_input.text().strip()
             new_steamcmd_path = self.steamcmd_path_input.text().strip()
-            new_builder_path = self.builder_path_input.text().strip()
 
             self.steam_config.username = new_username
             self.steam_config.steamcmd_path = new_steamcmd_path
-            self.steam_config.builder_path = new_builder_path 
 
             # Update initial values to reflect saved state
             self._initial_username = new_username
             self._initial_steamcmd_path = new_steamcmd_path
-            self._initial_builder_path = new_builder_path
 
             # --- Handle Password ---
             entered_password = self.password_input.text()
@@ -204,18 +183,23 @@ class SteamConfigWidget(QWidget):
         print("SteamConfigWidget: Resetting UI to initial state...")
         self.username_input.setText(self._initial_username)
         self.steamcmd_path_input.setText(self._initial_steamcmd_path)
-        self.builder_path_input.setText(self._initial_builder_path) # Added
         self.password_input.clear()
         self._reset_status_label()
 
+    def _update_status_label(self, success: bool, message: str):
+        """ Updates the status label with appropriate color and text. """
+        self.status_label.setText(f"Status: {message}")
+        if success:
+            self.status_label.setStyleSheet("color: green; font-style: normal;")
+        else:
+            # Use red for errors, gray for inconclusive/untested
+            color = "red" if "failed" in message.lower() or "error" in message.lower() else "gray"
+            self.status_label.setStyleSheet(f"color: {color}; font-style: normal;")
 
     def _reset_status_label(self):
         """ Helper to reset the status label """
         self.status_label.setText("Status: Not tested yet.")
         self.status_label.setStyleSheet("color: gray; font-style: italic;")
-
-
-    # --- Connection Testing Logic ---
 
     def _test_connection_with_steamcmd(self):
         """Tests connection using steamcmd with CURRENTLY ENTERED values."""
@@ -352,16 +336,5 @@ class SteamConfigWidget(QWidget):
             self.process = None
             print(f"{self.__class__.__name__}: Process terminated.")
         else:
-            print(f"{self.__class__.__name__}: No active process found.")
-
-    def _update_status_label(self, success: bool, message: str):
-        """ Updates the status label with appropriate color and text. """
-        self.status_label.setText(f"Status: {message}")
-        if success:
-            self.status_label.setStyleSheet("color: green; font-style: normal;")
-        else:
-            # Use red for errors, gray for inconclusive/untested
-            color = "red" if "failed" in message.lower() or "error" in message.lower() else "gray"
-            self.status_label.setStyleSheet(f"color: {color}; font-style: normal;")
-    
+            print(f"{self.__class__.__name__}: No active process found.")   
  

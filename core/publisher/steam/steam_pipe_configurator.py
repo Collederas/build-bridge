@@ -1,12 +1,13 @@
 import os
-from re import S
 from jinja2 import Template
+
+from models import SteamPublishProfile
 
 
 class SteamPipeConfigurator:
     TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), "app_build_template.vdf")
 
-    def __init__(self, publish_profile):
+    def __init__(self, publish_profile: SteamPublishProfile):
         self.publish_profile = publish_profile
 
     def create_or_update_vdf_file(self, content_root: str):
@@ -20,12 +21,11 @@ class SteamPipeConfigurator:
         """
         if not os.path.exists(self.TEMPLATE_FILE):
             raise FileNotFoundError(f"Template file not found: {self.TEMPLATE_FILE}")
+        
+        print(self.publish_profile)
 
-        # Get conf
         builder_path = self.publish_profile.builder_path
 
-        # Append store name to the user provided path (..maybe this should be done somewhere else)
-        steam_builder_path = os.path.join(builder_path, "Steam")
         app_id = self.publish_profile.app_id
         description = self.publish_profile.description
         depot_mappings = self.publish_profile.depots
@@ -37,13 +37,13 @@ class SteamPipeConfigurator:
         #       \_ app_build.vdf
         #       \_ ...
          
-        os.makedirs(steam_builder_path, exist_ok=True)
-        log_dir = os.path.join(steam_builder_path, "BuildLogs")
+        os.makedirs(builder_path, exist_ok=True)
+        log_dir = os.path.join(builder_path, "BuildLogs")
         os.makedirs(log_dir, exist_ok=True)
 
         # Ensure folders are relative to builder_path
-        content_root_rel = os.path.relpath(content_root, steam_builder_path)
-        log_dir_rel = os.path.relpath(log_dir, steam_builder_path)
+        content_root_rel = os.path.relpath(content_root, builder_path)
+        log_dir_rel = os.path.relpath(log_dir, builder_path)
 
         # Read and render the template using Jinja2
         with open(self.TEMPLATE_FILE, "r", encoding="utf-8") as template_file:
@@ -58,7 +58,7 @@ class SteamPipeConfigurator:
             )
 
         # Write the rendered VDF content to the builder directory
-        app_build_vdf_path = os.path.join(steam_builder_path, "app_build.vdf")
+        app_build_vdf_path = os.path.join(builder_path, "app_build.vdf")
 
         with open(app_build_vdf_path, "w", encoding="utf-8") as vdf_file:
             vdf_file.write(vdf_content)

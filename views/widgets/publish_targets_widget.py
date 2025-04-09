@@ -159,7 +159,7 @@ class PublishTargetEntry(QWidget):
             return
 
         try:
-            publisher.publish(content_dir=self.build_id)
+            publisher.publish(content_dir=self.build_root, build_id=self.build_id)
         except InvalidConfigurationError as e:
             QMessageBox.warning(
                 self,

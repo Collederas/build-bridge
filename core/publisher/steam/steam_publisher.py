@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 
 from database import SessionFactory
 from models import SteamPublishProfile
@@ -19,7 +17,7 @@ class SteamPublisher(BasePublisher):
 
         publish_profile = self.session.query(SteamPublishProfile).filter(
             SteamPublishProfile.build_id == build_id
-        )
+        ).first()
 
         if not publish_profile:
             raise InvalidConfigurationError(
@@ -28,21 +26,14 @@ class SteamPublisher(BasePublisher):
 
         configurator = SteamPipeConfigurator(publish_profile=publish_profile)
 
-        try:
-            # Generate or update the VDF file.
-            configurator.create_or_update_vdf_file(content_root=content_dir)
-            
-            steamcmd_path = publish_profile.steamcmd_path
+        # Generate or update the VDF file.
+        configurator.create_or_update_vdf_file(content_root=content_dir)
+        
+        # Proceed with publishing
+        dialog = SteamUploadDialog(
+            publish_profile=publish_profile,
+        )
+        dialog.exec()
 
-            # Proceed with publishing
-            dialog = SteamUploadDialog(
-                builder_path=publish_profile.builder_path,
-                steam_config=publish_profile.steam_config,
-                steamcmd_path=steamcmd_path,
-            )
-            return dialog.exec()
-
-        except Exception as e:
-            raise InvalidConfigurationError(
-                f"Publishing configuration is incomplete: {e}"
-            )
+        # Clean up the upload process
+        dialog.cleanup()

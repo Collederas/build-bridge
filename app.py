@@ -28,7 +28,7 @@ class BuildBridgeWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon("icons/buildbridge.ico"))
-        self.setGeometry(100, 100, 500, 400)
+        self.setGeometry(100, 100, 700, 500)
 
         self.session = SessionFactory()
 
@@ -41,18 +41,6 @@ class BuildBridgeWindow(QMainWindow):
         )
 
         self.vcs_client = None
-
-        # Extend with switch logic based on conf
-        try:
-            self.vcs_client = self.vcs_clients[0]()
-        except MissingConfigException:
-            self.vcs_client = None
-        except ConnectionError:
-            QMessageBox.warning(
-                self,
-                "Wrong VCS Configuration",
-                "VCS is misconfigured. Check details in File->Settings->VCS",
-            )
 
         self.build_list_widget = None
         self.init_ui()

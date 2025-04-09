@@ -1,14 +1,9 @@
-import os
-import sys
-import json
 from abc import ABC, abstractmethod
-from PyQt6.QtWidgets import QDialog
-
-from exceptions import InvalidConfigurationError
 
 
-class BasePublisher(ABC):    
+class BasePublisher(ABC):
+    # This was born with the idea of being a nice interface but it's
+    # almost useless. Probably worth removing it.
     @abstractmethod
     def publish(self, parent=None):
         """Execute the publishing process."""
-        pass

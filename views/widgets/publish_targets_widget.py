@@ -16,7 +16,7 @@ import os
 
 from requests import session
 from core.publisher.itch.itch_publisher import ItchPublisher
-from database import SessionFactory
+from database import SessionFactory, session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 from models import StoreEnum
@@ -38,10 +38,21 @@ class PublishTargetEntry(QWidget):
         layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(15)
 
-        # Left: Build label
-        self.label = QLabel(self.build_id)
+        with session_scope() as session:
+            project = session.query(Project).one_or_none()
+
+            # Left: Build label
+            label = f"{project.name} - {self.build_id}"
+            print(label)
+
+            if project:
+                self.label = QLabel(label)
+            else:
+                self.label = QLabel(self.build_id)
+
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        self.label.setFixedWidth(80)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.label.setFixedWidth(120)
 
         # Platform dropdown button
         self.platform_button = QToolButton()

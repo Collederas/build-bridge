@@ -1,21 +1,23 @@
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
-from vcs.vcsbase import VCSClient, VCSType
-from conf.config_manager import (
-    ConfigManager,
-)
+import keyring
+
+from core.vcs.vcsbase import VCSClient
 from P4 import P4, P4Exception
+
+from database import session_scope
+from models import PerforceConfig
 
 
 class P4Client(VCSClient):
-    vcs_type = VCSType.PERFORCE
 
-    def __init__(self):
+    # We don't *need* a config because p4 can read env variables and use those 
+    def __init__(self, config: PerforceConfig = None):
         super().__init__()
         self.p4 = P4()
-        # Initialize ConfigManager for VCS
-        self.config_manager = ConfigManager("vcs")
+
+        self.config = config
         self.workspace_root = self.get_workspace_root()
         self.p4.exception_level = (
             1  # File(s) up-to-date is a warning - no exception raised
@@ -27,26 +29,23 @@ class P4Client(VCSClient):
 
     def _connect(self) -> None:
         if not self.is_connected:
-            # Use ConfigManager to get configuration
-            config = self.config_manager.get("perforce", {})
-
-            if config:
-                self.p4.port = config.get("p4port", "")
-                self.p4.user = config.get("p4user", "")
-                # Retrieve password from keyring using ConfigManager's secure method
-                self.p4.password = self.config_manager.get_secure(
-                    "BuildBridge", self.p4.user
-                )
-                self.p4.client = config.get("p4client", "")
+            print("p4 not connected. Attempting connection now.")
+            if self.config:
+                self.p4.port = self.config.server_address
+                self.p4.user = self.config.user
+                self.p4.password = self.config.p4password
+                self.p4.client = self.config.client
 
             try:
                 self.p4.connect()
                 if self.p4.password:  # Only run login if a password is set
                     self.p4.run_login()
+                    print(f"p4 connection established. Logged in as {self.p4.user}")
             except P4Exception as e:
                 print(e)
                 raise ConnectionError(f"P4 connection error: {e}")
-        print("Already connected")
+        else:
+            print("Already connected")
 
     def _disconnect(self):
         self.p4.disconnect()

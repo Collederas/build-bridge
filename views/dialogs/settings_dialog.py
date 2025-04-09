@@ -19,6 +19,7 @@ from core.vcs.p4client import P4Client
 from database import SessionFactory
 from models import Project, PerforceConfig
 from views.widgets.steam_config_widget import SteamConfigWidget
+from views.widgets.itch_config_widget import ItchConfigWidget
 
 
 class SettingsDialog(QDialog):
@@ -65,14 +66,16 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout()
 
         self.category_list = QListWidget()
-        self.category_list.addItems(["Project", "Version Control", "Steam"])
+        self.category_list.addItems(["Project", "Version Control", "Steam", "Itch"])
         layout.addWidget(self.category_list, 1)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.create_project_page())
         self.stack.addWidget(self.create_vcs_page())
         self.steam_config_widget = SteamConfigWidget(self.session)
+        self.itch_config_widget = ItchConfigWidget(self.session)
         self.stack.addWidget(self.steam_config_widget)
+        self.stack.addWidget(self.itch_config_widget)
 
         layout.addWidget(self.stack, 3)
 
@@ -272,6 +275,7 @@ class SettingsDialog(QDialog):
                 self.session.add(self.project)
 
             self.steam_config_widget.save_settings()
+            self.itch_config_widget.save_settings()
 
             # Commit changes to the database and ensure they're flushed
             self.session.commit()

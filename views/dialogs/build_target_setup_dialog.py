@@ -162,12 +162,7 @@ class BuildTargetSetupDialog(QDialog):
         form = QFormLayout()
         self.build_type_combo = QComboBox()
         self.target_platform_combo = QComboBox()
-        self.archive_directory_edit = QLineEdit()
-        browse_archive_button = QPushButton("Browse")
-        browse_archive_button.clicked.connect(self.browse_archive_directory)
-        archive_layout = QHBoxLayout()
-        archive_layout.addWidget(self.archive_directory_edit)
-        archive_layout.addWidget(browse_archive_button)
+
         self.optimize_checkbox = QCheckBox("Optimize Packaging for Steam")
         self.optimize_hint = QLabel("Will build using Valve\nRecommended padding alignment values")
         self.optimize_hint.setStyleSheet("color: gray; font-size: 10px;")
@@ -176,16 +171,11 @@ class BuildTargetSetupDialog(QDialog):
         optimize_layout.addWidget(self.optimize_hint)
         form.addRow("Build Type", self.build_type_combo)
         form.addRow("Target Platform", self.target_platform_combo)
-        form.addRow("Archive Directory", archive_layout)
+
         form.addRow(optimize_layout)
         layout.addLayout(form)
         layout.addStretch()
         return widget
-
-    def browse_archive_directory(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory", self.archive_directory_edit.text() or "")
-        if folder:
-            self.archive_directory_edit.setText(folder)
 
     def create_footer(self):
         footer_layout = QHBoxLayout()
@@ -333,10 +323,6 @@ class BuildTargetSetupDialog(QDialog):
         if index >= 0:
             self.project_combo.setCurrentIndex(index)
         self.source_edit.setText(self.session_project.source_dir)
-
-        self.archive_directory_edit.setText(
-            self.build_target.project.archive_directory if self.build_target else ""
-        )
 
     def accept(self):
         try:

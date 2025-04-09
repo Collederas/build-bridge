@@ -1,7 +1,7 @@
 import sys
 
 from PyQt6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QFormLayout,
@@ -18,11 +18,12 @@ from PyQt6.QtWidgets import (
 )
 
 
+from database import session_scope
 from models import Project, SteamConfig, SteamPublishProfile
 from views.dialogs import settings_dialog
 
 
-class SteamPublishProfileDialog(QDialog):
+class SteamPublishProfileWidget(QWidget):
     def __init__(self, session, build_id: str, parent=None):
         super().__init__(parent)
         self.session = session  # Database session for CRUD operations
@@ -52,6 +53,7 @@ class SteamPublishProfileDialog(QDialog):
         """Loads the profile by build_id or prepares data for a new instance."""
         self.is_new_profile = False  # Reset flag
         try:
+
             self.profile = (
                 self.session.query(SteamPublishProfile)
                 .filter_by(build_id=self.build_id)
@@ -157,15 +159,10 @@ class SteamPublishProfileDialog(QDialog):
 
         # --- Save/Cancel Buttons ---
         button_layout = QHBoxLayout()
-        self.save_button = QPushButton("Save && Close")
+        self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_profile)
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(
-            self.reject
-        )  # reject() is standard for Cancel
         button_layout.addStretch()
         button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.cancel_button)
         main_layout.addLayout(button_layout)
 
         self.setLayout(main_layout)
@@ -483,7 +480,6 @@ class SteamPublishProfileDialog(QDialog):
             # --- Commit Changes ---
             self.session.commit()
             QMessageBox.information(self, "Success", "Profile saved successfully.")
-            self.accept()  # Close dialog on successful save
 
         except Exception as e:
             self.session.rollback()  # Rollback on any error during commit

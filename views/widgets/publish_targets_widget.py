@@ -13,12 +13,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
+
+from requests import session
 from core.publisher.itch.itch_publisher import ItchPublisher
 from database import SessionFactory
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 from models import StoreEnum
-from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileDialog
+from views.dialogs.platform_publish_dialog import PlatformPublishDialog
+from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileWidget
 
 
 class PublishTargetEntry(QWidget):
@@ -89,8 +92,7 @@ class PublishTargetEntry(QWidget):
         self.setLayout(layout)
 
     def edit_publish_profile(self):
-        session = SessionFactory()
-        dialog = SteamPublishProfileDialog(session=session, build_id=self.build_id)
+        dialog = PlatformPublishDialog(build_id=self.build_id)
         dialog.exec()
 
     def update_platform_button_text(self):

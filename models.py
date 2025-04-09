@@ -161,10 +161,10 @@ class ItchPublishProfile(PublishProfile):
     id = Column(Integer, ForeignKey('publish_profile.id'), primary_key=True)
     
     itch_user_game_id = Column(String, nullable=False) # e.g., "myusername/my-cool-game"
-    itch_config_id = Column(Integer, ForeignKey('itch_config.id'), nullable=False)
-    
-    itch_config = relationship("ItchConfig", back_populates="publish_profiles")
     itch_channel_name = Column(String, nullable=False, default="default-channel") # e.g., "windows-beta"
+
+    itch_config_id = Column(Integer, ForeignKey('itch_config.id'), nullable=False)
+    itch_config = relationship("ItchConfig", back_populates="publish_profiles")
     
     __mapper_args__ = {'polymorphic_identity': StoreEnum.itch}
 

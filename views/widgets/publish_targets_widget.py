@@ -19,7 +19,7 @@ from core.publisher.itch.itch_publisher import ItchPublisher
 from database import SessionFactory, session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
-from models import StoreEnum
+from models import Project, StoreEnum
 from views.dialogs.platform_publish_dialog import PlatformPublishDialog
 from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileWidget
 
@@ -43,7 +43,6 @@ class PublishTargetEntry(QWidget):
 
             # Left: Build label
             label = f"{project.name} - {self.build_id}"
-            print(label)
 
             if project:
                 self.label = QLabel(label)

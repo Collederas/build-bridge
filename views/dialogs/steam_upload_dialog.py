@@ -70,11 +70,8 @@ class SteamUploadDialog(QDialog):
 
         # --- Output Buffering Note ---
         # QProcess reads data when the *child process* (steamcmd) writes it to the output pipe.
-        # If steamcmd buffers its output (common when not run in an interactive terminal),
         # QProcess won't receive data until steamcmd flushes its buffer (e.g., on newline,
-        # when buffer is full, or program exits). QProcess cannot force steamcmd to be unbuffered.
-        # Tools like 'winpty' (previously removed) or other PTY wrappers are often needed on
-        # Windows to make steamcmd *think* it's in an interactive session and use less buffering.
+        # when buffer is full, or program exits).
         # Therefore, output might appear delayed or arrive all at once at the end.
         # ---
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)

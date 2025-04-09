@@ -29,18 +29,19 @@ class StoreEnum(str, enum.Enum):
 
 class Project(Base):
     __tablename__ = "project"
-    
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False, default="My Project")
+
     source_dir = Column(String, nullable=False, default="")
     archive_directory = Column(String, nullable=False, default="")
 
     build_targets = relationship("BuildTarget", back_populates="project", cascade="all, delete-orphan")
-    publish_profiles = relationship("SteamPublishProfile", back_populates="project", cascade="all, delete-orphan")
-    
+    publish_profiles = relationship("PublishProfile", back_populates="project", cascade="all, delete-orphan")
+
     @property
     def builds_path(self):
         return Path(self.archive_directory) / self.name
+
 
 class BuildTarget(Base):
     __tablename__ = "build_targets"
@@ -63,21 +64,34 @@ class BuildTarget(Base):
         return f"{self.project.name} - {self.target_platform.value}"
         
 
-class SteamPublishProfile(Base):
-    __tablename__ = "steam_publish_profile"
-    
+class PublishProfile(Base):
+    __tablename__ = "publish_profile"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    build_id = Column(String, unique=True, nullable=False)  # Normally, the version
+    store_type = Column(Enum(StoreEnum), nullable=False)
 
     project_id = Column(Integer, ForeignKey('project.id'), nullable=False)
     project = relationship("Project", back_populates="publish_profiles")
 
-    app_id = Column(Integer, nullable=False, default=480)
+    build_id = Column(String, nullable=False)
     description = Column(String, nullable=True)
+
+    __mapper_args__ = {'polymorphic_on': store_type, 'polymorphic_identity': None}
+
+
+class SteamPublishProfile(PublishProfile):
+    __tablename__ = "steam_publish_profile"
+
+    id = Column(Integer, ForeignKey('publish_profile.id'), primary_key=True)
+    app_id = Column(Integer, nullable=False, default=480)
+
+
     depots = Column(JSON, nullable=False, default=dict)
 
-    steam_config_id = Column(Integer, ForeignKey('steam_config.id'))
+    steam_config_id = Column(Integer, ForeignKey('steam_config.id'), nullable=False)
     steam_config = relationship("SteamConfig", back_populates="publish_profiles")
+
+    __mapper_args__ = {'polymorphic_identity': StoreEnum.steam}
     
     @validates('depots')
     def validate_depots(self, key, depots):
@@ -99,11 +113,12 @@ class SteamPublishProfile(Base):
         if self.project is not None:
             return str(Path(self.project.builds_path) / "Steam")
 
+
 class SteamConfig(Base):
     __tablename__ = "steam_config"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, nullable=False)
+    username = Column(String, nullable=False, default="itch-username")
     _password = None  # Internal cache for password
 
     steamcmd_path = Column(String, nullable=True)
@@ -139,72 +154,92 @@ class SteamConfig(Base):
         if not os.path.exists(steamcmd_path):
             raise ValueError("SteamCMD path is not valid or does not exist.")
         return steamcmd_path
+    
 
+class ItchPublishProfile(PublishProfile):
+    __tablename__ = "itch_publish_profile"
 
-class ItchConfig(Base):
-    __tablename__ = "itch_config"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-
-    itch_user_game_id = Column(String, nullable=True, unique=True)
-    butler_path = Column(String, nullable=True)
-    _api_key = None
-
-
-    @property
-    def _keyring_service_id(self):
-        config_id = self.id or "default" 
-        return f"BuildBridgeItchAuth:{config_id}:{self.itch_user_game_id or 'unknown'}"
-
-    @property
-    def api_key(self):
-        """Retrieves the Itch.io API key from the system keyring."""
-        if self._api_key is None and self.itch_user_game_id: # Only attempt fetch if user/game ID is set
-            try:
-                self._api_key = keyring.get_password(self._keyring_service_id, self.itch_user_game_id)
-            except keyring.errors.KeyringError as e:
-                 print(f"Warning: Could not retrieve Itch API key from keyring: {e}")
-                 self._api_key = None
-            except Exception as e:
-                 print(f"Warning: An unexpected error occurred retrieving Itch API key: {e}")
-                 self._api_key = None
-        return self._api_key
-
-    @api_key.setter
-    def api_key(self, value):
-        """Stores the Itch.io API key securely in the system keyring."""
-        if not self.itch_user_game_id:
-             raise ValueError("Cannot store API key without 'itch_user_game_id' being set.")
-        if not value:
-             try:
-                 keyring.delete_password(self._keyring_service_id, self.itch_user_game_id)
-                 self._api_key = None
-                 print("Itch API key cleared from keyring.")
-             except keyring.errors.PasswordDeleteError:
-                 print("Warning: Itch API key not found in keyring to delete.")
-             except Exception as e:
-                 raise RuntimeError(f"Failed to delete Itch API key from keyring: {e}") from e
-        else:
-             try:
-                 keyring.set_password(self._keyring_service_id, self.itch_user_game_id, value)
-                 self._api_key = value
-                 print("Itch API key stored securely in keyring.")
-             except keyring.errors.KeyringError as e:
-                 raise RuntimeError(f"Failed to store Itch API key: {e}") from e
-             except Exception as e:
-                 raise RuntimeError(f"An unexpected error occurred storing Itch API key: {e}") from e
-
-    @validates("butler_path")
-    def validate_butler_path(self, key, path):
-        if path and not os.path.exists(path):
-            raise ValueError(f"Butler path '{path}' is not valid or does not exist.")
-        return path
+    id = Column(Integer, ForeignKey('publish_profile.id'), primary_key=True)
+    
+    itch_user_game_id = Column(String, nullable=False) # e.g., "myusername/my-cool-game"
+    itch_config_id = Column(Integer, ForeignKey('itch_config.id'), nullable=False)
+    itch_config = relationship("ItchConfig", back_populates="publish_profiles")
+    itch_channel_name = Column(String, nullable=False, default="default-channel") # e.g., "windows-beta"
+    
+    __mapper_args__ = {'polymorphic_identity': StoreEnum.itch}
 
     @validates("itch_user_game_id")
     def validate_user_game_id(self, key, value):
         if value and '/' not in value:
             raise ValueError("Itch.io User/Game ID must be in the format 'username/game-name'.")
         return value
+
+
+class ItchConfig(Base):
+    __tablename__ = "itch_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, nullable=False, unique=True) # Itch.io username
+    butler_path = Column(String, nullable=True)
+    _api_key = None # Internal cache
+
+    publish_profiles = relationship("ItchPublishProfile", back_populates="itch_config")
+
+    @property
+    def _keyring_service_id(self):
+        """Generates the keyring service ID using the Itch.io username."""
+        if not self.username: return None
+        return f"BuildBridgeItchAuth:{self.username}" # Service tied to the username
+
+    @property
+    def api_key(self):
+        """Retrieves the Itch.io API key from keyring for this config's username."""
+        if self._api_key is None:
+            service_id = self._keyring_service_id
+            key_name = self.username
+
+            if not service_id: print("Cannot retrieve API key: ItchConfig username not set."); return None
+
+            try:
+                self._api_key = keyring.get_password(service_id, key_name)
+            except keyring.errors.PasswordNotFoundError:
+                 print(f"No Itch API key found in keyring for {service_id}/{key_name}.")
+                 self._api_key = None
+            except keyring.errors.KeyringError as e:
+                print(f"Keyring error retrieving Itch API key for {service_id}/{key_name}: {e}")
+                self._api_key = None
+            except Exception as e:
+                print(f"Unexpected error retrieving Itch API key for {service_id}/{key_name}: {e}")
+                self._api_key = None
+        return self._api_key
+
+    @api_key.setter
+    def api_key(self, value):
+        """Stores the Itch.io API key in keyring for this config's username."""
+        service_id = self._keyring_service_id
+        key_name = self.username
+
+        if not service_id: raise ValueError("Cannot store API key: ItchConfig username is not set.")
+
+        if not value:
+            try:
+                keyring.delete_password(service_id, key_name)
+                self._api_key = None
+                print(f"Itch API key cleared from keyring for {service_id}/{key_name}.")
+            except keyring.errors.PasswordDeleteError: print(f"Itch API key not found in keyring to delete for {service_id}/{key_name}.")
+            except Exception as e: print(f"Failed to delete Itch API key from keyring for {service_id}/{key_name}: {e}")
+        else:
+            try:
+                keyring.set_password(service_id, key_name, value)
+                self._api_key = value
+                print(f"Itch API key stored securely in keyring for {service_id}/{key_name}.")
+            except keyring.errors.KeyringError as e: print(f"Keyring error storing Itch API key for {service_id}/{key_name}: {e}"); raise RuntimeError(f"Failed to store Itch API key: {e}") from e
+            except Exception as e: print(f"Unexpected error storing Itch API key for {service_id}/{key_name}: {e}"); raise RuntimeError(f"An unexpected error occurred storing Itch API key: {e}") from e
+
+    @validates("butler_path")
+    def validate_butler_path(self, key, path):
+        if path and not os.path.exists(path): raise ValueError(f"Butler path '{path}' is not valid or does not exist.")
+        return path
 
 
 class VCSConfig(Base):

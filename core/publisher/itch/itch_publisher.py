@@ -1,44 +1,58 @@
-import os
 from pathlib import Path
-
-
+from core.publisher.base_publisher import BasePublisher
+from database import SessionFactory, session_scope
+from exceptions import InvalidConfigurationError
+from models import ItchConfig, ItchPublishProfile
+from views.dialogs.store_upload_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
 
-from core.publisher.base_publisher import BasePublisher
-from exceptions import InvalidConfigurationError
-from database import SessionFactory
-from models import ItchConfig
+def check_itch_success(exit_code: int, log_content: str) -> bool:
+    """
+    Checks butler output for success indicators.
 
-from views.dialogs.itch_upload_dialog import ItchUploadDialog
+    Args:
+        exit_code: The exit code from the QProcess.
+        log_content: The accumulated stdout/stderr from the process.
+
+    Returns:
+        True if the upload seems successful, False otherwise.
+    """
+    log_lower = log_content.lower()
+    success_indicators = ["build is processed", "patch applied", "tasks ended."]
+    error_indicators = ["error:", "failed", "panic:", "invalid api key", "denied"]
+
+    is_success = (
+        exit_code == 0
+        and any(ind in log_lower for ind in success_indicators)
+        and not any(err in log_lower for err in error_indicators)
+    )
+
+    return is_success
 
 
 class ItchPublisher(BasePublisher):
-    """
-    Handles uploading builds to Itch.io using the 'butler' command-line tool
-    by launching a dedicated upload dialog.
-    """
-
     def __init__(self):
         self.session = SessionFactory()
-        self.itch_config = self._load_config()
+        self.publish_profile = self._load_profile()
 
-    def _load_config(self) -> ItchConfig:
+    def _load_profile(self) -> ItchPublishProfile:
         """Loads the Itch.io configuration from the database."""
         # Ensure the config is attached to the session if loaded
-        config = self.session.query(ItchConfig).first()
-        if not config:
+        publish_profile = self.session.query(ItchPublishProfile).first()
+        if not publish_profile:
             self.session.close()  # Close session if config loading fails early
             raise InvalidConfigurationError(
                 "Itch.io configuration not found in settings."
             )
-        if not config.itch_user_game_id:
+        if not publish_profile.itch_user_game_id:
             self.session.close()
             raise InvalidConfigurationError("Itch.io User/Game ID is not configured.")
         # Ensure object is associated with the session if it came from elsewhere
-        if config not in self.session:
-            self.session.add(config)
-        return config
+        if publish_profile not in self.session:
+            self.session.add(publish_profile)
+
+        return publish_profile
 
     def publish(self, content_dir: str, build_id: str, channel_name: str = None):
         """
@@ -51,14 +65,13 @@ class ItchPublisher(BasePublisher):
         """
         print(f"Preparing Itch.io publish for build: {build_id}")
 
-        if not self.itch_config:
-            raise InvalidConfigurationError("Itch.io configuration not loaded.")
+        if not self.publish_profile:
+            raise InvalidConfigurationError("Itch.io publish profile not loaded.")
 
         # --- Determine Butler Executable ---
-        butler_exe = self.itch_config.butler_path or "butler"
+        butler_exe = self.publish_profile.itch_config.butler_path or "butler"
 
-
-        api_key = self.itch_config.api_key
+        api_key = self.publish_profile.itch_config.api_key
         if not api_key:
             # Close session before raising
             self.session.close()
@@ -75,7 +88,7 @@ class ItchPublisher(BasePublisher):
                 f"Warning: No channel specified, using derived default: {channel_name}"
             )
 
-        itch_target = f"{self.itch_config.itch_user_game_id}:{channel_name}"
+        itch_target = f"{self.publish_profile.itch_user_game_id}:{channel_name}"
 
         # --- Construct Butler Command Arguments ---
         # Note: command executable is passed separately to QProcess
@@ -87,28 +100,27 @@ class ItchPublisher(BasePublisher):
             build_id,
         ]
 
-        # --- Prepare Environment ---
-        # QProcess needs environment as a list of "key=value" strings
-
-
         print(f"Command: {butler_exe} {' '.join(arguments)}")
         print(f"Target: {itch_target}")
+        
+        title = f"Itch Upload: {publish_profile.project.name} - {build_id}"
 
         # --- Launch Dialog ---
         try:
-            # Assuming QApplication instance exists
-            dialog = ItchUploadDialog(
+            dialog = GenericUploadDialog(
                 executable=butler_exe,
-                api_key=api_key,
+                environment={"BUTLER_API_KEY": f"{api_key}", "BUTLER_NO_TTY": "1"},
+                title=title,
                 arguments=arguments,
                 display_info={  # Pass info for display in the dialog
                     "build_id": build_id,
                     "target": itch_target,
                     "content_dir": content_dir,
                 },
+                success_checker=check_itch_success,
             )
             # The dialog will handle QProcess execution and feedback
-            result = dialog.exec()  # Show the dialog modally
+            result = dialog.exec()
 
             if result == QDialog.DialogCode.Rejected:
                 # Check if rejection was due to failure or cancellation
@@ -116,8 +128,6 @@ class ItchPublisher(BasePublisher):
                 print(
                     "Itch.io upload dialog closed with Rejected status (failed or cancelled)."
                 )
-                # Optionally raise an error based on dialog's internal state if needed
-                # raise RuntimeError("Itch.io upload failed or was cancelled.")
             else:
                 print(
                     "Itch.io upload dialog closed with Accepted status (likely successful)."
@@ -130,7 +140,6 @@ class ItchPublisher(BasePublisher):
             )
         except Exception as e:
             print(f"An error occurred launching or running the Itch upload dialog: {e}")
-            raise  # Re-raise the exception
+            raise
         finally:
-            # Close the session after the dialog is done
             self.session.close()

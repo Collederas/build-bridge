@@ -60,7 +60,17 @@ class SteamPipeConfigurator:
         # Write the rendered VDF content to the builder directory
         app_build_vdf_path = os.path.join(builder_path, "app_build.vdf")
 
+        vdf_created = False # created? or updated?
+
+        if not os.path.exists(app_build_vdf_path):
+            vdf_created = True
+
         with open(app_build_vdf_path, "w", encoding="utf-8") as vdf_file:
             vdf_file.write(vdf_content)
 
-        print(f"VDF file generated at: {app_build_vdf_path}")
+        if vdf_created:
+            print(f"VDF file generated at: {app_build_vdf_path}")
+        else:
+            print(f"Existing VDF file updated at: {app_build_vdf_path}")
+            
+        return app_build_vdf_path

@@ -85,7 +85,6 @@ class SteamPublishProfile(PublishProfile):
     id = Column(Integer, ForeignKey('publish_profile.id'), primary_key=True)
     app_id = Column(Integer, nullable=False, default=480)
 
-
     depots = Column(JSON, nullable=False, default=dict)
 
     steam_config_id = Column(Integer, ForeignKey('steam_config.id'), nullable=False)
@@ -110,7 +109,7 @@ class SteamPublishProfile(PublishProfile):
     @property
     def builder_path(self):
         """This is built dynamically based on project"""
-        if self.project is not None:
+        if self.project:
             return str(Path(self.project.builds_path) / "Steam")
 
 
@@ -163,6 +162,7 @@ class ItchPublishProfile(PublishProfile):
     
     itch_user_game_id = Column(String, nullable=False) # e.g., "myusername/my-cool-game"
     itch_config_id = Column(Integer, ForeignKey('itch_config.id'), nullable=False)
+    
     itch_config = relationship("ItchConfig", back_populates="publish_profiles")
     itch_channel_name = Column(String, nullable=False, default="default-channel") # e.g., "windows-beta"
     

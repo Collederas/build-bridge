@@ -1,8 +1,8 @@
 from pathlib import Path
 from core.publisher.base_publisher import BasePublisher
-from database import SessionFactory, session_scope
+from database import session_scope
 from exceptions import InvalidConfigurationError
-from models import ItchConfig, ItchPublishProfile
+from models import ItchPublishProfile
 from views.dialogs.store_upload_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
@@ -33,28 +33,50 @@ def check_itch_success(exit_code: int, log_content: str) -> bool:
 
 class ItchPublisher(BasePublisher):
     def __init__(self):
-        self.session = SessionFactory()
         self.publish_profile = self._load_profile()
 
     def _load_profile(self) -> ItchPublishProfile:
         """Loads the Itch.io configuration from the database."""
         # Ensure the config is attached to the session if loaded
-        publish_profile = self.session.query(ItchPublishProfile).first()
-        if not publish_profile:
-            self.session.close()  # Close session if config loading fails early
-            raise InvalidConfigurationError(
-                "Itch.io configuration not found in settings."
+        with session_scope() as session:
+            publish_profile = session.query(ItchPublishProfile).one_or_none()
+            if not publish_profile:
+                raise InvalidConfigurationError(f"Itch.io Publish Profile not found.")
+
+            if not publish_profile.itch_user_game_id:
+                raise InvalidConfigurationError(
+                    "Itch.io User/Game ID is not configured."
+                )
+
+            if not publish_profile:
+                raise InvalidConfigurationError("Itch.io publish profile not loaded.")
+
+            butler_exe = publish_profile.itch_config.butler_path or "butler"
+
+            api_key = self.publish_profile.itch_config.api_key
+            if not api_key:
+                raise InvalidConfigurationError(
+                    "Itch.io API Key not found or configured. Please set it in Settings."
+                )
+
+            platform = "windows"  # Example: Derive from BuildTarget.target_platform
+            channel_name = publish_profile.itch_channel_name
+
+            itch_target = f"{self.publish_profile.itch_user_game_id}:{channel_name}"
+            project_name = self.publish_profile.project.name
+
+            publish_profile = dict(
+                butler_exe=butler_exe,
+                api_key=api_key,
+                platform=platform,
+                channel=channel_name,
+                itch_target=itch_target,
+                project_name=project_name,
             )
-        if not publish_profile.itch_user_game_id:
-            self.session.close()
-            raise InvalidConfigurationError("Itch.io User/Game ID is not configured.")
-        # Ensure object is associated with the session if it came from elsewhere
-        if publish_profile not in self.session:
-            self.session.add(publish_profile)
 
-        return publish_profile
+            return publish_profile
 
-    def publish(self, content_dir: str, build_id: str, channel_name: str = None):
+    def publish(self, content_dir: str, build_id: str):
         """
         Prepares the butler command and launches the ItchUploadDialog to execute it.
 
@@ -65,33 +87,11 @@ class ItchPublisher(BasePublisher):
         """
         print(f"Preparing Itch.io publish for build: {build_id}")
 
-        if not self.publish_profile:
-            raise InvalidConfigurationError("Itch.io publish profile not loaded.")
-
-        # --- Determine Butler Executable ---
-        butler_exe = self.publish_profile.itch_config.butler_path or "butler"
-
-        api_key = self.publish_profile.itch_config.api_key
-        if not api_key:
-            # Close session before raising
-            self.session.close()
-            raise InvalidConfigurationError(
-                "Itch.io API Key not found or configured. Please set it in Settings."
-            )
-
-        # --- Determine Channel ---
-        if not channel_name:
-            # Placeholder: Derive channel name (needs better logic based on build target)
-            platform = "windows"  # Example: Derive from BuildTarget.target_platform
-            channel_name = f"{platform}-{build_id.replace('.', '-')}"
-            print(
-                f"Warning: No channel specified, using derived default: {channel_name}"
-            )
-
-        itch_target = f"{self.publish_profile.itch_user_game_id}:{channel_name}"
-
         # --- Construct Butler Command Arguments ---
         # Note: command executable is passed separately to QProcess
+        itch_target = self.publish_profile.get("itch_target")
+        butler_exe = self.publish_profile.get("butler_exe")
+
         arguments = [
             "push",
             str(Path(content_dir).resolve()),  # Ensure absolute path
@@ -102,15 +102,15 @@ class ItchPublisher(BasePublisher):
 
         print(f"Command: {butler_exe} {' '.join(arguments)}")
         print(f"Target: {itch_target}")
-        
-        title = f"Itch Upload: {publish_profile.project.name} - {build_id}"
-
         # --- Launch Dialog ---
         try:
             dialog = GenericUploadDialog(
                 executable=butler_exe,
-                environment={"BUTLER_API_KEY": f"{api_key}", "BUTLER_NO_TTY": "1"},
-                title=title,
+                environment={
+                    "BUTLER_API_KEY": f"{self.publish_profile.get('api_key')}",
+                    "BUTLER_NO_TTY": "1",
+                },
+                title=self.publish_profile.get("title"),
                 arguments=arguments,
                 display_info={  # Pass info for display in the dialog
                     "build_id": build_id,
@@ -141,5 +141,3 @@ class ItchPublisher(BasePublisher):
         except Exception as e:
             print(f"An error occurred launching or running the Itch upload dialog: {e}")
             raise
-        finally:
-            self.session.close()

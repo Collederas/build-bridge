@@ -22,8 +22,6 @@ class SteamPipeConfigurator:
         if not os.path.exists(self.TEMPLATE_FILE):
             raise FileNotFoundError(f"Template file not found: {self.TEMPLATE_FILE}")
         
-        print(self.publish_profile)
-
         builder_path = self.publish_profile.builder_path
 
         app_id = self.publish_profile.app_id

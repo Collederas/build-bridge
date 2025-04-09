@@ -7,12 +7,7 @@ from PyQt6.QtWidgets import QDialog
 from exceptions import InvalidConfigurationError
 
 
-class BasePublisher(ABC):
-    store_name = None
-    
-    def __init__(self, build_path, config_path):
-        self.build_path = build_path
-
+class BasePublisher(ABC):    
     @abstractmethod
     def publish(self, parent=None):
         """Execute the publishing process."""

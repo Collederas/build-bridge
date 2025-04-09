@@ -25,40 +25,43 @@ def check_steam_success(exit_code: int, log_content: str) -> bool:
     return exit_code == 0 and login_ok and build_success and no_errors
 
 class SteamPublisher(BasePublisher):
+    def __init__(self):
+        super().__init__()
 
     def publish(self, content_dir: str, build_id: str):
         """Start the Steam publishing process."""
         with session_scope() as session:
-            publish_profile = self.session.query(SteamPublishProfile).filter(
+            # Read all required config within this scope
+            publish_profile = session.query(SteamPublishProfile).filter(
                 SteamPublishProfile.build_id == build_id
             ).first()
 
-        if not publish_profile:
-            raise InvalidConfigurationError(
-                f"Cannot find publish profile for build: {build_id}"
-            )
+            if not publish_profile:
+                raise InvalidConfigurationError(
+                    f"Cannot find publish profile for build: {build_id}"
+                )
 
-        configurator = SteamPipeConfigurator(publish_profile=publish_profile)
+            configurator = SteamPipeConfigurator(publish_profile=publish_profile)
 
-        # Generate or update the VDF file.
-        vdf_path = configurator.create_or_update_vdf_file(content_root=content_dir)
+            # Generate or update the VDF file.
+            vdf_path = configurator.create_or_update_vdf_file(content_root=content_dir)
 
-        steam_config = publish_profile.steam_config
+            steam_config = publish_profile.steam_config
 
-        executable = steam_config.steamcmd_path
-        arguments = [
-            "+login", steam_config.username, steam_config.password or "", # Include password if set
-            "+run_app_build", vdf_path,
-            "+quit"
-        ]
+            executable = steam_config.steamcmd_path
+            arguments = [
+                "+login", steam_config.username, steam_config.password or "", # Include password if set
+                "+run_app_build", vdf_path,
+                "+quit"
+            ]
 
-        # --- Prepare Display Info & Title ---
-        display_info = {
-            "Build ID": build_id,
-            "App ID": str(publish_profile.app_id),
-            "Target": f"Steam ({steam_config.username})",
-        }
-        title = f"Steam Upload: {publish_profile.project.name} - {build_id}"
+            # --- Prepare Display Info & Title ---
+            display_info = {
+                "Build ID": build_id,
+                "App ID": str(publish_profile.app_id),
+                "Target": f"Steam ({steam_config.username})",
+            }
+            title = f"Steam Upload: {publish_profile.project.name} - {build_id}"
 
 
         # Proceed with publishing

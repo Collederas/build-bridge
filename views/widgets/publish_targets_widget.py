@@ -1,4 +1,3 @@
-from ast import List
 from PyQt6.QtWidgets import (
     QWidget,
     QLabel,
@@ -15,7 +14,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
 from core.publisher.itch.itch_publisher import ItchPublisher
-from database import SessionFactory, session_scope
+from database import SessionFactory
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 from models import StoreEnum
@@ -146,7 +145,7 @@ class PublishTargetEntry(QWidget):
         # Check we have a valid store publisher. For now we only support one.
         selected_platforms = self.get_selected_platforms()
         if selected_platforms:
-            # TODO: please fix me
+            # TODO: please fix me when multi store support is available
             selected_platform = selected_platforms[0]
     
             publisher = self.store_publishers.get(selected_platform)()

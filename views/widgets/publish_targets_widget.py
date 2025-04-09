@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
+from core.publisher.itch.itch_publisher import ItchPublisher
 from database import SessionFactory, session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
@@ -22,7 +23,7 @@ from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileDialog
 
 
 class PublishTargetEntry(QWidget):
-    store_publishers = {StoreEnum.itch: None, StoreEnum.steam: SteamPublisher}
+    store_publishers = {StoreEnum.itch: ItchPublisher, StoreEnum.steam: SteamPublisher}
 
     def __init__(self, build_root):
         super().__init__()
@@ -142,13 +143,14 @@ class PublishTargetEntry(QWidget):
                 f"The build_src provided: {self.build_root} is not a valid application folder."
             )
 
-        # Check we have a valid store publisher. For now we only support steam
+        # Check we have a valid store publisher. For now we only support one.
         selected_platforms = self.get_selected_platforms()
-        if StoreEnum.itch.value in selected_platforms:
-            QMessageBox.warning(self, "Unsupported Store", f"{StoreEnum.itch.value} is not (yet!) supported!")
-
-        if StoreEnum.steam.value in selected_platforms:
-            publisher = self.store_publishers.get(StoreEnum.steam)()
+        if selected_platforms:
+            # TODO: please fix me
+            selected_platform = selected_platforms[0]
+    
+            publisher = self.store_publishers.get(selected_platform)()
+            print(f"Publishing on {selected_platform}")
 
         if not publisher:
             QMessageBox.warning(

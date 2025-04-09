@@ -141,6 +141,72 @@ class SteamConfig(Base):
         return steamcmd_path
 
 
+class ItchConfig(Base):
+    __tablename__ = "itch_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    itch_user_game_id = Column(String, nullable=True, unique=True)
+    butler_path = Column(String, nullable=True)
+    _api_key = None
+
+
+    @property
+    def _keyring_service_id(self):
+        config_id = self.id or "default" 
+        return f"BuildBridgeItchAuth:{config_id}:{self.itch_user_game_id or 'unknown'}"
+
+    @property
+    def api_key(self):
+        """Retrieves the Itch.io API key from the system keyring."""
+        if self._api_key is None and self.itch_user_game_id: # Only attempt fetch if user/game ID is set
+            try:
+                self._api_key = keyring.get_password(self._keyring_service_id, self.itch_user_game_id)
+            except keyring.errors.KeyringError as e:
+                 print(f"Warning: Could not retrieve Itch API key from keyring: {e}")
+                 self._api_key = None
+            except Exception as e:
+                 print(f"Warning: An unexpected error occurred retrieving Itch API key: {e}")
+                 self._api_key = None
+        return self._api_key
+
+    @api_key.setter
+    def api_key(self, value):
+        """Stores the Itch.io API key securely in the system keyring."""
+        if not self.itch_user_game_id:
+             raise ValueError("Cannot store API key without 'itch_user_game_id' being set.")
+        if not value:
+             try:
+                 keyring.delete_password(self._keyring_service_id, self.itch_user_game_id)
+                 self._api_key = None
+                 print("Itch API key cleared from keyring.")
+             except keyring.errors.PasswordDeleteError:
+                 print("Warning: Itch API key not found in keyring to delete.")
+             except Exception as e:
+                 raise RuntimeError(f"Failed to delete Itch API key from keyring: {e}") from e
+        else:
+             try:
+                 keyring.set_password(self._keyring_service_id, self.itch_user_game_id, value)
+                 self._api_key = value
+                 print("Itch API key stored securely in keyring.")
+             except keyring.errors.KeyringError as e:
+                 raise RuntimeError(f"Failed to store Itch API key: {e}") from e
+             except Exception as e:
+                 raise RuntimeError(f"An unexpected error occurred storing Itch API key: {e}") from e
+
+    @validates("butler_path")
+    def validate_butler_path(self, key, path):
+        if path and not os.path.exists(path):
+            raise ValueError(f"Butler path '{path}' is not valid or does not exist.")
+        return path
+
+    @validates("itch_user_game_id")
+    def validate_user_game_id(self, key, value):
+        if value and '/' not in value:
+            raise ValueError("Itch.io User/Game ID must be in the format 'username/game-name'.")
+        return value
+
+
 class VCSConfig(Base):
     """Each build target can have its own vcs."""
     __tablename__ = "vcs_configs"

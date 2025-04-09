@@ -213,7 +213,7 @@ class SteamUploadDialog(QDialog):
         log_args = " ".join(f'"{arg}"' if " " in arg else arg for arg in arguments)
         log_cmd = f'"{executable}" {log_args}'
         self.log_display.append(f"Working Directory: {working_dir}")
-        self.log_display.append(f"Executing: {log_cmd}")
+        self.log_display.append(f"Launching steamCMD in Separate process. Logs will be outputted below.")
         print(f"[Debug run_command] Executable: {executable}")
         print(f"[Debug run_command] Arguments: {arguments}")
         print(f"[Debug run_command] Working Dir: {self.process.workingDirectory()}")
@@ -223,12 +223,8 @@ class SteamUploadDialog(QDialog):
 
         # Check if process started successfully and start timer
         if self.process.state() == QProcess.ProcessState.Running:
-            # --- UX Enhancement: Start waiting timer ---
             self.wait_timer.start()
-            # --- End UX Enhancement ---
         elif self.process.state() == QProcess.ProcessState.NotRunning:
-             # If start() failed immediately, handle_process_error should be called
-             # Or log an additional message here if needed
              self.log_display.append("[ERROR] Process failed to start immediately.")
 
 

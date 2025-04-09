@@ -53,7 +53,7 @@ class ItchPublisher(BasePublisher):
 
             butler_exe = publish_profile.itch_config.butler_path or "butler"
 
-            api_key = self.publish_profile.itch_config.api_key
+            api_key = publish_profile.itch_config.api_key
             if not api_key:
                 raise InvalidConfigurationError(
                     "Itch.io API Key not found or configured. Please set it in Settings."
@@ -62,8 +62,8 @@ class ItchPublisher(BasePublisher):
             platform = "windows"  # Example: Derive from BuildTarget.target_platform
             channel_name = publish_profile.itch_channel_name
 
-            itch_target = f"{self.publish_profile.itch_user_game_id}:{channel_name}"
-            project_name = self.publish_profile.project.name
+            itch_target = f"{publish_profile.itch_user_game_id}:{channel_name}"
+            project_name = publish_profile.project.name
 
             publish_profile = dict(
                 butler_exe=butler_exe,

@@ -1,4 +1,3 @@
-
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -10,8 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
 )
 
-from database import SessionFactory
-from models import Project, ItchConfig, ItchPublishProfile
+from models import BuildTarget, Project, ItchConfig, ItchPublishProfile
 from views.dialogs import settings_dialog
 
 
@@ -156,10 +154,20 @@ class ItchPublishProfileWidget(QWidget):
                     )
 
             # Set other fields
+            bt = self.session.query(BuildTarget).one_or_none()
+            if bt:
+                platform = bt.target_platform.lower()
+
+            if preset_channel := self.profile.itch_channel_name:
+                channel_name = preset_channel
+            elif bt:
+                channel_name = platform
+            else:
+                channel_name = ""
+
+            print(f"ItchPublishProfile: setting channel_name to {channel_name}")
             self.user_game_id_input.setText(self.profile.itch_user_game_id or "")
-            self.channel_name_input.setText(
-                self.profile.itch_channel_name or "default-channel"
-            )
+            self.channel_name_input.setText(channel_name)
 
         else:
             # Defaults for a new profile

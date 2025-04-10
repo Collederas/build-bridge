@@ -2,7 +2,7 @@ from pathlib import Path
 from core.publisher.base_publisher import BasePublisher
 from database import session_scope
 from exceptions import InvalidConfigurationError
-from models import ItchPublishProfile
+from models import ItchPublishProfile, StoreEnum
 from views.dialogs.store_upload_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
@@ -39,7 +39,7 @@ class ItchPublisher(BasePublisher):
         """Loads the Itch.io configuration from the database."""
         # Ensure the config is attached to the session if loaded
         with session_scope() as session:
-            publish_profile = session.query(ItchPublishProfile).one_or_none()
+            publish_profile = session.query(ItchPublishProfile).filter_by(store_type=StoreEnum.itch).one_or_none()
             self.validate_publish_profile(publish_profile)
             
             api_key = publish_profile.itch_config.api_key

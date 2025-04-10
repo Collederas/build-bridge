@@ -14,9 +14,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QProcess, QProcessEnvironment
 from PyQt6.QtGui import QColor
 
+import keyring
+import keyring.errors
 import requests
 from sqlalchemy.orm import Session
 
+from exceptions import InvalidConfigurationError
 from models import ItchConfig
 
 
@@ -122,18 +125,18 @@ class ItchConfigWidget(QWidget):
             if not self.itch_config:
                 print("ItchConfigWidget: No config found, creating new one in session.")
                 self.itch_config = ItchConfig()
-                self._initial_username_input = ""
+                self._initial_username = ""
                 self._initial_butler_path = ""
             else:
                 # Ensure loaded object is in session
                 if self.itch_config not in self.session:
                     self.session.add(self.itch_config)
                 # Store initial values
-                self._initial_username_input = self.itch_config.username or ""
+                self._initial_username = self.itch_config.username or ""
                 self._initial_butler_path = self.itch_config.butler_path or ""
 
             # Populate UI fields
-            self.username_input.setText(self._initial_username_input)
+            self.username_input.setText(self._initial_username)
             self.butler_path_input.setText(self._initial_butler_path)
             self.api_key_input.clear()  # Always clear API key field on load
 
@@ -150,18 +153,12 @@ class ItchConfigWidget(QWidget):
             self.test_button.setEnabled(False)
             # Disable inputs?
 
-    def save_settings(self):
-        """Saves current values into the config object (without committing)."""
+    def validate(self):
+        print("ItchConfigWidget: Validating Itch settings...")
+
         if not self.itch_config:
             print("ItchConfigWidget: Cannot save, config object missing.")
-            raise RuntimeError("Itch configuration object not found during save.")
-
-        # Ensure object is still in session (important if dialog is reused)
-        if self.itch_config not in self.session:
-            print(
-                "ItchConfigWidget: Warning - ItchConfig object was not in session during save. Re-adding."
-            )
-            self.session.add(self.itch_config)
+            raise InvalidConfigurationError("Itch configuration object not found during save.")
 
         print("ItchConfigWidget: Preparing settings for save...")
         try:
@@ -169,35 +166,39 @@ class ItchConfigWidget(QWidget):
             new_username = self.username_input.text().strip()
             new_butler_path = self.butler_path_input.text().strip()
 
-
             self.itch_config.username = new_username
             self.itch_config.butler_path = (
                 new_butler_path if new_butler_path else None
-            )  # Store None if empty
+            )
 
             # Update initial values
             self._initial_username = new_username
             self._initial_butler_path = new_butler_path
 
-            # Handle API Key using the property setter (which uses keyring)
-            entered_api_key = self.api_key_input.text()  # Don't strip API keys
-            if entered_api_key:
-                print(
-                    "ItchConfigWidget: API Key field entered, attempting to store in keyring."
-                )
-                if not new_username:
-                    raise ValueError("Cannot save API key without a Username.")
-                self.itch_config.api_key = entered_api_key  # This calls the setter
-            # else: If field is empty, the setter won't be called, existing key remains.
-
-            self.api_key_input.clear()  # Clear field after handling  
-
-        except Exception as e:
+        except ValueError as e:
             print(f"ItchConfigWidget: Error preparing settings for save: {e}")
-            # Rollback might happen in SettingsDialog, but good practice to raise
             raise  # Re-raise the exception to be caught by SettingsDialog
 
-    # --- Status Label Helpers ---
+    def store_api_key(self):
+        """Requires no session so this is not part of the sql transaction and cna be stored here"""
+        new_username = self.username_input.text().strip() # Requried for association with api key. Can't retrieve it otherwise
+
+        entered_api_key = self.api_key_input.text()  # Don't strip API keys
+        if entered_api_key:
+            print(
+                "ItchConfigWidget: API Key field entered, attempting to store in keyring."
+            )
+            if not new_username:
+                raise ValueError("Cannot save API key without a Username.")
+            try:
+                self.itch_config.api_key = entered_api_key  # This calls the setter
+            except keyring.errors.KeyringError:
+                pass
+
+        # else: If field is empty, the setter won't be called, existing key remains.
+
+        self.api_key_input.clear()  # Clear field after handling
+
     def _update_status_label(self, success: bool, message: str, color: QColor = None):
         self.status_label.setText(f"Status: {message}")
         if color:
@@ -212,19 +213,54 @@ class ItchConfigWidget(QWidget):
 
     def _test_connection(self):
         """Tests connection using butler status with CURRENTLY ENTERED values."""
-        print("ItchConfigWidget: Initiating connection test via butler...")
 
-        api_key = self.api_key_input.text()  # Use value from field for test
+        entered_api_key = self.api_key_input.text() # Check the input field first
+        api_key_to_use = None
 
-        if not api_key:
-            msg = "API Key field is empty for test. Connection test requires API Key."
+        if entered_api_key:
+            print("ItchConfigWidget: Testing with key entered in the field.")
+            api_key_to_use = entered_api_key
 
+        elif self.itch_config:
+            # Field is empty, try retrieving the saved key from keyring via the model
+            print("ItchConfigWidget: Input field empty, attempting to use saved key from keyring.")
+            try:
+                saved_key = self.itch_config.api_key
+                if saved_key:
+                    api_key_to_use = saved_key
+                    print("ItchConfigWidget: Using saved key for test.")
+                else:
+                    print("ItchConfigWidget: No saved key found in keyring.")
+            except Exception as e:
+                # Handle potential errors from keyring access if necessary
+                print(f"ItchConfigWidget: Error retrieving saved API key: {e}")
+                self._update_status_label(False, f"Error accessing saved key: {e}", QColor("red"))
+                return
+
+        if not api_key_to_use:
+            # If neither entered nor saved key is available
+            msg = "Api Key not provided: field is empty and could not load an existing key from keyring"
             self._update_status_label(False, msg, QColor("orange"))
-            QMessageBox.warning(self, "Input Error", msg)
+            QMessageBox.warning(self, "API Key Missing", msg)
             return
-        
-        result = requests.get(f"https://itch.io/api/1/{api_key}/credentials/info")
+        elif not self.username_input.text().strip():
+            # This is not actually true but until i fix validation to prevent this case
+            # informing the user only if itch fields have been touched, this will at least
+            # give some info to the user that username is required.
+
+            msg = "Username is missing. Can only test connection with valid Api Key AND username."
+            self._update_status_label(False, msg, QColor("orange"))
+            QMessageBox.warning(self, "Username missing", msg)
+            return
+
+        print(
+            "ItchConfigWidget: Initiating connection test via api: \n\n"
+            + "ENDPOINT: https://itch.io/api/1/{api_key}/credentials/info"
+        )
+        result = requests.get(f"https://itch.io/api/1/{api_key_to_use}/credentials/info")
         if result.ok:
+            print("ItchConfigWidget: Connection successful.")
+
             self._update_status_label(True, message="Connection successful")
         else:
             self._update_status_label(False, message="Connection failed")

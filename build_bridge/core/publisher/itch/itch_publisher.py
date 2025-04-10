@@ -2,7 +2,7 @@ from pathlib import Path
 from core.publisher.base_publisher import BasePublisher
 from database import session_scope
 from exceptions import InvalidConfigurationError
-from models import ItchPublishProfile
+from models import ItchPublishProfile, StoreEnum
 from views.dialogs.store_upload_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
@@ -39,25 +39,12 @@ class ItchPublisher(BasePublisher):
         """Loads the Itch.io configuration from the database."""
         # Ensure the config is attached to the session if loaded
         with session_scope() as session:
-            publish_profile = session.query(ItchPublishProfile).one_or_none()
-            if not publish_profile:
-                raise InvalidConfigurationError(f"Itch.io Publish Profile not found.")
-
-            if not publish_profile.itch_user_game_id:
-                raise InvalidConfigurationError(
-                    "Itch.io User/Game ID is not configured."
-                )
-
-            if not publish_profile:
-                raise InvalidConfigurationError("Itch.io publish profile not loaded.")
+            publish_profile = session.query(ItchPublishProfile).filter_by(store_type=StoreEnum.itch).first()
+            self.validate_publish_profile(publish_profile)
+            
+            api_key = publish_profile.itch_config.api_key
 
             butler_exe = publish_profile.itch_config.butler_path or "butler"
-
-            api_key = publish_profile.itch_config.api_key
-            if not api_key:
-                raise InvalidConfigurationError(
-                    "Itch.io API Key not found or configured. Please set it in Settings."
-                )
 
             platform = "windows"  # Example: Derive from BuildTarget.target_platform
             channel_name = publish_profile.itch_channel_name
@@ -75,6 +62,29 @@ class ItchPublisher(BasePublisher):
             )
 
             return publish_profile
+        
+    def validate_publish_profile(self, publish_profile):
+        """Ensures config is valid alnd allows publishing"""
+        if not publish_profile:
+            raise InvalidConfigurationError(f"Itch.io Publish Profile not found.")
+
+        if not publish_profile.itch_user_game_id:
+            raise InvalidConfigurationError(
+                "Itch.io User/Game ID is not configured."
+            )
+        
+        if not publish_profile:
+            raise InvalidConfigurationError("Itch.io publish profile not loaded.")
+        
+        if not publish_profile.itch_config.api_key:
+            raise InvalidConfigurationError(
+                "Itch.io API Key not found or configured. Please set it in Settings."
+            )
+        
+        if not publish_profile.itch_config.butler_path:
+            raise InvalidConfigurationError(
+                "Butler not found. Please set it in Settings."
+            )       
 
     def publish(self, content_dir: str, build_id: str):
         """

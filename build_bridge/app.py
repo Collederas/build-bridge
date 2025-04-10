@@ -1,9 +1,11 @@
 import sys
+from tkinter import NO
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QWidget,
     QVBoxLayout,
+    QDialog,
     QLabel,
     QMenu,
 )
@@ -19,7 +21,7 @@ from views.dialogs.settings_dialog import SettingsDialog
 
 
 class BuildBridgeWindow(QMainWindow):
-    vcs_clients = (P4Client,)
+    # vcs_clients = (P4Client,)
 
     def __init__(self):
         super().__init__()
@@ -29,7 +31,7 @@ class BuildBridgeWindow(QMainWindow):
 
         self.session = SessionFactory()
 
-        # One day, support multiproject. For now, this will do.
+        # One day, support multiproject. For now, only one
         self.project = self.session.query(Project).first()
 
         # Single build target setup too.
@@ -57,10 +59,11 @@ class BuildBridgeWindow(QMainWindow):
         main_layout.setSpacing(10)  # Add some spacing between sections
 
         # Build Targt Section
+        build_target_id = self.build_target.id if self.build_target else None
         build_target_widget = BuildTargetListWidget(
-            build_target=self.build_target, parent=self
+            build_target_id=build_target_id, parent=self
         )
-        build_target_widget.build_ready_signal.connect(self.on_new_build_available)
+        build_target_widget.build_ready_signal.connect(self.refresh_builds)
         main_layout.addWidget(build_target_widget)
 
         # Builds Section
@@ -70,9 +73,14 @@ class BuildBridgeWindow(QMainWindow):
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         builds_layout.addWidget(heading_label)
 
-        self.build_list_widget = PublishTargetsListWidget(
-            self.project.builds_path if self.project else ""
-        )
+        self.build_list_widget = PublishTargetsListWidget()
+        
+        if self.project:
+            builds_dir = self.project.builds_path
+        else:
+            builds_dir = None
+
+        self.build_list_widget.refresh_builds(builds_dir)
 
         self.build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(self.build_list_widget)
@@ -81,9 +89,28 @@ class BuildBridgeWindow(QMainWindow):
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
+        # Connect signal BEFORE exec()
+        dialog.monitored_dir_changed_signal.connect(self.refresh_builds)
         result = dialog.exec()
-        if result:
-            self.build_list_widget.refresh_builds(self.project.builds_path)
+
+        if result == QDialog.DialogCode.Accepted:
+            print("Settings accepted, refreshing main window project data...")
+            try:
+                # Re-query or refresh the project in the main window's session
+                if self.project:
+                    self.session.refresh(self.project)
+                    print(f"Refreshed project '{self.project.name}' in main window session.")
+                    self.build_list_widget.refresh_builds(self.project.builds_path)
+
+                else:
+                    # If no project existed initially, try loading one now
+                    self.project = self.session.query(Project).first()
+                    if self.project:
+                        print(f"Loaded newly created project '{self.project.name}' into main window.")
+                        self.build_list_widget.refresh_builds(self.project.builds_path)
+
+            except Exception as e:
+                print(f"Error refreshing project in main window after settings: {e}")
 
     def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()
@@ -91,17 +118,8 @@ class BuildBridgeWindow(QMainWindow):
             return None
         return selected_items[0].text()
 
-    def on_new_build_available(self, build_dir):
-        print(f"New build available at {build_dir}")
-
-        # Hm... build_dir is the archive dir: it has no Project Name joined to it
-        # but still this is not good because it's the build widget that should tell us
-        # where the new build is.
-        self.build_list_widget.refresh_builds(self.project.builds_path)
-
-    def focusInEvent(self, a0):
-        self.build_list_widget.refresh_builds(self.project.builds_path)
-        return super().focusInEvent(a0)
+    def refresh_builds(self, build_dir):
+        self.build_list_widget.refresh_builds(build_dir)
 
     def closeEvent(self, event):
         if self.vcs_client:

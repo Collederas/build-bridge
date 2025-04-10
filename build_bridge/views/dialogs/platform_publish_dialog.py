@@ -9,6 +9,8 @@ from PyQt6.QtWidgets import (
     QFrame,
 )
 
+from PyQt6.QtCore import pyqtSignal
+
 from database import SessionFactory
 from models import StoreEnum
 from views.widgets.steam_publish_profile_widget import SteamPublishProfileWidget
@@ -20,6 +22,8 @@ class PlatformPublishDialog(QDialog):
     A dialog that shows either Steam or Itch.io publish profile based on the platform argument.
     Can also show both in a tabbed interface when no specific platform is specified.
     """
+    profile_changed_signal = pyqtSignal()
+
     def __init__(self, build_id, platform : StoreEnum = None, parent=None):
         """
         Initialize the platform-specific publish dialog.
@@ -111,14 +115,19 @@ class PlatformPublishDialog(QDialog):
         """Create a Steam-only dialog."""
         self.steam_widget = SteamPublishProfileWidget(self.session, self.build_id, self)
         parent_layout.addWidget(self.steam_widget)
+        self.steam_widget.profile_saved_signal.connect(self.new_profile_created)
         
     
     def _create_itch_dialog(self, parent_layout):
         """Create an Itch-only dialog."""
         self.itch_widget = ItchPublishProfileWidget(self.session, self.build_id, self)
         parent_layout.addWidget(self.itch_widget)
+        self.itch_widget.profile_saved_signal.connect(self.new_profile_created)
+
+    def new_profile_created(self):
+        self.profile_changed_signal.emit()
+        self.close()
         
-    
     def _create_button_layout(self):
         """Create save and cancel buttons for the tabbed interface."""
         from PyQt6.QtWidgets import QHBoxLayout

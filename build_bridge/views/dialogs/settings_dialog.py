@@ -1,3 +1,4 @@
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -9,27 +10,31 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QMessageBox,
     QFileDialog,
     QTextEdit,
 )
 from PyQt6.QtGui import QColor
+
 from core.vcs.p4client import P4Client
 
 from database import SessionFactory
+from exceptions import InvalidConfigurationError
 from models import Project, PerforceConfig
+from views.widgets import itch_config_widget
 from views.widgets.steam_config_widget import SteamConfigWidget
 from views.widgets.itch_config_widget import ItchConfigWidget
 
 
 class SettingsDialog(QDialog):
+    monitored_dir_changed_signal = pyqtSignal(str)
+
     def __init__(self, parent=None, default_page: int = 0):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(600, 400)
         self.default_page = default_page
 
-        # Dialog managed session
+        # DIALOG MANAGED SESSION: all settings are saved as single transaction
         self.session = SessionFactory()
 
         # Query for project and ensure it exists
@@ -45,7 +50,7 @@ class SettingsDialog(QDialog):
 
             # If no project exists, create one
             if not self.project:
-                print("No project found, creating new project")
+                print("Settings: No project found, creating new project")
                 self.project = Project()
                 self.project.name = ""
                 self.project.source_dir = ""
@@ -54,12 +59,12 @@ class SettingsDialog(QDialog):
                 self.session.add(self.project)
                 self.session.commit()  # Save immediately to ensure it has an ID
             else:
-                print(f"Found existing project: '{self.project.name}'")
+                print("Settings: Found existing project: '{self.project.name}'")
                 # Ensure project is attached to our session
                 if self.project not in self.session:
                     self.session.add(self.project)
         except Exception as e:
-            print(f"Error loading project: {str(e)}")
+            print("Settings: Error loading project: {str(e)}")
             self.project = None
 
     def setup_ui(self):
@@ -71,7 +76,10 @@ class SettingsDialog(QDialog):
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.create_project_page())
-        self.stack.addWidget(self.create_vcs_page())
+
+        # TODO: VCS
+        # self.stack.addWidget(self.create_vcs_page())
+
         self.steam_config_widget = SteamConfigWidget(self.session)
         self.itch_config_widget = ItchConfigWidget(self.session)
         self.stack.addWidget(self.steam_config_widget)
@@ -220,9 +228,9 @@ class SettingsDialog(QDialog):
         self.connection_status_display.setText(message)
 
     def load_form_data(self):
-        """Load existing data from database into UI fields"""
+        """Load existing data from database into UI fields."""
         if not self.project:
-            print("Warning: No project available to load data from")
+            print("Settings: Warning: No project available to load data from")
             return
 
         try:
@@ -230,75 +238,131 @@ class SettingsDialog(QDialog):
             self.session.refresh(self.project)
 
             # Load data into form fields
-            print(
-                f"Loading form data - Name: '{self.project.name}', Source: '{self.project.source_dir}', Archive: '{self.project.archive_directory}'"
-            )
-
             self.project_name_input.setText(self.project.name or "")
             self.source_dir_input.setText(self.project.source_dir or "")
-            self.archive_dir_input.setText(self.project.archive_directory or "")
+            arch_dir = self.project.archive_directory
+            self.archive_dir_input.setText(arch_dir or "")
+            self._initial_archive_dir = (
+                arch_dir  # monitored here to emit signal later if changed
+            )
+
         except Exception as e:
-            print(f"Error loading form data: {str(e)}")
+            print("Settings: Error loading form data: {str(e)}")
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
 
     def apply_settings(self):
-        # Save project settings
+        errors_occurred = []
+
+        # PROJECT SETTINGS -> perhaps move to own widget
+
+        # Create project if it doesnt exist
         try:
             if not self.project:
                 self.project = Project()
-                self.session.add(self.project)
 
             # Update project with form values
             self.project.name = self.project_name_input.text().strip()
             self.project.source_dir = self.source_dir_input.text().strip()
-            self.project.dest_dir = self.dest_dir_input.text().strip()
             self.project.archive_directory = self.archive_dir_input.text().strip()
 
-            # Debug values being saved
-            print(
-                f"Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Dest: '{self.project.dest_dir}', Archive: '{self.project.archive_directory}'"
-            )
-
-            # Save Perforce settings
-            try:
-                self.perforce_config.user = self.p4_user_input.text().strip()
-                self.perforce_config.p4password = self.p4_password_input.text().strip()
-                self.perforce_config.server_address = (
-                    self.p4_server_input.text().strip()
-                )
-                self.perforce_config.client = self.p4_client_input.text().strip()
-                self.session.add(self.perforce_config)
-                print(f"saving vcs settings: user {self.p4_user_input.text().strip()}")
-
-            except Exception as e:
-                print(f"Error saving Perforce settings: {str(e)}")
-                QMessageBox.critical(
-                    self, "Error", f"Failed to save Perforce settings: {str(e)}"
-                )
-
-            # Make sure object is in session
             if self.project not in self.session:
                 self.session.add(self.project)
 
-            self.steam_config_widget.save_settings()
-            self.itch_config_widget.save_settings()
+            # TODO: PERFORCE SETTINGS
+            # This should be moved to self contained widget
+            # try:
+            #     self.perforce_config.user = self.p4_user_input.text().strip()
+            #     self.perforce_config.p4password = self.p4_password_input.text().strip()
+            #     self.perforce_config.server_address = (
+            #         self.p4_server_input.text().strip()
+            #     )
+            #     self.perforce_config.client = self.p4_client_input.text().strip()
+            #     self.session.add(self.perforce_config)
+            #     print("Settings: saving vcs settings: user {self.p4_user_input.text().strip()}")
+
+            # except Exception as e:
+            #     print("Settings: Error saving Perforce settings: {str(e)}")
+            #     QMessageBox.critical(
+            #         self, "Error", f"Failed to save Perforce settings: {str(e)}"
+            #     )
+
+            # if self.perforce_config not in self.session:
+            #     self.session.add(self.perforce_config)
+            #
+
+
+            # Validate Steam, store password
+            try:
+           
+                self.steam_config_widget.validate()  # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
+      
+    
+                self.steam_config_widget.store_password()
+                print(
+                    "Settings: Steam settings validated. Keyring saved."
+                )
+
+                self.session.add(self.steam_config_widget.steam_config)
+
+            except (InvalidConfigurationError, ValueError) as e:
+                error_msg = f"Failed to save Steam settings: {str(e)}"
+                print(error_msg)
+                errors_occurred.append(error_msg)
+
+
+            # Validate Itch, store api_key if username provided too
+            try:
+               
+                self.itch_config_widget.validate() # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
+             
+                self.session.add(self.itch_config_widget.itch_config)
+                
+                self.itch_config_widget.store_api_key()
+                print(
+                    "Settings: Itch settings validated. Keyring saved."
+                )
+            except (InvalidConfigurationError, ValueError) as e:
+                error_msg = f"Failed to save Itch.io settings: {str(e)}"
+                print(error_msg)
+                errors_occurred.append(error_msg)
 
             # Commit changes to the database and ensure they're flushed
+
             self.session.commit()
             self.session.flush()
 
-            print(f"VCS Saved: user {self.perforce_config.user}")
+            if self._initial_archive_dir != self.project.archive_directory:
+                self.monitored_dir_changed_signal.emit(str(self.project.builds_path))
+
+            print("Settings: Commit successful")
+
             print(
-                f"Project saved: '{self.project.name}' (ID: {self.project.id if hasattr(self.project, 'id') else 'unknown'})"
+                f"Settings: Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Builds will be stored in: '{self.project.builds_path}'"
             )
+
+            if errors_occurred:
+                # Inform user about non-critical failures AFTER successful commit of essentials
+                print(
+                    "Settings: Errors occurred saving some settings:\n\n"
+                    + "\n".join(errors_occurred)
+                )
+            else:
+                print(
+                    "Settings: All settings saved successfully. User can publish to all platforms!"
+                )
 
             self.accept()
         except Exception as e:
-            print(f"Error saving settings: {str(e)}")
-            QMessageBox.critical(self, "Error", f"Failed to save settings: {str(e)}")
-            self.reject()
+            # CRITICAL FAILURE -> causes settings roll back
+            # This catches errors during essential data preparation or the final commit itself.
+            print(f"CRITICAL Error saving settings: {str(e)}")
+            try:
+                self.session.rollback()
+                print("Session rolled back due to critical error.")
+            except Exception as rb_e:
+                print(f"Error during rollback: {rb_e}")
 
     def accept(self):
         """User clicked Apply - close dialog but keep session open"""

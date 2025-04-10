@@ -9,11 +9,15 @@ from PyQt6.QtWidgets import (
     QComboBox,
 )
 
-from models import BuildTarget, Project, ItchConfig, ItchPublishProfile
+from PyQt6.QtCore import pyqtSignal
+
+from models import BuildTarget, Project, ItchConfig, ItchPublishProfile, StoreEnum
 from views.dialogs import settings_dialog
 
 
 class ItchPublishProfileWidget(QWidget):
+    profile_saved_signal = pyqtSignal()
+
     def __init__(self, session, build_id: str, parent=None):
         super().__init__(parent)
         self.session = session
@@ -53,7 +57,7 @@ class ItchPublishProfileWidget(QWidget):
                     f"Preparing new Itch.io Publish Profile for build {self.build_id}"
                 )
                 # Create a transient instance, DO NOT add to session yet
-                self.profile = ItchPublishProfile(build_id=self.build_id)
+                self.profile = ItchPublishProfile(build_id=self.build_id, store_type=StoreEnum.itch)
                 self.is_new_profile = True
                 # Set defaults for transient object display
                 self.profile.itch_user_game_id = ""
@@ -236,7 +240,8 @@ class ItchPublishProfileWidget(QWidget):
                 self.auth_combo.addItem("Select Auth Profile...", None)  # Placeholder
                 for i, auth in enumerate(itch_config):
                     # Store auth ID as data for reliable retrieval
-                    self.auth_combo.addItem(auth.username, auth.id)
+                    if auth.username:
+                        self.auth_combo.addItem(auth.username, auth.id)
                     if auth.id == current_auth_id or auth.id == user_selected_auth:
                         selected_index = i + 1  # +1 because of placeholder item
 
@@ -320,6 +325,8 @@ class ItchPublishProfileWidget(QWidget):
 
             # --- Commit Changes ---
             self.session.commit()
+            self.profile_saved_signal.emit()
+
             QMessageBox.information(self, "Success", "Profile saved successfully.")
 
         except Exception as e:

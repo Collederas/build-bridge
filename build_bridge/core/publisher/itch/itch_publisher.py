@@ -39,7 +39,7 @@ class ItchPublisher(BasePublisher):
         """Loads the Itch.io configuration from the database."""
         # Ensure the config is attached to the session if loaded
         with session_scope() as session:
-            publish_profile = session.query(ItchPublishProfile).filter_by(store_type=StoreEnum.itch).one_or_none()
+            publish_profile = session.query(ItchPublishProfile).filter_by(store_type=StoreEnum.itch).first()
             self.validate_publish_profile(publish_profile)
             
             api_key = publish_profile.itch_config.api_key

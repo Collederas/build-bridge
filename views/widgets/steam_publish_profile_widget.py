@@ -1,4 +1,3 @@
-import sys
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -18,7 +17,6 @@ from PyQt6.QtWidgets import (
 )
 
 
-from database import session_scope
 from models import Project, SteamConfig, SteamPublishProfile
 from views.dialogs import settings_dialog
 
@@ -322,7 +320,7 @@ class SteamPublishProfileWidget(QWidget):
             self.depots_table.setItem(row, 1, QTableWidgetItem(path))
 
     def _open_steam_settings(self):
-        settings = settings_dialog.SettingsDialog(default_page=2)
+        settings = settings_dialog.SettingsDialog(default_page=1)
         settings.exec()
         self._refresh_auth_options()
 

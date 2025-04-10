@@ -14,14 +14,12 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
 
-from requests import session
 from core.publisher.itch.itch_publisher import ItchPublisher
-from database import SessionFactory, session_scope
+from database import session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
 from models import Project, StoreEnum
 from views.dialogs.platform_publish_dialog import PlatformPublishDialog
-from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileWidget
 
 
 class PublishTargetEntry(QWidget):
@@ -38,6 +36,7 @@ class PublishTargetEntry(QWidget):
         layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(15)
 
+        # SINGLE PROJECT SETUP
         with session_scope() as session:
             project = session.query(Project).one_or_none()
 
@@ -62,7 +61,7 @@ class PublishTargetEntry(QWidget):
 
         self.platform_menu = QMenu()
         self.platforms = {}
-        for name in [StoreEnum.itch.value, StoreEnum.steam.value]:
+        for name in [StoreEnum.itch, StoreEnum.steam]:
             action = QAction(name, self)
             action.setCheckable(True)
             action.setChecked(True)
@@ -78,7 +77,7 @@ class PublishTargetEntry(QWidget):
         browse_archive_button.setFixedHeight(28)
         browse_archive_button.clicked.connect(self.browse_archive_directory)
 
-        self.edit_button = QPushButton("Manage Publish Profile")
+        self.edit_button = QPushButton("Profile")
         self.edit_button.setFixedHeight(28)
         self.edit_button.clicked.connect(self.edit_publish_profile)
 
@@ -101,10 +100,6 @@ class PublishTargetEntry(QWidget):
 
         self.setLayout(layout)
 
-    def edit_publish_profile(self):
-        dialog = PlatformPublishDialog(build_id=self.build_id)
-        dialog.exec()
-
     def update_platform_button_text(self):
         selected = [
             name for name, action in self.platforms.items() if action.isChecked()
@@ -125,6 +120,16 @@ class PublishTargetEntry(QWidget):
             os.startfile(self.build_root)  # Windows-only
         except Exception as e:
             print(e)
+
+    def edit_publish_profile(self):
+        sel_platforms = self.get_selected_platforms()
+
+        if len(sel_platforms) == 1:
+            platform = sel_platforms[0]
+        else:
+            platform = None  # Which means both stores for the PublishDialog... meh
+        dialog = PlatformPublishDialog(platform=platform, build_id=self.build_id)
+        dialog.exec()
 
     def handle_publish(self):
         # Support only one store now. Maybe queues in the future (or parallel uploads)
@@ -154,12 +159,11 @@ class PublishTargetEntry(QWidget):
                 f"The build_src provided: {self.build_root} is not a valid application folder."
             )
 
-        # Check we have a valid store publisher. For now we only support one.
         selected_platforms = self.get_selected_platforms()
         if selected_platforms:
             # TODO: please fix me when multi store support is available
             selected_platform = selected_platforms[0]
-    
+
             publisher = self.store_publishers.get(selected_platform)()
             print(f"Publishing on {selected_platform}")
 
@@ -228,9 +232,10 @@ class PublishTargetsListWidget(QWidget):
             full_path = os.path.join(path, entry)
             print(f"Checking builds in {full_path}")
 
-
             # Exclude store config directories
-            if os.path.isdir(full_path) and not entry in [store.value for store in StoreEnum]:
+            if os.path.isdir(full_path) and not entry in [
+                store.value for store in StoreEnum
+            ]:
                 widget = PublishTargetEntry(full_path)
                 self.vbox.addWidget(widget)
                 builds_found = True

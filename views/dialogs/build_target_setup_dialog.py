@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QFileDialog, QCheckBox, QStackedWidget, QMessageBox, QWidget
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
 from core.vcs.p4client import P4Client
@@ -16,6 +16,7 @@ from database import SessionFactory
 
 class BuildTargetSetupDialog(QDialog):
     vcs_clients = {VCSTypeEnum.perforce: P4Client}
+    build_target_created = pyqtSignal(int)
 
     def __init__(self, build_target_id: int = None):
         super().__init__()
@@ -352,7 +353,9 @@ class BuildTargetSetupDialog(QDialog):
 
             self.session.commit()
             print(f"BuildTarget {self.build_target.id} - {self.build_target.target_platform} saved.")
+            self.build_target_created.emit(self.build_target.id)
             super().accept()
+            
         except Exception as e:
             self.session.rollback()
             QMessageBox.critical(self, "Error", f"Failed to save: {str(e)}")

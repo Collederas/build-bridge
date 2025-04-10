@@ -1,4 +1,3 @@
-import os
 import sys
 from PyQt6.QtWidgets import (
     QApplication,
@@ -6,14 +5,12 @@ from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QLabel,
-    QMessageBox,
     QMenu,
 )
 from PyQt6.QtGui import QIcon
 
 
 from core.vcs.p4client import P4Client
-from core.vcs.vcsbase import MissingConfigException
 from database import SessionFactory, initialize_database
 from models import BuildTarget, Project
 from views.widgets.build_targets_widget import BuildTargetListWidget
@@ -35,7 +32,7 @@ class BuildBridgeWindow(QMainWindow):
         # One day, support multiproject. For now, this will do.
         self.project = self.session.query(Project).first()
 
-        # Single build target setup too.     
+        # Single build target setup too.
         self.build_target = (
             self.session.query(BuildTarget).order_by(BuildTarget.id.desc()).first()
         )
@@ -63,6 +60,7 @@ class BuildBridgeWindow(QMainWindow):
         build_target_widget = BuildTargetListWidget(
             build_target=self.build_target, parent=self
         )
+        build_target_widget.build_ready_signal.connect(self.on_new_build_available)
         main_layout.addWidget(build_target_widget)
 
         # Builds Section
@@ -72,7 +70,9 @@ class BuildBridgeWindow(QMainWindow):
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         builds_layout.addWidget(heading_label)
 
-        self.build_list_widget = PublishTargetsListWidget(self.project.builds_path if self.project else "")
+        self.build_list_widget = PublishTargetsListWidget(
+            self.project.builds_path if self.project else ""
+        )
 
         self.build_list_widget.setMinimumHeight(100)
         builds_layout.addWidget(self.build_list_widget)
@@ -91,8 +91,16 @@ class BuildBridgeWindow(QMainWindow):
             return None
         return selected_items[0].text()
 
+    def on_new_build_available(self, build_dir):
+        print(f"New build available at {build_dir}")
+
+        # Hm... build_dir is the archive dir: it has no Project Name joined to it
+        # but still this is not good because it's the build widget that should tell us
+        # where the new build is.
+        self.build_list_widget.refresh_builds(self.project.builds_path)
+
     def focusInEvent(self, a0):
-        self.build_list_widget.refresh_builds()
+        self.build_list_widget.refresh_builds(self.project.builds_path)
         return super().focusInEvent(a0)
 
     def closeEvent(self, event):

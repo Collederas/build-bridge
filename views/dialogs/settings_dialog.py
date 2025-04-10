@@ -66,7 +66,7 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout()
 
         self.category_list = QListWidget()
-        self.category_list.addItems(["Project", "Version Control", "Steam", "Itch"])
+        self.category_list.addItems(["Project", "Steam", "Itch"])
         layout.addWidget(self.category_list, 1)
 
         self.stack = QStackedWidget()
@@ -183,7 +183,9 @@ class SettingsDialog(QDialog):
         self.connection_status_display.setReadOnly(True)
         self.connection_status_display.setMaximumHeight(50)
         self.connection_status_display.setStyleSheet("padding: 5px;")  # Add padding
-        form_layout.addRow("", self.connection_status_display)  # Empty label for alignment
+        form_layout.addRow(
+            "", self.connection_status_display
+        )  # Empty label for alignment
 
         layout.addLayout(form_layout)
         layout.addStretch()  # Push content to top, leaving space below
@@ -208,7 +210,9 @@ class SettingsDialog(QDialog):
             self.display_connection_status("Connection successful", QColor("green"))
         except Exception as e:
             # Display error message
-            self.display_connection_status(f"Connection failed: {str(e)}", QColor("red"))
+            self.display_connection_status(
+                f"Connection failed: {str(e)}", QColor("red")
+            )
 
     def display_connection_status(self, message, color):
         """Display a connection status message with the specified color."""
@@ -261,14 +265,18 @@ class SettingsDialog(QDialog):
             try:
                 self.perforce_config.user = self.p4_user_input.text().strip()
                 self.perforce_config.p4password = self.p4_password_input.text().strip()
-                self.perforce_config.server_address = self.p4_server_input.text().strip()
+                self.perforce_config.server_address = (
+                    self.p4_server_input.text().strip()
+                )
                 self.perforce_config.client = self.p4_client_input.text().strip()
                 self.session.add(self.perforce_config)
                 print(f"saving vcs settings: user {self.p4_user_input.text().strip()}")
 
             except Exception as e:
                 print(f"Error saving Perforce settings: {str(e)}")
-                QMessageBox.critical(self, "Error", f"Failed to save Perforce settings: {str(e)}")
+                QMessageBox.critical(
+                    self, "Error", f"Failed to save Perforce settings: {str(e)}"
+                )
 
             # Make sure object is in session
             if self.project not in self.session:

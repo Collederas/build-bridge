@@ -6,6 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
+
 Base = declarative_base()
 
 # Check for an environment variable for the database path

@@ -10,8 +10,9 @@ from PyQt6.QtWidgets import (
 )
 
 from database import SessionFactory
-from views.dialogs.steam_publish_profile_dialog import SteamPublishProfileWidget
-from views.dialogs.itch_publish_profile_dialog import ItchPublishProfileWidget
+from models import StoreEnum
+from views.widgets.steam_publish_profile_widget import SteamPublishProfileWidget
+from views.widgets.itch_publish_profile_widget import ItchPublishProfileWidget
 
 
 class PlatformPublishDialog(QDialog):
@@ -19,7 +20,7 @@ class PlatformPublishDialog(QDialog):
     A dialog that shows either Steam or Itch.io publish profile based on the platform argument.
     Can also show both in a tabbed interface when no specific platform is specified.
     """
-    def __init__(self, build_id, platform=None, parent=None):
+    def __init__(self, build_id, platform : StoreEnum = None, parent=None):
         """
         Initialize the platform-specific publish dialog.
         
@@ -53,10 +54,10 @@ class PlatformPublishDialog(QDialog):
         if self.platform is None:
             # Show both platforms in tabs
             self._create_tabbed_interface(main_layout)
-        elif self.platform.lower() == "steam":
+        elif self.platform == StoreEnum.steam:
             # Show only Steam
             self._create_steam_dialog(main_layout)
-        elif self.platform.lower() == "itch":
+        elif self.platform == StoreEnum.itch:
             # Show only Itch
             self._create_itch_dialog(main_layout)
         else:
@@ -111,20 +112,12 @@ class PlatformPublishDialog(QDialog):
         self.steam_widget = SteamPublishProfileWidget(self.session, self.build_id, self)
         parent_layout.addWidget(self.steam_widget)
         
-        # The SteamPublishProfileDialog already has its own buttons
-        # Override the default accept/reject to use this dialog
-        self.steam_widget.accepted.connect(self.accept)
-        self.steam_widget.rejected.connect(self.reject)
     
     def _create_itch_dialog(self, parent_layout):
         """Create an Itch-only dialog."""
         self.itch_widget = ItchPublishProfileWidget(self.session, self.build_id, self)
         parent_layout.addWidget(self.itch_widget)
         
-        # The ItchPublishProfileDialog already has its own buttons
-        # Override the default accept/reject to use this dialog
-        self.itch_widget.accepted.connect(self.accept)
-        self.itch_widget.rejected.connect(self.reject)
     
     def _create_button_layout(self):
         """Create save and cancel buttons for the tabbed interface."""

@@ -1,4 +1,3 @@
-import logging
 import os
 import subprocess
 import platform
@@ -10,14 +9,14 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
 )
-from PyQt6.QtCore import QProcess
+from PyQt6.QtCore import QProcess, pyqtSignal
 
 from core.builder.unreal_builder import UnrealBuilder
 
-logger = logging.getLogger(__name__)
-
 
 class BuildWindowDialog(QDialog):
+    build_ready_signal = pyqtSignal(str)  # payload = build_dir
+
     def __init__(self, builder: UnrealBuilder, parent=None):
         super().__init__(parent)
         self.builder = builder
@@ -53,20 +52,22 @@ class BuildWindowDialog(QDialog):
             if self.build_in_progress:
                 self.append_output("A build is already in progress.")
                 return
-                
+
             self.build_in_progress = True
             self.process = QProcess(self)
             self.process.readyReadStandardOutput.connect(self.handle_output)
             self.process.finished.connect(self.build_finished)
             self.process.errorOccurred.connect(self.handle_error)
 
+            # This was AI suggestion that I accepted and now looking at it I cringe a bit.
+            # But it works so for now it stays.
             command = self.builder.get_build_command()
             program = command[0]
             arguments = command[1:]
 
             self.append_output("Starting build...\n")
             self.append_output(f"Command: {program} {' '.join(arguments)}\n")
-            logger.info(f"Starting build with command: {program} {' '.join(arguments)}")
+            print(f"Starting build with command: {program} {' '.join(arguments)}")
 
             self.process.start(program, arguments)
 
@@ -78,7 +79,7 @@ class BuildWindowDialog(QDialog):
                 )
         except Exception as e:
             self.append_output(f"Failed to start build: {str(e)}")
-            logger.error(f"Build start failed: {str(e)}", exc_info=True)
+            print(f"Build start failed: {str(e)}", exc_info=True)
             self.build_finished(-1, QProcess.ExitStatus.CrashExit)
 
     def handle_output(self):
@@ -89,7 +90,7 @@ class BuildWindowDialog(QDialog):
                 .decode("utf-8", errors="replace")
             )
             self.append_output(data)
-            logger.debug(f"Process output: {data.strip()}")
+            print(f"Process output: {data.strip()}")
 
     def cancel_build(self):
         """Immediately force-cancel the running build."""
@@ -100,7 +101,7 @@ class BuildWindowDialog(QDialog):
         try:
             self.action_button.setEnabled(False)
             self.append_output("\nCancelling build (forcing termination)...")
-            logger.info("Attempting to force-cancel build")
+            print("Attempting to force-cancel build")
 
             pid = self.process.processId()
             if platform.system() == "Windows":
@@ -112,25 +113,25 @@ class BuildWindowDialog(QDialog):
                 )
                 if result.returncode == 0:
                     self.append_output("Build process and children terminated.")
-                    logger.info(f"Process {pid} and children terminated via taskkill.")
+                    print(f"Process {pid} and children terminated via taskkill.")
                 else:
                     self.append_output(f"WARNING: Termination failed: {result.stderr}")
-                    logger.error(f"taskkill failed: {result.stderr}")
+                    print(f"taskkill failed: {result.stderr}")
             else:
                 # On Unix-like systems, kill the process group
                 os.killpg(os.getpgid(pid), 9)  # SIGKILL
                 self.append_output("Build process and children terminated.")
-                logger.info(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
+                print(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
 
             # Wait briefly to confirm termination
             self.process.waitForFinished(2000)
             if self.process.state() != QProcess.ProcessState.NotRunning:
                 self.append_output("WARNING: Process may still be running!")
-                logger.error(f"Process {pid} may not have terminated.")
+                print(f"Process {pid} may not have terminated.")
 
         except Exception as e:
             self.append_output(f"Cancel failed: {str(e)}")
-            logger.error(f"Force cancel failed: {str(e)}", exc_info=True)
+            print(f"Force cancel failed: {str(e)}", exc_info=True)
         finally:
             self.reset_after_cancel()
 
@@ -161,24 +162,26 @@ class BuildWindowDialog(QDialog):
             .decode("utf-8", errors="replace")
         )
         self.append_output(data)
-        logger.debug(f"Process output: {data.strip()}")
+        print(f"Process output: {data.strip()}")
 
     def handle_error(self, error):
         """Handle QProcess errors."""
         self.append_output(f"Process error: {self.process.errorString()}\n")
-        logger.error(f"Process error {error}: {self.process.errorString()}")
+        print(f"Process error {error}: {self.process.errorString()}")
 
     def build_finished(self, exit_code, exit_status):
         """Handle build completion."""
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
             self.append_output("\nBUILD COMPLETED SUCCESSFULLY")
-            logger.info("Build completed successfully")
+            print("Build completed successfully")
             self.action_button.setText("Close")
+            self.build_ready_signal.emit(str(self.builder.output_dir))
             self.action_button.clicked.connect(self.accept)
         else:
             self.append_output(f"\nBUILD FAILED (Exit code: {exit_code})")
-            logger.warning(f"Build failed with exit code {exit_code}")
+            print(f"Build failed with exit code {exit_code}")
             self.action_button.setText("Close")
+
             self.action_button.clicked.disconnect()
             self.action_button.clicked.connect(self.close)
 
@@ -192,5 +195,4 @@ class BuildWindowDialog(QDialog):
                 self.output_text.verticalScrollBar().maximum()
             )
         except Exception as e:
-            logger.error(f"Error updating GUI: {str(e)}", exc_info=True)
-
+            print(f"Error updating GUI: {str(e)}", exc_info=True)

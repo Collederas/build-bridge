@@ -92,14 +92,6 @@ class ItchPublishProfileWidget(QWidget):
         )
         form_layout.addRow("Channel Name:", self.channel_name_input)
 
-        # --- Builder Path (Read-Only Display) ---
-        self.builder_path_display = QLineEdit()
-        self.builder_path_display.setReadOnly(True)
-        self.builder_path_display.setToolTip(
-            "Managed by Build Bridge. This is where build files and upload logs will go."
-        )
-        form_layout.addRow("Builder Path:", self.builder_path_display)
-
         # --- Itch.io Authentication ---
         auth_layout = QHBoxLayout()
         self.auth_combo = QComboBox()
@@ -213,17 +205,9 @@ class ItchPublishProfileWidget(QWidget):
             if project:
                 self.profile.project = project
 
-        if self.profile.project is not None:
-            try:
-                path = self.profile.builder_path
-            except Exception as e:
-                path = f"Error loading path: {e}"
-
-        self.builder_path_display.setText(path)
-
     def _open_itch_settings(self):
         settings = settings_dialog.SettingsDialog(
-            default_page=3
+            default_page=2
         )  # Assuming Itch.io settings is page 3
         settings.exec()
         self._refresh_auth_options()

@@ -1,6 +1,6 @@
 # Build Bridge
 
-Build Bridge is a tool designed to streamline the process of building and publishing game projects, particularly those using Unreal Engine, to platforms like Steam and Itch.io. It provides a graphical user interface (GUI) built with PyQt6 to manage project configurations, build targets, and publishing profiles.
+Build Bridge is a tool that streamlines building and deploying Unreal Engine projects to major platforms like Itch.io and Steam. With a user-friendly PyQt6 GUI, it simplifies configuration, automates builds, and manages uploads—all in just a few clicks.
 
 ## Features
 

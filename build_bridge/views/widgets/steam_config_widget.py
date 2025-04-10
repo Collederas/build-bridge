@@ -6,8 +6,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QProcess
 
 from sqlalchemy.orm import Session
-from exceptions import InvalidConfigurationError
-from models import SteamConfig
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.models import SteamConfig
 
 class SteamConfigWidget(QWidget):
     """

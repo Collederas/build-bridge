@@ -11,10 +11,10 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtCore import pyqtSignal
 
-from database import SessionFactory
-from models import StoreEnum
-from views.widgets.steam_publish_profile_widget import SteamPublishProfileWidget
-from views.widgets.itch_publish_profile_widget import ItchPublishProfileWidget
+from build_bridge.database import SessionFactory
+from build_bridge.models import StoreEnum
+from build_bridge.views.widgets.steam_publish_profile_widget import SteamPublishProfileWidget
+from build_bridge.views.widgets.itch_publish_profile_widget import ItchPublishProfileWidget
 
 
 class PlatformPublishDialog(QDialog):

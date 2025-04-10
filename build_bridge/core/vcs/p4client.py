@@ -1,18 +1,16 @@
 import os
 from typing import List, Optional
 
-import keyring
 
-from core.vcs.vcsbase import VCSClient
+from build_bridge.core.vcs.vcsbase import VCSClient
 from P4 import P4, P4Exception
 
-from database import session_scope
-from models import PerforceConfig
+from build_bridge.models import PerforceConfig
 
 
 class P4Client(VCSClient):
 
-    # We don't *need* a config because p4 can read env variables and use those 
+    # We don't *need* a config because p4 can read env variables and use those
     def __init__(self, config: PerforceConfig = None):
         super().__init__()
         self.p4 = P4()

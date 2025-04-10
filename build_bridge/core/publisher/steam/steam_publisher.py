@@ -1,10 +1,10 @@
 
-from database import SessionFactory, session_scope
-from models import PublishProfile, SteamPublishProfile
-from exceptions import InvalidConfigurationError
-from core.publisher.base_publisher import BasePublisher
-from core.publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
-from views.dialogs.store_upload_dialog import GenericUploadDialog
+from build_bridge.database import SessionFactory, session_scope
+from build_bridge.models import PublishProfile, SteamPublishProfile
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.core.publisher.base_publisher import BasePublisher
+from build_bridge.core.publisher.steam.steam_pipe_configurator import SteamPipeConfigurator
+from build_bridge.views.dialogs.store_upload_dialog import GenericUploadDialog
 
 def check_steam_success(exit_code: int, log_content: str) -> bool:
     """

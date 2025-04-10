@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QProcess, pyqtSignal
 
-from core.builder.unreal_builder import UnrealBuilder
+from build_bridge.core.builder.unreal_builder import UnrealBuilder
 
 
 class BuildWindowDialog(QDialog):

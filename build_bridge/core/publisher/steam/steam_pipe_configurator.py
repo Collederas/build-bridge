@@ -1,7 +1,7 @@
 import os
 from jinja2 import Template
 
-from models import SteamPublishProfile
+from build_bridge.models import SteamPublishProfile
 
 
 class SteamPipeConfigurator:

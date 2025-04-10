@@ -15,14 +15,14 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QColor
 
-from core.vcs.p4client import P4Client
+from build_bridge.core.vcs.p4client import P4Client
 
-from database import SessionFactory
-from exceptions import InvalidConfigurationError
-from models import Project, PerforceConfig
-from views.widgets import itch_config_widget
-from views.widgets.steam_config_widget import SteamConfigWidget
-from views.widgets.itch_config_widget import ItchConfigWidget
+from build_bridge.database import SessionFactory
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.models import Project, PerforceConfig
+from build_bridge.views.widgets import itch_config_widget
+from build_bridge.views.widgets.steam_config_widget import SteamConfigWidget
+from build_bridge.views.widgets.itch_config_widget import ItchConfigWidget
 
 
 class SettingsDialog(QDialog):
@@ -228,13 +228,13 @@ class SettingsDialog(QDialog):
         self.connection_status_display.setText(message)
 
     def load_form_data(self):
-        """Load existing data from database into UI fields."""
+        """Load existing data from build_bridge.database into UI fields."""
         if not self.project:
             print("Settings: Warning: No project available to load data from")
             return
 
         try:
-            # Explicitly refresh from database to ensure we have latest data
+            # Explicitly refresh from build_bridge.database to ensure we have latest data
             self.session.refresh(self.project)
 
             # Load data into form fields

@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtCore import pyqtSignal
 
-from models import Project, SteamConfig, SteamPublishProfile, StoreEnum
-from views.dialogs import settings_dialog
+from build_bridge.models import Project, SteamConfig, SteamPublishProfile, StoreEnum
+from build_bridge.views.dialogs import settings_dialog
 
 
 class SteamPublishProfileWidget(QWidget):
@@ -347,8 +347,8 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtCore import pyqtSignal
 
-from models import Project, SteamConfig, SteamPublishProfile, StoreEnum
-from views.dialogs import settings_dialog
+from build_bridge.models import Project, SteamConfig, SteamPublishProfile, StoreEnum
+from build_bridge.views.dialogs import settings_dialog
 
 
 class SteamPublishProfileWidget(QWidget):

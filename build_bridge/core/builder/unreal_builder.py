@@ -3,7 +3,7 @@ import os
 import sys
 from typing import Optional
 
-from models import BuildTargetPlatformEnum, BuildTypeEnum
+from build_bridge.models import BuildTargetPlatformEnum, BuildTypeEnum
 
 
 

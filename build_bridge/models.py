@@ -6,7 +6,7 @@ from sqlalchemy import JSON, Boolean, Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, validates
 import keyring
 
-from database import Base
+from build_bridge.database import Base
 
 
 class VCSTypeEnum(str, enum.Enum):

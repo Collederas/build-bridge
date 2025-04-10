@@ -12,12 +12,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon
 
 
-from core.vcs.p4client import P4Client
-from database import SessionFactory, initialize_database
-from models import BuildTarget, Project
-from views.widgets.build_targets_widget import BuildTargetListWidget
-from views.widgets.publish_targets_widget import PublishTargetsListWidget
-from views.dialogs.settings_dialog import SettingsDialog
+from build_bridge.core.vcs.p4client import P4Client
+from build_bridge.database import SessionFactory, initialize_database
+from build_bridge.models import BuildTarget, Project
+from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
+from build_bridge.views.widgets.publish_targets_widget import PublishTargetsListWidget
+from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 
 class BuildBridgeWindow(QMainWindow):

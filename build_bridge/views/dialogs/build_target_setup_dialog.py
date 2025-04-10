@@ -6,14 +6,14 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
-from views.dialogs.settings_dialog import SettingsDialog
+from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
-from core.vcs.p4client import P4Client
-from models import (
+from build_bridge.core.vcs.p4client import P4Client
+from build_bridge.models import (
     BuildTarget, PerforceConfig, Project, BuildTargetPlatformEnum,
     BuildTypeEnum, VCSTypeEnum
 )
-from database import SessionFactory # Assuming SessionFactory gives a session
+from build_bridge.database import SessionFactory # Assuming SessionFactory gives a session
 
 
 class BuildTargetSetupDialog(QDialog):

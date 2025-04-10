@@ -1,9 +1,9 @@
 from pathlib import Path
-from core.publisher.base_publisher import BasePublisher
-from database import session_scope
-from exceptions import InvalidConfigurationError
-from models import ItchPublishProfile, StoreEnum
-from views.dialogs.store_upload_dialog import GenericUploadDialog
+from build_bridge.core.publisher.base_publisher import BasePublisher
+from build_bridge.database import session_scope
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.models import ItchPublishProfile, StoreEnum
+from build_bridge.views.dialogs.store_upload_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
 

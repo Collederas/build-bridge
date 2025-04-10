@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from models import PublishProfile
+from build_bridge.models import PublishProfile
 
 
 class BasePublisher(ABC):

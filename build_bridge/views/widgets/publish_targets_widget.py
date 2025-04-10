@@ -16,14 +16,14 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from models import StoreEnum
+from build_bridge.models import StoreEnum
 
-from core.publisher.itch.itch_publisher import ItchPublisher
-from database import session_scope
-from exceptions import InvalidConfigurationError
-from core.publisher.steam.steam_publisher import SteamPublisher
-from models import Project, PublishProfile, StoreEnum
-from views.dialogs.platform_publish_dialog import PlatformPublishDialog
+from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
+from build_bridge.database import session_scope
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.core.publisher.steam.steam_publisher import SteamPublisher
+from build_bridge.models import Project, PublishProfile, StoreEnum
+from build_bridge.views.dialogs.platform_publish_dialog import PlatformPublishDialog
 
 
 class PublishTargetEntry(QWidget):

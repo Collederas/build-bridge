@@ -19,8 +19,8 @@ import keyring.errors
 import requests
 from sqlalchemy.orm import Session
 
-from exceptions import InvalidConfigurationError
-from models import ItchConfig
+from build_bridge.exceptions import InvalidConfigurationError
+from build_bridge.models import ItchConfig
 
 
 class ItchConfigWidget(QWidget):

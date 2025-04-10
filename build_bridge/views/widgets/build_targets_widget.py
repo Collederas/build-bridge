@@ -14,16 +14,16 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from core.builder.unreal_builder import (
+from build_bridge.core.builder.unreal_builder import (
     EngineVersionError,
     ProjectFileNotFoundError,
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
-from database import session_scope
-from models import BuildTarget
-from views.dialogs.build_dialog import BuildWindowDialog
-from views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
+from build_bridge.database import session_scope
+from build_bridge.models import BuildTarget
+from build_bridge.views.dialogs.build_dialog import BuildWindowDialog
+from build_bridge.views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 
 
 class BuildTargetListWidget(QWidget):

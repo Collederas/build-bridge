@@ -1,8 +1,8 @@
 """initial baseline
 
-Revision ID: a1a341861dd8
+Revision ID: 58e32512480d
 Revises: 
-Create Date: 2025-04-09 15:31:36.366457
+Create Date: 2025-04-10 16:27:16.667238
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1a341861dd8'
+revision: str = '58e32512480d'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -64,8 +64,8 @@ def upgrade() -> None:
     op.create_table('itch_publish_profile',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('itch_user_game_id', sa.String(), nullable=False),
-    sa.Column('itch_config_id', sa.Integer(), nullable=False),
     sa.Column('itch_channel_name', sa.String(), nullable=False),
+    sa.Column('itch_config_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['id'], ['publish_profile.id'], ),
     sa.ForeignKeyConstraint(['itch_config_id'], ['itch_config.id'], ),
     sa.PrimaryKeyConstraint('id')

@@ -7,19 +7,23 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QVBoxLayout,
     QMenu,
-    QToolButton,
+    QToolTip,
     QSizePolicy,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 import os
 
+from requests import session
+
 from core.publisher.itch.itch_publisher import ItchPublisher
 from database import session_scope
 from exceptions import InvalidConfigurationError
 from core.publisher.steam.steam_publisher import SteamPublisher
-from models import Project, StoreEnum
+from models import Project, PublishProfile, StoreEnum
 from views.dialogs.platform_publish_dialog import PlatformPublishDialog
+from views.widgets.steam_config_widget import SteamConfigWidget
 
 
 class PublishTargetEntry(QWidget):
@@ -52,25 +56,17 @@ class PublishTargetEntry(QWidget):
         self.label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.label.setFixedWidth(120)
 
-        # Platform dropdown button
-        self.platform_button = QToolButton()
-        self.platform_button.setText("Select Platforms")
-        self.platform_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.platform_button.setFixedWidth(150)
-        self.platform_button.setFixedHeight(28)
+        # TODO: Multi-store publish
+        self.platform_menu_combo = QComboBox()
+        platform_layout = QHBoxLayout()
+        platform_layout.addWidget(QLabel("Target Platform:"))
+        platform_layout.addWidget(self.platform_menu_combo)
+        layout.addLayout(platform_layout)
 
-        self.platform_menu = QMenu()
-        self.platforms = {}
-        for name in [StoreEnum.itch, StoreEnum.steam]:
-            action = QAction(name, self)
-            action.setCheckable(True)
-            action.setChecked(True)
-            self.platform_menu.addAction(action)
-            self.platforms[name] = action
+        self.platform_menu_combo.currentTextChanged.connect(self.on_target_platform_changed)
 
-        self.platform_menu.triggered.connect(self.update_platform_button_text)
-        self.platform_button.setMenu(self.platform_menu)
-        self.update_platform_button_text()
+        for publisher in self.store_publishers:
+            self.platform_menu_combo.addItem(publisher.value, publisher)
 
         # Right-side buttons
         browse_archive_button = QPushButton("Browse")
@@ -85,6 +81,10 @@ class PublishTargetEntry(QWidget):
         self.publish_button.setFixedHeight(28)
         self.publish_button.clicked.connect(self.handle_publish)
 
+        self.publish_button.setToolTip("")
+
+        self.publish_button.setEnabled(self.can_publish())
+
         # Group buttons to keep them aligned
         button_layout = QHBoxLayout()
         button_layout.setSpacing(8)
@@ -94,52 +94,57 @@ class PublishTargetEntry(QWidget):
 
         # Add widgets to main layout
         layout.addWidget(self.label)
-        layout.addWidget(self.platform_button)
         layout.addStretch()  # Push buttons to the right
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
 
-    def update_platform_button_text(self):
-        selected = [
-            name for name, action in self.platforms.items() if action.isChecked()
-        ]
-        if selected:
-            text = ", ".join(selected)
-            if len(text) > 20:
-                text = text[:17] + "..."
-            self.platform_button.setText(text)
-        else:
-            self.platform_button.setText("Select Platforms")
+    def on_target_platform_changed(self):
+        self.publish_button.setEnabled(self.can_publish())
 
-    def get_selected_platforms(self):
-        return [name for name, action in self.platforms.items() if action.isChecked()]
+    def on_publish_profile_added_or_updated(self):
+        self.publish_button.setEnabled(self.can_publish())
 
-    def browse_archive_directory(self):
+    def get_publish_profile_for_store(self, store: StoreEnum, session):
+        profile = session.query(PublishProfile).filter_by(store_type=store.value).first()
+        return profile
+
+    def can_publish(self) -> bool:
+        """Based on selected platform, allows or not to publish by
+        enabling/disabling the button if config is not valid"""
         try:
-            os.startfile(self.build_root)  # Windows-only
-        except Exception as e:
-            print(e)
 
-    def edit_publish_profile(self):
-        sel_platforms = self.get_selected_platforms()
+            self.validate()
+            with session_scope() as session:
+                selected_platform = self.platform_menu_combo.currentData()
 
-        if len(sel_platforms) == 1:
-            platform = sel_platforms[0]
-        else:
-            platform = None  # Which means both stores for the PublishDialog... meh
-        dialog = PlatformPublishDialog(platform=platform, build_id=self.build_id)
-        dialog.exec()
+                publish_profile_selected_platform = self.get_publish_profile_for_store(selected_platform, session)
 
-    def handle_publish(self):
-        # Support only one store now. Maybe queues in the future (or parallel uploads)
+                publisher = self.store_publishers[selected_platform]()
 
+                if publish_profile_selected_platform:
+                    publisher.validate_publish_profile(publish_profile_selected_platform)
+                else:
+                    raise InvalidConfigurationError(f"Missing profile for {selected_platform}")
+        except InvalidConfigurationError as e:
+            self.publish_button.setToolTip(f"Some configuration is missing or invalid: \n\n     {e}")
+            print(f"PublisTargetEntryWidget: invlaid configuration: \n\n    {e}.")
+            return False
+        return True
+
+    def validate(self):
+        """Validates basic things like stores selected and that files look like a build (have an .exe inside)."""
+        selected_platform = self.platform_menu_combo.currentData()
+        print(self)
+        if not selected_platform:
+           raise InvalidConfigurationError("You must select at least one store from the list.")
+        
         if not self.build_root:
             raise InvalidConfigurationError(
-                "The build entry widget has no source dir to build."
+                "The build entry widget has no source dir to build to."
             )
 
-        # Ensure there is executable - Win only
+        # Ensure there is executable directly in build_root or in first child (version number folder) - Win only
         has_exe_in_root = any(
             file.endswith(".exe") for file in os.listdir(self.build_root)
         )
@@ -155,17 +160,32 @@ class PublishTargetEntry(QWidget):
             file.endswith(".exe") for file in os.listdir(first_subfolder)
         )
         if not has_exe_in_root and not has_exe_in_subfolder:
-            raise InvalidConfigurationError(
-                f"The build_src provided: {self.build_root} is not a valid application folder."
-            )
+            raise InvalidConfigurationError("You must select at least one store from the list.")
 
-        selected_platforms = self.get_selected_platforms()
-        if selected_platforms:
-            # TODO: please fix me when multi store support is available
-            selected_platform = selected_platforms[0]
 
-            publisher = self.store_publishers.get(selected_platform)()
-            print(f"Publishing on {selected_platform}")
+    def browse_archive_directory(self):
+        try:
+            os.startfile(self.build_root)  # Windows-only
+        except Exception as e:
+            print(e)
+
+    def edit_publish_profile(self):
+        sel_platform = self.platform_menu_combo.currentText()
+
+        dialog = PlatformPublishDialog(platform=sel_platform, build_id=self.build_id)
+        dialog.profile_changed_signal.connect(self.on_publish_profile_added_or_updated)
+        dialog.exec()
+
+    def handle_publish(self):
+        # We get here only if button to publish is enabled. And this is enabled only
+        # if we have valid conf for the selected store(s).
+
+        # Support only one store now. Maybe queues in the future (or parallel uploads)
+        # after validate config we must be sure at lest one platform is selected
+        selected_platform = self.platform_menu_combo.currentData()
+        publisher = self.store_publishers[selected_platform]()
+
+        print(f"Publishing on {selected_platform}")
 
         if not publisher:
             QMessageBox.warning(
@@ -191,6 +211,8 @@ class PublishTargetsListWidget(QWidget):
         self.setWindowTitle("Available Builds")
         self.setMinimumSize(600, 400)
 
+        self.monitored_directory = builds_dir
+
         # Scroll area setup
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -212,12 +234,23 @@ class PublishTargetsListWidget(QWidget):
         self.empty_message_label.setVisible(False)
         main_layout.addWidget(self.empty_message_label)
 
-        # Populate with subdirectory widgets
-        self.refresh_builds(builds_dir)
+    def refresh_builds(self, new_dir: str = None):
+        # allows to set nothing to show nothing.
 
-    def refresh_builds(self, path):
-        if not path or not os.path.exists(path):
-            print(f"No build path: {path}")
+        if not new_dir or not os.path.isdir(new_dir):
+            print(
+                "PublishTargetsListWidget: Refreshing with empty new dir. Showing empty"
+            )
+            self.empty_message_label.setVisible(True)
+            return
+
+        print(f"PublishTargetsListWidget: Setting new monitored dir to: {new_dir}")
+        self.monitored_directory = new_dir
+
+        if not self.monitored_directory or not os.path.exists(self.monitored_directory):
+            print(
+                f"PublishTargetsListWidget: No valid build path: {self.monitored_directory}"
+            )
             self.empty_message_label.setVisible(True)
             return
 
@@ -228,11 +261,14 @@ class PublishTargetsListWidget(QWidget):
                 child.widget().deleteLater()
 
         builds_found = False
-        for entry in sorted(os.listdir(path)):
-            full_path = os.path.join(path, entry)
-            print(f"Checking builds in {full_path}")
 
-            # Exclude store config directories
+
+        # Run through children and see if we want to filter out config dirs
+        # Add the rest as entries. This should really be made to use a model
+        for entry in sorted(os.listdir(self.monitored_directory)):
+            full_path = os.path.join(self.monitored_directory, entry)
+
+            # filtering the store config by name and validating dir all at once yeee
             if os.path.isdir(full_path) and not entry in [
                 store.value for store in StoreEnum
             ]:
@@ -240,5 +276,5 @@ class PublishTargetsListWidget(QWidget):
                 self.vbox.addWidget(widget)
                 builds_found = True
 
-        # Show or hide the empty message label
+        # Show/hide the empty message label
         self.empty_message_label.setVisible(not builds_found)

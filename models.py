@@ -223,24 +223,28 @@ class ItchConfig(Base):
             key_name = self.username
 
             if not service_id:
-                print("Cannot retrieve API key: ItchConfig username not set.")
+                print("ItchConfigModel: Cannot retrieve API key: ItchConfig username not set.")
                 return None
 
             try:
                 self._api_key = keyring.get_password(service_id, key_name)
             except keyring.errors.PasswordNotFoundError:
-                print(f"No Itch API key found in keyring for {service_id}/{key_name}.")
+                print(f"ItchConfigModel:No Itch API key found in keyring for {service_id}/{key_name}.")
                 self._api_key = None
+                raise
             except keyring.errors.KeyringError as e:
                 print(
-                    f"Keyring error retrieving Itch API key for {service_id}/{key_name}: {e}"
+                    f"ItchConfigModel:Keyring error retrieving Itch API key for {service_id}/{key_name}: {e}"
                 )
                 self._api_key = None
+                raise
             except Exception as e:
                 print(
-                    f"Unexpected error retrieving Itch API key for {service_id}/{key_name}: {e}"
+                    f"ItchConfigModel:Unexpected error retrieving Itch API key for {service_id}/{key_name}: {e}"
                 )
                 self._api_key = None
+                raise
+
         return self._api_key
 
     @api_key.setter

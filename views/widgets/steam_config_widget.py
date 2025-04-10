@@ -1,3 +1,4 @@
+import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QFormLayout, QMessageBox, QApplication, QFileDialog
@@ -5,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QProcess
 
 from sqlalchemy.orm import Session
+from exceptions import InvalidConfigurationError
 from models import SteamConfig
 
 class SteamConfigWidget(QWidget):
@@ -135,21 +137,16 @@ class SteamConfigWidget(QWidget):
             self.username_input.setEnabled(False)
             # ... disable others
 
-    def save_settings(self):
-        """Saves current values from input fields into the config object."""
-
-        # IMPORTANT: No commit here! SettingsDialog handles the commit.
+    def validate(self):
+        print("SteamConfigWidget: Validating Itch settings...")
 
         if not self.steam_config:
             print("SteamConfigWidget: Cannot save, config object missing.")
-            raise Exception("Steam configuration object not found during save.")
+            raise InvalidConfigurationError("Steam configuration object not found during save.")
         
-        if self.steam_config not in self.session:
-           print(f"  *** Adding self.steam_config object to session NOW! ***")
-           self.session.add(self.steam_config)
+        if not self.steam_config.steamcmd_path and not self.steamcmd_path_input.text().strip():
+            raise InvalidConfigurationError("No steamcmd path found in Steam Config.")
 
-        
-        print("SteamConfigWidget: Preparing settings for save...")
         try:
             # --- Update config object from UI fields ---
             new_username = self.username_input.text().strip()
@@ -162,21 +159,22 @@ class SteamConfigWidget(QWidget):
             self._initial_username = new_username
             self._initial_steamcmd_path = new_steamcmd_path
 
-            # --- Handle Password ---
-            entered_password = self.password_input.text()
-            if entered_password:
-                 print("SteamConfigWidget: Password field entered, updating stored password (INSECURE if saving to DB).")
-                 self.steam_config.password = entered_password
-            else:
-                 # If field is empty, DO NOT overwrite existing stored password
-                 print("SteamConfigWidget: Password field empty, stored password remains unchanged.")
-
-            self.password_input.clear() # Clear password field after handling
-
-
-        except Exception as e:
+        except ValueError as e:
             print(f"SteamConfigWidget: Error preparing settings for save: {e}")
-            raise Exception(f"Failed to stage Steam settings for saving: {e}") from e
+            raise (f"Validation of some fields failed. Steam is misconfigured: {e}") from e
+
+    def store_password(self):
+        """Requires no session so this is not part of the sql transaction and cna be stored here"""
+        # --- Handle Password ---
+        entered_password = self.password_input.text()
+        if entered_password:
+            print("SteamConfigWidget: Password field entered, updating stored password.")
+            self.steam_config.password = entered_password # calls keyring
+        else:
+            # If field is empty, DO NOT overwrite existing stored password
+            print("SteamConfigWidget: Password field empty, stored password remains unchanged.")
+
+        self.password_input.clear() # Clear password field after handling
 
     def reset_to_initial_state(self):
         """Resets input fields to their initially loaded values."""

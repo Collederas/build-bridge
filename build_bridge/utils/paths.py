@@ -1,6 +1,8 @@
 from pathlib import Path
 import sys
 
+from build_bridge.conf import APP_ROOT
+
 def unc_join_path(base_path, unc_path):
     """
     Join a base path with a UNC path using pathlib.
@@ -34,7 +36,7 @@ def get_resource_path(relative_path):
     except Exception:
         # Not bundled, running from source -> use script's directory
         # Assuming this helper is in the same file as SteamUploadDialog
-        base_path = Path(__file__).parent
+        base_path = Path(APP_ROOT)
 
     resource_path = base_path / relative_path
     return resource_path

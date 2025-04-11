@@ -34,8 +34,6 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
           working-directory: ./docs
-      - name: Install Dependencies
-        run: bundle install --jobs 4 --retry 3
         working-directory: ./docs
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -57,7 +57,4 @@ I very much welcome feedback and bug reports. You can use:
 
 ## Development notes
 I built this app quite quickly and I think we are at a point where adopting an actual View-ViewModel pattern could be useful especially to deal with big widgets like settings or to validate configurations (like Publish Profiles).
-If you have a design suggestion please let me know usign one of the [channels above](#development-notes)
-
-Also, the project wishfully integrates pytest and a test folder. I started writing some tests early in development but I wanted to get to MVP phase more, because I needed the app for my own sake.
-If the app will be adopted by more people and grow, this will become a main TODO but it will require considering the point already made about de-coupling of views (widgets and dialogs) from business logic and db access.
+If you have a design suggestion please let me know using one of the [channels above](#contact)

@@ -69,3 +69,12 @@ venv.bak/
 
 # PyPI configuration file
 .pypirc
+
+# Documentation
+docs/_site/
+docs/.jekyll-cache/
+docs/.jekyll-metadata
+docs/.jekyll-build-cache/
+docs/.bundle/
+docs/vendor/
+*sass-cache/

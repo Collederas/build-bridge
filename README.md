@@ -23,8 +23,8 @@ Build Bridge is a tool that streamlines building and deploying Unreal Engine pro
 
 * Python (>=3.9,<3.14)
 * Unreal Engine (Version detected from `.uproject` file)
-* For Steam publishing: [SteamCMD] (https://developer.valvesoftware.com/wiki/SteamCMD#Downloading_SteamCMD)
-* For Itch.io publishing: [Butler] (https://itchio.itch.io/butler)
+* For Steam publishing: [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD#Downloading_SteamCMD)
+* For Itch.io publishing: [Butler](https://itchio.itch.io/butler)
 
 ### Installation & Setup
 

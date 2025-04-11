@@ -77,4 +77,4 @@ You can customize the database location by setting the `BUILD_BRIDGE_DB_PATH` en
 
 ## Testing
 
-The project wishfully integrates pytest and a test folder. It was used early in development and quickly abandoned. If the app will grow, this will become a main TODO.
+The project wishfully integrates pytest and a test folder. It was used early in development and quickly abandoned. If the app will grow, this will become a main TODO but it will require heavy de-coupling of views (widgets and dialogs) from business logic and db access.

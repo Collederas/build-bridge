@@ -18,7 +18,7 @@ I developed this tool with my own workflow in mind and it's tailored to my curre
 
 **So**, if you want to let me know of any feature idea, _UX_ improvement or simply report a bug, please reach out in one of these places:
 
-- **On Itch**: you can leave me a comment!
+- **On [Itch](https://collederas.itch.io/build-bridge)**: you can leave me a comment!
 - **On [GitHub Issues](https://github.com/Collederas/build-bridge/issues)**: creating or commenting on an existing issue.
 
 
@@ -143,5 +143,5 @@ This dialog (Build List entry -> Publish button) allows you to specify the field
 
 ## Contact
 Questions? Feedback? Bug?
-- **On Itch**: you can leave me a comment!
-- **On [GitHub Issues](https://github.com/Collederas/build-bridge/issues)**: create or comment on an existing issue.
+- **On [Itch](https://collederas.itch.io/build-bridge)**: you can leave me a comment!
+- **On [GitHub Issues](https://github.com/Collederas/build-bridge/issues)**: create a new issue or comment on an existing one.

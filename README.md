@@ -50,6 +50,14 @@ You can customize the database location by setting the `BUILD_BRIDGE_DB_PATH` en
 * **Credentials:** Passwords and API keys are stored `keyring`.
 * **Database Location:** Determined automatically based on OS or via the `BUILD_BRIDGE_DB_PATH` environment variable.
 
-## Testing
+## Contact
+I very much welcome feedback and bug reports. You can use:
+- Create or comment on [GitHub Issues](https://github.com/Collederas/build-bridge/issues)
+- Leave a comment on [Build Bridge Itch Page](https://collederas.itch.io/build-bridge)
 
-The project wishfully integrates pytest and a test folder. I started writing some tests early in development but I wanted to get to MVP before testing something I am not even sure other people will find useful. If the app will grow, this will become a main TODO but it will require heavy de-coupling of views (widgets and dialogs) from business logic and db access.
+## Development notes
+I built this app quite quickly and I think we are at a point where adopting an actual View-ViewModel pattern could be useful especially to deal with big widgets like settings or to validate configurations (like Publish Profiles).
+If you have a design suggestion please let me know usign one of the [channels above](#development-notes)
+
+Also, the project wishfully integrates pytest and a test folder. I started writing some tests early in development but I wanted to get to MVP phase more, because I needed the app for my own sake.
+If the app will be adopted by more people and grow, this will become a main TODO but it will require considering the point already made about de-coupling of views (widgets and dialogs) from business logic and db access.

@@ -17,7 +17,8 @@ Build Bridge is a tool that streamlines building and deploying Unreal Engine pro
 * **GUI:** Provides a user-friendly interface built with PyQt6 for managing builds and publishing.
 * **VCS Integration (Experimental):** Includes support for Perforce (P4) for source control operations like syncing and switching streams/branches.
 
-## Getting Started
+## Documentation
+Check out the documentation [here]()!
 
 ### Prerequisites
 
@@ -46,33 +47,10 @@ You can customize the database location by setting the `BUILD_BRIDGE_DB_PATH` en
     * **Itch.io:** Butler path, Username, API Key.
     * **(Currently unused) Perforce:** Server, User, Client Workspace.
 
-## Usage
-
-1.  **Run the Application:**
-    ```bash
-    python app.py
-    ```
-2.  **Configure Build Target:**
-    * Use the "Build Target" section in the main window.
-    * Click "+ Add new Build Target" or "Edit" to open the setup dialog.
-    * Select the Project, set the Source Directory.
-    * Configure VCS settings if needed (e.g., Perforce stream/branch).
-    * Set the Build Type (Development/Shipping) and Target Platform (Win64, etc.).
-    * Save the build target.
-3.  **Build Project:**
-    * Select the desired build target in the main window.
-    * Enter a Build Version/Release Name (e.g., "1.0.0", "0.2-beta").
-    * Click "Build". A dialog will show the Unreal Engine build process output.
-4.  **Publish Build:**
-    * Once a build is complete, it will appear in the "Available Builds" list.
-    * Select the target platform (Steam/Itch.io) from the dropdown next to the build.
-    * Click "Profile" to configure the publishing profile for that platform and build ID (e.g., Steam App ID, Depots, Itch.io User/Game ID, Channel). You'll need to have configured the base Steam/Itch.io settings first.
-    * Once the profile is configured and valid, click "Publish". An upload dialog will show the progress.
-
 ## Configuration
 
 * **Main Configuration:** Stored in the SQLite database. Managed via the Settings dialog.
-* **Credentials:** Passwords and API keys are stored securely using the system's keyring service.
+* **Credentials:** Passwords and API keys are stored `keyring`.
 * **Database Location:** Determined automatically based on OS or via the `BUILD_BRIDGE_DB_PATH` environment variable.
 
 ## Testing

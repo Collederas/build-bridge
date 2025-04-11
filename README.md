@@ -4,6 +4,8 @@ Build Bridge is a tool that streamlines building and deploying Unreal Engine pro
 
 ## Features
 
+* **GUI:** Provides a user-friendly interface built with PyQt6 for managing builds and publishing.
+
 * **Unreal Engine Builder:** Automates the build process for Unreal Engine projects.
     * Supports different build configurations (e.g., Development, Shipping).
     * Option to optimize packaging for Steam distribution.
@@ -16,8 +18,6 @@ _Currently supports only Win target platforms (e.g., Win64, Win32)_
 * **Configuration Management:**
     * Stores project settings, build targets, and publishing profiles in a local SQLite database.
     * Securely stores sensitive credentials (like passwords and API keys) using the system's keyring.
-* **GUI:** Provides a user-friendly interface built with PyQt6 for managing builds and publishing.
-* **VCS Integration (Experimental):** Includes support for Perforce (P4) for source control operations like syncing and switching streams/branches.
 
 ## Documentation
 Check out the documentation [here](https://collederas.github.io/build-bridge/)!

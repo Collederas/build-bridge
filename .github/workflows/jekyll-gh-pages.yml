@@ -32,8 +32,8 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Build with Jekyll
-        run: bundle exec jekyll build --source docs --destination _site
-        working-directory: ./
+        run: bundle exec jekyll build --source . --destination ../_site
+        working-directory: ./docs
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
 

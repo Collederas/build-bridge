@@ -3,9 +3,9 @@ layout: default
 title: Build Bridge Documentation
 ---
 
-# Build Bridge Documentation
+# Build Bridge
 
-Welcome to the documentation for Build Bridge.
+In progress...
 
 ## Getting Started
 

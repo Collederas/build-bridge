@@ -1,3 +1,5 @@
 title: Build Bridge
-description: Documentation for Build Bridge
-theme: jekyll-theme-cayman
+description: A GUI utility to organize, build, and launch your Unreal Engine projects on Itch.io and Steam.
+theme: minimal-mistakes-jekyll
+toc: true
+minimal_mistakes_skin: "dark"

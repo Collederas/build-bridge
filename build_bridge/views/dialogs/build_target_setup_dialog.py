@@ -1,17 +1,20 @@
-import os
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QFileDialog, QCheckBox, QStackedWidget, QMessageBox, QWidget
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
 
+from PyQt6.QtGui import QIcon
+
+from PyQt6.QtCore import Qt, pyqtSignal
+from sqlalchemy import exists
+
+from build_bridge.utils.paths import get_resource_path
 from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 from build_bridge.core.vcs.p4client import P4Client
 from build_bridge.models import (
-    BuildTarget, PerforceConfig, Project, BuildTargetPlatformEnum,
-    BuildTypeEnum, VCSTypeEnum
+    BuildTarget, Project, BuildTargetPlatformEnum, BuildTypeEnum,
+    VCSTypeEnum
 )
 from build_bridge.database import SessionFactory # Assuming SessionFactory gives a session
 
@@ -24,6 +27,8 @@ class BuildTargetSetupDialog(QDialog):
         super().__init__()
         self.setWindowTitle("Build Target Setup")
         self.setMinimumSize(800, 500)
+        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        self.setWindowIcon(QIcon(icon_path))
 
         # Create session FIRST to query projects
         self.session = SessionFactory()
@@ -31,17 +36,6 @@ class BuildTargetSetupDialog(QDialog):
         if build_target_id:
             # Fetch existing target if ID is provided
             self.build_target = self.session.query(BuildTarget).get(build_target_id)
-            # It's generally better practice to merge detached objects or reload them
-            # instead of adding them directly if they came from another session.
-            # However, if build_target_id implies it should exist in *this* session's
-            # context, get() is fine. If it might be detached, use merge:
-            # if self.build_target:
-            #    self.build_target = self.session.merge(self.build_target) # If potentially detached
-            # else:
-            #    # Handle case where ID doesn't exist
-            #    QMessageBox.warning(self,"Error", f"Build Target ID {build_target_id} not found.")
-            #    # Decide how to proceed - perhaps create new or close dialog
-            #    self.build_target = None # Fallback to creating new
         else:
             self.build_target = None
 
@@ -75,12 +69,7 @@ class BuildTargetSetupDialog(QDialog):
     def _initial_project_check(self):
         """Checks if any projects exist in the database."""
         try:
-            # Use exists() for efficiency if only checking presence
-            # from sqlalchemy import exists
-            # self.projects_exist_initially = self.session.query(exists().where(Project.id != None)).scalar()
-            # Or count()
-            project_count = self.session.query(Project).count()
-            self.projects_exist_initially = project_count > 0
+            self.projects_exist_initially = self.session.query(exists().where(Project.id != None)).scalar()
             print(f"Initial project check: {'Projects exist' if self.projects_exist_initially else 'No projects found'}")
         except Exception as e:
             # Handle potential DB connection errors during the check
@@ -157,9 +146,6 @@ class BuildTargetSetupDialog(QDialog):
 
         layout.addSpacing(20)
 
-        # VCS Section (keep existing commented/uncommented code)
-        # ...
-
         layout.addStretch()
         return widget
 
@@ -221,8 +207,8 @@ class BuildTargetSetupDialog(QDialog):
                 # Update self.session_project to the newly selected one
                 self.session_project = projects[0]
                 if self.session_project not in self.session:
-                    self.session.add(self.session_project) # Ensure it's managed
-            else: # No projects exist (shouldn't happen if projects list is not empty)
+                    self.session.add(self.session_project)
+            else:
                  self.source_edit.clear()
 
             # Show project form, hide 'Add' button
@@ -231,18 +217,16 @@ class BuildTargetSetupDialog(QDialog):
             print(f"Loaded {len(projects)} projects into combo box.")
 
         else:
-            # No projects exist, hide form, show 'Add' button
-            self.project_combo.setEnabled(False) # Disable empty combo
+            self.project_combo.setEnabled(False)
             self.source_edit.clear()
-            self.source_edit.setEnabled(False) # Disable source edit too
-            self.project_form_widget.hide() # Hide the form rows
-            self.add_project_button.show() # Show the add button
-            self.session_project = None # Ensure no project is considered selected
+            self.source_edit.setEnabled(False)
+            self.project_form_widget.hide()
+            self.add_project_button.show()
+            self.session_project = None
             print("No projects found. Showing 'Add Project' button.")
 
 
     def create_perforce_config_widget(self):
-        # (Keep existing code)
         widget = QWidget()
         layout = QFormLayout(widget)
         self.p4_user_edit = QLineEdit()
@@ -257,7 +241,6 @@ class BuildTargetSetupDialog(QDialog):
         return widget
 
     def create_page2(self):
-        # (Keep existing code)
         widget = QWidget()
         layout = QVBoxLayout(widget)
         build_conf_label = QLabel("Build Config")
@@ -283,7 +266,6 @@ class BuildTargetSetupDialog(QDialog):
         return widget
 
     def create_footer(self):
-        # (Keep existing code)
         footer_layout = QHBoxLayout()
         footer_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.page1_label = QLabel("1")
@@ -305,7 +287,6 @@ class BuildTargetSetupDialog(QDialog):
         footer_layout.addWidget(self.save_button)
         return footer_layout
 
-    # page1_clicked, page2_clicked, next_page (Keep existing code)
     def page1_clicked(self, event):
         self.stack.setCurrentIndex(0)
         self.page1_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
@@ -332,18 +313,9 @@ class BuildTargetSetupDialog(QDialog):
 
 
     def browse_folder(self):
-        # (Keep existing code)
         folder = QFileDialog.getExistingDirectory(self, "Select Project Folder", self.source_edit.text() or "")
         if folder:
             self.source_edit.setText(folder)
-
-    # display_connection_status, test_connection, on_vcs_changed (Keep existing code)
-    def display_connection_status(self, message, color):
-        # Placeholder if these were removed/commented previously
-        pass
-        # Example implementation if needed:
-        # self.connection_status_label.setText(message)
-        # self.connection_status_label.setStyleSheet(f"font-size: 12px; color: {color.name()};")
 
     def test_connection(self):
         pass # Implement if needed
@@ -375,12 +347,6 @@ class BuildTargetSetupDialog(QDialog):
         self.optimize_checkbox.setChecked(
             bool(self.build_target.optimize_for_steam) if self.build_target else True
         )
-
-        # --- VCS initialization (if applicable) ---
-        # self.vcs_combo.clear() # If VCS section is used
-        # self.vcs_combo.addItems([v.value.capitalize() for v in VCSTypeEnum])
-        # ... load VCS config ...
-        # self.on_vcs_changed()
 
 
     def accept(self):
@@ -435,7 +401,6 @@ class BuildTargetSetupDialog(QDialog):
             # Don't reject automatically, let the user fix the issue or cancel
 
     def reject(self):
-        # (Keep existing code, maybe add print statement)
         print("Rolling back session and closing dialog.")
         self.session.rollback()
         self.session.close()
@@ -444,7 +409,6 @@ class BuildTargetSetupDialog(QDialog):
         super().reject()
 
     def closeEvent(self, event):
-        # (Keep existing code)
         # Check if session is still active and has changes
         is_dirty = False
         try:

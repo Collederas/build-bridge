@@ -10,8 +10,10 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
 )
 from PyQt6.QtCore import QProcess, pyqtSignal
+from PyQt6.QtGui import QIcon
 
 from build_bridge.core.builder.unreal_builder import UnrealBuilder
+from build_bridge.utils.paths import get_resource_path
 
 
 class BuildWindowDialog(QDialog):
@@ -28,6 +30,8 @@ class BuildWindowDialog(QDialog):
     def setup_ui(self):
         self.setWindowTitle("Unreal Engine Builder")
         self.setMinimumSize(600, 400)
+        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        self.setWindowIcon(QIcon(icon_path))
 
         self.layout = QVBoxLayout()
 

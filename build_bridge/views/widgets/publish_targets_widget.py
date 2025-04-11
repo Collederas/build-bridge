@@ -27,20 +27,17 @@ from build_bridge.views.dialogs.platform_publish_dialog import PlatformPublishDi
 
 
 class PublishTargetEntry(QWidget):
-    # Assuming StoreEnum.itch and StoreEnum.steam exist and have a 'value' attribute
     store_publishers = {StoreEnum.itch: ItchPublisher, StoreEnum.steam: SteamPublisher}
 
     def __init__(self, build_root):
         super().__init__()
         self.build_root = build_root
-        # Ensure build_root is a valid path before getting basename
+
         if build_root and os.path.exists(build_root):
             self.build_id = os.path.basename(build_root)
         else:
             self.build_id = "Invalid Path"
             print(f"Warning: Invalid build_root passed to PublishTargetEntry: {build_root}")
-
-        self.publish_conf = None # Keep if used elsewhere, otherwise can remove
 
         # Main horizontal layout
         layout = QHBoxLayout(self)
@@ -56,27 +53,25 @@ class PublishTargetEntry(QWidget):
                 if project:
                     project_name_str = project.name
         except Exception as e:
-             print(f"Error fetching project name: {e}")
-             # Keep default project_name_str
+                 print(f"Error fetching project name: {e}")
+                 # Keep default project_name_str
 
         # Build Label
         self.label = QLabel(f"{project_name_str} - {self.build_id}")
-        self.label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred) # Allow expansion
+        # Let the label take necessary space, MinimumExpanding allows growth if needed
+        self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.label.setWordWrap(True) # Allow wrapping if name is too long
-        # self.label.setFixedWidth(120) # REMOVED fixed width
-
+        self.label.setMaximumWidth(350)
+        
         # Platform Selector
         self.platform_label = QLabel("Target Platform:") # Added label for clarity
         self.platform_menu_combo = QComboBox()
-        self.platform_menu_combo.setMinimumWidth(80) # Give combo box a minimum size
+        self.platform_menu_combo.setMinimumWidth(100) # Give combo box a decent minimum size
 
         # Populate ComboBox
-        # Add a placeholder item if desired
-        # self.platform_menu_combo.addItem("Select...", None)
+        # self.platform_menu_combo.addItem("Select...", None) # Optional placeholder
         for store_enum in self.store_publishers.keys():
-            # Use store_enum.value if it holds the display name (e.g., "itch.io")
-            # Use store_enum itself as the data
-            self.platform_menu_combo.addItem(store_enum.value, store_enum)
+            self.platform_menu_combo.addItem(str(store_enum.value), store_enum) # Use .value and ensure it's a string
 
         # --- Right Side: Action Buttons ---
         browse_archive_button = QPushButton("Browse")
@@ -99,20 +94,20 @@ class PublishTargetEntry(QWidget):
         layout.addWidget(self.platform_label)
         layout.addWidget(self.platform_menu_combo)
 
-        layout.addStretch(1) # Add stretch HERE to push buttons right
+        layout.addStretch(1) # Add stretch HERE to push buttons right within the row
 
-        # Add buttons directly (no need for separate button_layout unless complex)
         layout.addWidget(browse_archive_button)
         layout.addWidget(self.edit_button)
         layout.addWidget(self.publish_button)
 
         # Connect signals after widgets are created
-        self.platform_menu_combo.currentIndexChanged.connect( # Use currentIndexChanged for reliability
+        self.platform_menu_combo.currentIndexChanged.connect(
             self.on_target_platform_changed
         )
 
         # Initial state check for publish button
-        self.publish_button.setEnabled(self.can_publish())
+        # Defer initial check slightly or ensure profile data is ready if needed immediately
+        self.on_target_platform_changed() # Call to set initial state
 
         self.setLayout(layout) # Set the layout for the widget
 
@@ -299,45 +294,34 @@ class PublishTargetsListWidget(QWidget):
     def __init__(self, builds_dir: str = None):
         super().__init__()
         self.setWindowTitle("Available Builds")
-        # Setting a minimum size might interfere with the empty message centering
-        # Let the layout determine the size, or set it on the main window.
-        # self.setMinimumSize(600, 400)
+        self.monitored_directory = builds_dir
 
-        self.monitored_directory = builds_dir  # Store initial directory
-
-        # Main layout for the whole widget
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)  # Use margins of parent container
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Scroll area setup (holds the list of builds)
-        self.scroll_area = QScrollArea()  # Keep reference
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setVisible(False)  # Start hidden
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True) # Keep True
+        self.scroll_area.setVisible(False)
+        # Make scroll bars appear only when needed
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
-        # Widget container inside scroll area
-        scroll_content = QWidget()
-        self.vbox = QVBoxLayout(scroll_content)  # Layout for build entries
-        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.vbox.setContentsMargins(5, 5, 5, 5)  # Add some padding inside scroll area
-        self.vbox.setSpacing(5)  # Spacing between build entries
+        self.scroll_content = QWidget() # Keep reference if needed, maybe not necessary
+        self.vbox = QVBoxLayout(self.scroll_content)
+        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.vbox.setContentsMargins(5, 5, 5, 5)
+        self.vbox.setSpacing(5)
+        self.scroll_area.setWidget(self.scroll_content)
 
-        self.scroll_area.setWidget(scroll_content)
-
-        # Message label for empty builds (sibling of scroll_area)
-        self.empty_message_label = QLabel(
-            "No builds available in the monitored directory."
-        )
+        self.empty_message_label = QLabel("No builds available.")
         self.empty_message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_message_label.setStyleSheet("font-style: italic; color: gray;")
-        # Add some padding maybe
         self.empty_message_label.setContentsMargins(10, 20, 10, 20)
-        self.empty_message_label.setVisible(True)  # Start visible
+        self.empty_message_label.setVisible(True)
 
-        # Add scroll area and empty message label to the main layout
         main_layout.addWidget(self.scroll_area)
         main_layout.addWidget(self.empty_message_label)
 
-        # Initial refresh based on the passed directory
         self.refresh_builds(self.monitored_directory)
 
     def refresh_builds(self, new_dir: str = None):
@@ -414,6 +398,8 @@ class PublishTargetsListWidget(QWidget):
             )
             self.empty_message_label.setText(f"An unexpected error occurred.")
             builds_found = False
+        
+        self.vbox.addStretch(1)
 
         # --- 4. Set final visibility based on whether builds were found ---
         if builds_found:

@@ -10,6 +10,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from PyQt6.QtCore import QProcess, QProcessEnvironment
+from PyQt6.QtGui import QIcon
+
+from build_bridge.utils.paths import get_resource_path
 
 
 class GenericUploadDialog(QDialog):
@@ -42,6 +45,9 @@ class GenericUploadDialog(QDialog):
         self._log_buffer: str = ""  # Accumulate log content
 
         self.setWindowTitle(title)
+        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        self.setWindowIcon(QIcon(icon_path))
+
         self.setup_ui()
         self.setup_process()
 

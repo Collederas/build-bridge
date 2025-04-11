@@ -80,10 +80,13 @@ class BuildTargetListWidget(QWidget):
         # Keep sizing policy for add button
 
         # Add widgets for the "Exists" state
+
         self.content_layout.addWidget(self.target_label)
+
+        self.content_layout.addStretch(1) # Push buttons to the right
+
         self.content_layout.addWidget(self.build_version_label)
         self.content_layout.addWidget(self.build_version_input)
-        self.content_layout.addStretch(1) # Push buttons to the right
         self.content_layout.addWidget(self.edit_button)
         self.content_layout.addWidget(self.build_button)
 

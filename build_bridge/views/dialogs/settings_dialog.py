@@ -13,13 +13,14 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QTextEdit,
 )
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QIcon
 
 from build_bridge.core.vcs.p4client import P4Client
 
 from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.models import Project, PerforceConfig
+from build_bridge.utils.paths import get_resource_path
 from build_bridge.views.widgets import itch_config_widget
 from build_bridge.views.widgets.steam_config_widget import SteamConfigWidget
 from build_bridge.views.widgets.itch_config_widget import ItchConfigWidget
@@ -32,6 +33,9 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(600, 400)
+        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        self.setWindowIcon(QIcon(icon_path))
+
         self.default_page = default_page
 
         # DIALOG MANAGED SESSION: all settings are saved as single transaction
@@ -54,12 +58,11 @@ class SettingsDialog(QDialog):
                 self.project = Project()
                 self.project.name = ""
                 self.project.source_dir = ""
-                self.project.dest_dir = ""
                 self.project.archive_directory = ""
                 self.session.add(self.project)
                 self.session.commit()  # Save immediately to ensure it has an ID
             else:
-                print("Settings: Found existing project: '{self.project.name}'")
+                print(f"Settings: Found existing project: '{self.project.name}'")
                 # Ensure project is attached to our session
                 if self.project not in self.session:
                     self.session.add(self.project)

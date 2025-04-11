@@ -105,7 +105,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  jekyll (~> 3.7)
+  jekyll (~> 3.9)
   jekyll-include-cache
   jekyll-remote-theme
   kramdown-parser-gfm

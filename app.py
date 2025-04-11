@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 
+from build_bridge.utils.paths import get_resource_path
 
 from build_bridge.core.vcs.p4client import P4Client
 from build_bridge.database import SessionFactory, initialize_database
@@ -26,7 +27,7 @@ class BuildBridgeWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Build Bridge")
-        self.setWindowIcon(QIcon("icons/buildbridge.ico"))
+        self.setWindowIcon(QIcon(str(get_resource_path("icons/buildbridge.ico"))))
         self.setGeometry(100, 100, 700, 500)
 
         self.session = SessionFactory()

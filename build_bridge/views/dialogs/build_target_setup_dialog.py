@@ -1,11 +1,23 @@
+import os
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
-    QComboBox, QPushButton, QFileDialog, QCheckBox, QStackedWidget, QMessageBox, QWidget
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QPushButton,
+    QFileDialog,
+    QCheckBox,
+    QStackedWidget,
+    QMessageBox,
+    QWidget,
 )
 
 from PyQt6.QtGui import QIcon
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QDir
 from sqlalchemy import exists
 
 from build_bridge.utils.paths import get_resource_path
@@ -13,10 +25,15 @@ from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 from build_bridge.core.vcs.p4client import P4Client
 from build_bridge.models import (
-    BuildTarget, Project, BuildTargetPlatformEnum, BuildTypeEnum,
-    VCSTypeEnum
+    BuildTarget,
+    Project,
+    BuildTargetPlatformEnum,
+    BuildTypeEnum,
+    VCSTypeEnum,
 )
-from build_bridge.database import SessionFactory # Assuming SessionFactory gives a session
+from build_bridge.database import (
+    SessionFactory,
+)  # Assuming SessionFactory gives a session
 
 
 class BuildTargetSetupDialog(QDialog):
@@ -69,13 +86,19 @@ class BuildTargetSetupDialog(QDialog):
     def _initial_project_check(self):
         """Checks if any projects exist in the database."""
         try:
-            self.projects_exist_initially = self.session.query(exists().where(Project.id != None)).scalar()
-            print(f"Initial project check: {'Projects exist' if self.projects_exist_initially else 'No projects found'}")
+            self.projects_exist_initially = self.session.query(
+                exists().where(Project.id != None)
+            ).scalar()
+            print(
+                f"Initial project check: {'Projects exist' if self.projects_exist_initially else 'No projects found'}"
+            )
         except Exception as e:
             # Handle potential DB connection errors during the check
             print(f"Error during initial project check: {e}")
-            QMessageBox.critical(self, "Database Error", f"Could not check for existing projects:\n{e}")
-            self.projects_exist_initially = True # Assume they exist to avoid locking user out? Or handle differently.
+            QMessageBox.critical(
+                self, "Database Error", f"Could not check for existing projects:\n{e}"
+            )
+            self.projects_exist_initially = True  # Assume they exist to avoid locking user out? Or handle differently.
 
     def get_or_create_session_project(self, session):
         session_project = None
@@ -92,13 +115,15 @@ class BuildTargetSetupDialog(QDialog):
                 print("No project found in DB or associated with build target.")
                 # We will rely on the "Add Project" button flow if none exist.
                 # Returning None here signifies no project is currently selected/available.
-                return None # Important change
+                return None 
 
         if session_project:
             # Ensure the found/merged project is in the session
             if session_project not in session:
-                 session.add(session_project)
-            print(f"Using project '{session_project.name}' - ID: {session_project.id} in the session.")
+                session.add(session_project)
+            print(
+                f"Using project '{session_project.name}' - ID: {session_project.id} in the session."
+            )
         return session_project
 
     def add_header(self, title_text):
@@ -126,9 +151,9 @@ class BuildTargetSetupDialog(QDialog):
         # ===================================================
 
         # Project Form Layout (Combo, Source Dir)
-        self.project_form_widget = QWidget() # Put form in a widget to hide/show easily
+        self.project_form_widget = QWidget()  # Put form in a widget to hide/show easily
         project_form = QFormLayout(self.project_form_widget)
-        project_form.setContentsMargins(0,0,0,0) # Remove margins if needed
+        project_form.setContentsMargins(0, 0, 0, 0)  # Remove margins if needed
 
         self.project_combo = QComboBox()
         self.source_edit = QLineEdit()
@@ -149,22 +174,20 @@ class BuildTargetSetupDialog(QDialog):
         layout.addStretch()
         return widget
 
-    # --- Add this new method ---
     def _open_settings_to_add_project(self):
         """Opens the SettingsDialog focused on adding a project."""
         print("Opening Settings Dialog to add project...")
-        # Assuming SettingsDialog takes parent and handles its own session
         settings_dialog = SettingsDialog(parent=self)
         try:
             # Navigate to the relevant page (index 1 as requested)
             # Adapt this call if your SettingsDialog uses a different method
             settings_dialog.setCurrentIndex(1)
         except AttributeError:
-            print("Warning: SettingsDialog does not have setCurrentIndex method. Cannot navigate.")
+            print(
+                "Warning: SettingsDialog does not have setCurrentIndex method. Cannot navigate."
+            )
         except Exception as e:
             print(f"Warning: Could not navigate SettingsDialog: {e}")
-
-        # Execute the dialog modally
         result = settings_dialog.exec()
 
         print(f"Settings Dialog closed with result: {result}")
@@ -178,8 +201,10 @@ class BuildTargetSetupDialog(QDialog):
         try:
             projects = self.session.query(Project).order_by(Project.name).all()
         except Exception as e:
-            QMessageBox.critical(self, "Database Error", f"Failed to load projects:\n{e}")
-            projects = [] # Proceed with empty list on error
+            QMessageBox.critical(
+                self, "Database Error", f"Failed to load projects:\n{e}"
+            )
+            projects = []  # Proceed with empty list on error
 
         self.project_combo.clear()
 
@@ -187,7 +212,9 @@ class BuildTargetSetupDialog(QDialog):
             self.project_combo.addItems([p.name for p in projects])
 
             # Try to re-select the current session project if it exists
-            current_project_name = self.session_project.name if self.session_project else None
+            current_project_name = (
+                self.session_project.name if self.session_project else None
+            )
             index = -1
             if current_project_name:
                 index = self.project_combo.findText(current_project_name)
@@ -195,13 +222,15 @@ class BuildTargetSetupDialog(QDialog):
             if index >= 0:
                 self.project_combo.setCurrentIndex(index)
                 # Update source dir based on selected project
-                selected_project_obj = next((p for p in projects if p.name == current_project_name), None)
+                selected_project_obj = next(
+                    (p for p in projects if p.name == current_project_name), None
+                )
                 if selected_project_obj:
                     self.source_edit.setText(selected_project_obj.source_dir or "")
-                else: # Should not happen if index was found, but defensively clear
-                     self.source_edit.clear()
+                else:  # Should not happen if index was found, but defensively clear
+                    self.source_edit.clear()
 
-            elif projects: # If current session project wasn't found/set, select first
+            elif projects:  # If current session project wasn't found/set, select first
                 self.project_combo.setCurrentIndex(0)
                 self.source_edit.setText(projects[0].source_dir or "")
                 # Update self.session_project to the newly selected one
@@ -209,7 +238,7 @@ class BuildTargetSetupDialog(QDialog):
                 if self.session_project not in self.session:
                     self.session.add(self.session_project)
             else:
-                 self.source_edit.clear()
+                self.source_edit.clear()
 
             # Show project form, hide 'Add' button
             self.project_form_widget.show()
@@ -224,7 +253,6 @@ class BuildTargetSetupDialog(QDialog):
             self.add_project_button.show()
             self.session_project = None
             print("No projects found. Showing 'Add Project' button.")
-
 
     def create_perforce_config_widget(self):
         widget = QWidget()
@@ -252,13 +280,37 @@ class BuildTargetSetupDialog(QDialog):
         self.target_platform_combo = QComboBox()
 
         self.optimize_checkbox = QCheckBox("Optimize Packaging for Steam")
-        self.optimize_hint = QLabel("Will build using Valve\nRecommended padding alignment values")
+        self.optimize_hint = QLabel(
+            "Will build using Valve\nRecommended padding alignment values"
+        )
         self.optimize_hint.setStyleSheet("color: gray; font-size: 10px;")
         optimize_layout = QVBoxLayout()
         optimize_layout.addWidget(self.optimize_checkbox)
         optimize_layout.addWidget(self.optimize_hint)
         form.addRow("Build Type", self.build_type_combo)
         form.addRow("Target Platform", self.target_platform_combo)
+
+        self.bt_ue_path_edit = QLineEdit("C:/Program Files/Epic Games")
+        self.bt_ue_path_edit.setPlaceholderText("e.g., C:/Program Files/Epic Games")
+        ue_path_layout = QHBoxLayout()
+        ue_path_layout.addWidget(self.bt_ue_path_edit, 1)
+        ue_browse_button = QPushButton("Browse")
+        ue_browse_button.setToolTip(
+            "Select the engine base path for this specific build target"
+        )
+        ue_browse_button.clicked.connect(self.browse_engine_path_for_target)
+        ue_path_layout.addWidget(ue_browse_button)
+        form.addRow("Unreal Engine Path:", ue_path_layout)
+
+        ue_path_explanation = QLabel(
+            "Provide the root directory containing engine versions (e.g., 'Epic Games'). "
+            "The specific version (e.g., UE_5.3) will be detected from the .uproject file. "
+            "Relies on standard engine folder names (UE_x.y)."
+        )
+        ue_path_explanation.setStyleSheet("color: gray; font-size: 9pt;") # Style as hint text
+        ue_path_explanation.setWordWrap(True) # Allow text to wrap
+        # Add the label on the next row, spanning both columns by providing an empty string for the label part
+        form.addRow("", ue_path_explanation)
 
         form.addRow(optimize_layout)
         layout.addLayout(form)
@@ -269,7 +321,9 @@ class BuildTargetSetupDialog(QDialog):
         footer_layout = QHBoxLayout()
         footer_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.page1_label = QLabel("1")
-        self.page1_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
+        self.page1_label.setStyleSheet(
+            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
+        )
         self.page1_label.mousePressEvent = self.page1_clicked
         self.page2_label = QLabel("2")
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
@@ -289,7 +343,9 @@ class BuildTargetSetupDialog(QDialog):
 
     def page1_clicked(self, event):
         self.stack.setCurrentIndex(0)
-        self.page1_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
+        self.page1_label.setStyleSheet(
+            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
+        )
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
         self.next_button.show()
         self.save_button.hide()
@@ -297,7 +353,9 @@ class BuildTargetSetupDialog(QDialog):
     def page2_clicked(self, event):
         self.stack.setCurrentIndex(1)
         self.page1_label.setStyleSheet("color: gray; margin-right: 8px;")
-        self.page2_label.setStyleSheet("background-color: black; color: white; padding: 4px 10px; border-radius: 10px;")
+        self.page2_label.setStyleSheet(
+            "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
+        )
         self.next_button.hide()
         self.save_button.show()
 
@@ -305,49 +363,60 @@ class BuildTargetSetupDialog(QDialog):
         if self.stack.currentIndex() == 0:
             # --- Validation before moving to next page ---
             if not self.session_project:
-                 QMessageBox.warning(self, "Project Required", "Please add or select a project before proceeding.")
-                 return # Stay on page 1
-            # Add any other page 1 validation needed here
+                QMessageBox.warning(
+                    self,
+                    "Project Required",
+                    "Please add or select a project before proceeding.",
+                )
+                return  # Stay on page 1
             # --- End Validation ---
             self.page2_clicked(None)
 
-
     def browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Project Folder", self.source_edit.text() or "")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Project Folder", self.source_edit.text() or ""
+        )
         if folder:
             self.source_edit.setText(folder)
 
-    def test_connection(self):
-        pass # Implement if needed
+    def browse_engine_path_for_target(self):
+        """Opens a directory dialog to select the UE base path for this BuildTarget."""
+        current_path = self.bt_ue_path_edit.text()
+        start_dir = current_path if os.path.isdir(current_path) else QDir.homePath()
 
-    def on_vcs_changed(self):
-        pass # Implement if needed
-
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Unreal Engine Base Directory for this Build Target",
+            start_dir,
+            QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
+        )
+        if directory:
+            self.bt_ue_path_edit.setText(directory)
 
     def initialize_form(self):
         # --- Refresh Project List and set visibility ---
-        self._refresh_project_list() # This now handles project combo, source edit, and button visibility
+        self._refresh_project_list()
 
         # --- Initialize Page 2 fields ---
         self.build_type_combo.clear()
         self.build_type_combo.addItems([e.value for e in BuildTypeEnum])
-        current_build = BuildTypeEnum.prod.value # Default
+        current_build = BuildTypeEnum.prod.value
         if self.build_target and self.build_target.build_type:
-             current_build = self.build_target.build_type.value
+            current_build = self.build_target.build_type.value
         self.build_type_combo.setCurrentText(current_build)
 
         self.target_platform_combo.clear()
         self.target_platform_combo.addItems([p.value for p in BuildTargetPlatformEnum])
-        current_platform = BuildTargetPlatformEnum.win_64.value # Default
+        current_platform = BuildTargetPlatformEnum.win_64.value  # Default
         if self.build_target and self.build_target.target_platform:
-            current_platform = self.build_target.target_platform.value # Note: Enum value already stored
+            current_platform = (
+                self.build_target.target_platform.value
+            )  # Note: Enum value already stored
         self.target_platform_combo.setCurrentText(current_platform)
-
 
         self.optimize_checkbox.setChecked(
             bool(self.build_target.optimize_for_steam) if self.build_target else True
         )
-
 
     def accept(self):
         try:
@@ -355,17 +424,27 @@ class BuildTargetSetupDialog(QDialog):
             if not self.session_project:
                 # This might happen if the user somehow gets to save without a project
                 # (e.g., if validation in next_page is bypassed)
-                QMessageBox.critical(self, "Error", "No project selected or available. Cannot save.")
-                self.stack.setCurrentIndex(0) # Go back to page 1
-                return # Do not proceed
+                QMessageBox.critical(
+                    self, "Error", "No project selected or available. Cannot save."
+                )
+                self.stack.setCurrentIndex(0)  # Go back to page 1
+                return  # Do not proceed
 
             # Find the selected project object from the DB using the combo box text
             selected_project_name = self.project_combo.currentText()
-            selected_project = self.session.query(Project).filter_by(name=selected_project_name).first()
+            selected_project = (
+                self.session.query(Project)
+                .filter_by(name=selected_project_name)
+                .first()
+            )
 
             if not selected_project:
                 # Should not happen if combo is populated correctly, but good to check
-                QMessageBox.critical(self, "Error", f"Selected project '{selected_project_name}' not found in database.")
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Selected project '{selected_project_name}' not found in database.",
+                )
                 return
 
             # --- Update project details ---
@@ -374,29 +453,38 @@ class BuildTargetSetupDialog(QDialog):
             # Or make sure self.session_project points to the *correct* selected one
             self.session_project = self.session.merge(selected_project)
 
-
             # --- Create or update BuildTarget ---
             if not self.build_target:
                 self.build_target = BuildTarget(project=self.session_project)
                 self.session.add(self.build_target)
             else:
-                 # Ensure existing build_target is associated with the selected project
-                 self.build_target.project = self.session_project
+                # Ensure existing build_target is associated with the selected project
+                self.build_target.project = self.session_project
 
+            self.build_target.build_type = BuildTypeEnum(
+                self.build_type_combo.currentText()
+            )
+            self.build_target.target_platform = BuildTargetPlatformEnum(
+                self.target_platform_combo.currentText()
+            )
 
-            self.build_target.build_type = BuildTypeEnum(self.build_type_combo.currentText()) # Assumes value matches Enum name case-insensitively via constructor
-            self.build_target.target_platform = BuildTargetPlatformEnum(self.target_platform_combo.currentText()) # Assumes value matches Enum name
+            ue_path_text = self.bt_ue_path_edit.text().strip()
+            self.build_target.unreal_engine_base_path = (
+                ue_path_text if ue_path_text else "C:/Program Files/Epic Games"
+            )
+
             self.build_target.optimize_for_steam = self.optimize_checkbox.isChecked()
-            # self.build_target.target_branch = self.branch_combo.currentText() # If VCS is used
 
             self.session.commit()
-            print(f"BuildTarget {self.build_target.id} - Project '{self.session_project.name}' - {self.build_target.target_platform.value} saved.")
+            print(
+                f"BuildTarget {self.build_target.id} - Project '{self.session_project.name}' - {self.build_target.target_platform.value} saved."
+            )
             self.build_target_created.emit(self.build_target.id)
-            super().accept() # Close dialog only on successful commit
+            super().accept()  # Close dialog only on successful commit
 
         except Exception as e:
             self.session.rollback()
-            print(f"Save failed: {str(e)}") # Log detailed error
+            print(f"Save failed: {str(e)}")  # Log detailed error
             QMessageBox.critical(self, "Error", f"Failed to save:\n{str(e)}")
             # Don't reject automatically, let the user fix the issue or cancel
 
@@ -413,21 +501,27 @@ class BuildTargetSetupDialog(QDialog):
         is_dirty = False
         try:
             if self.session.is_active:
-                is_dirty = bool(self.session.dirty) or bool(self.session.new) or bool(self.session.deleted)
+                is_dirty = (
+                    bool(self.session.dirty)
+                    or bool(self.session.new)
+                    or bool(self.session.deleted)
+                )
         except Exception:
-             pass # Ignore errors if session is already closed etc.
+            pass  # Ignore errors if session is already closed etc.
 
         if is_dirty:
             reply = QMessageBox.question(
-                self, "Unsaved Changes", "You have unsaved changes. Close anyway?",
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Close anyway?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No # Default to No
+                QMessageBox.StandardButton.No,  # Default to No
             )
             if reply == QMessageBox.StandardButton.Yes:
-                self.reject() # Rollback and close session properly
+                self.reject()  # Rollback and close session properly
                 event.accept()
             else:
                 event.ignore()
         else:
-            self.reject() # Close session even if not dirty
+            self.reject()  # Close session even if not dirty
             event.accept()

@@ -294,22 +294,33 @@ class PublishTargetsListWidget(QWidget):
     def __init__(self, builds_dir: str = None):
         super().__init__()
         self.setWindowTitle("Available Builds")
+
+        # Store the directory path internally - set the initial value
         self.monitored_directory = builds_dir
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)
+
+        # --- Refresh Button ---
+        self.refresh_button = QPushButton("🔄 Refresh")
+        self.refresh_button.setToolTip("Rescan the currently monitored build directory for changes")
+        self.refresh_button.clicked.connect(lambda: self.refresh_builds())
+        self.refresh_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        main_layout.addWidget(self.refresh_button)
+        # --- End Refresh Button ---
 
         self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True) # Keep True
+        self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setVisible(False)
-        # Make scroll bars appear only when needed
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self.scroll_content = QWidget() # Keep reference if needed, maybe not necessary
+        self.scroll_content = QWidget()
         self.vbox = QVBoxLayout(self.scroll_content)
         self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.vbox.setContentsMargins(5, 5, 5, 5)
+        self.vbox.setContentsMargins(0, 0, 0, 0)
         self.vbox.setSpacing(5)
         self.scroll_area.setWidget(self.scroll_content)
 
@@ -318,18 +329,29 @@ class PublishTargetsListWidget(QWidget):
         self.empty_message_label.setStyleSheet("font-style: italic; color: gray;")
         self.empty_message_label.setContentsMargins(10, 20, 10, 20)
         self.empty_message_label.setVisible(True)
+        self.empty_message_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         main_layout.addWidget(self.scroll_area)
         main_layout.addWidget(self.empty_message_label)
+        # --- End Scroll Area Setup ---
 
-        self.refresh_builds(self.monitored_directory)
+
+        self.refresh_builds()
+
 
     def refresh_builds(self, new_dir: str = None):
         """
         Refreshes the list of builds displayed by scanning the monitored directory.
         Clears previous entries and shows/hides the 'No builds' message.
         """
-        print(f"PublishTargetsListWidget: Refresh triggered with new_dir: {new_dir}")
+
+        if new_dir is not None:
+            # Update the instance's directory path if a new one was passed
+            print(f"  - Updating monitored directory to: {new_dir}")
+            self.monitored_directory = new_dir
+
+        dir_to_scan = self.monitored_directory
+        print(f"  - Refreshing based on directory: {dir_to_scan}")
 
         # --- 1. ALWAYS Clear existing widgets FIRST ---
         while self.vbox.count():
@@ -344,17 +366,17 @@ class PublishTargetsListWidget(QWidget):
 
         # --- 2. Check if the directory is valid ---
         is_valid_dir = False
-        if self.monitored_directory and os.path.isdir(self.monitored_directory):
+        if dir_to_scan and os.path.isdir(dir_to_scan):
             is_valid_dir = True
-            print(f"  - Directory '{self.monitored_directory}' is valid.")
+            print(f"  - Directory '{dir_to_scan}' is valid.")
         else:
-            print(f"  - Directory '{self.monitored_directory}' is invalid or None.")
+            print(f"  - Directory '{dir_to_scan}' is invalid or None.")
             # Update label text if needed
-            if not self.monitored_directory:
+            if not dir_to_scan:
                 self.empty_message_label.setText("Builds directory not set.")
             else:
                 self.empty_message_label.setText(
-                    f"Directory not found:\n{self.monitored_directory}"
+                    f"Directory not found:\n{dir_to_scan}"
                 )
 
         # If directory is invalid, ensure UI shows empty state and return
@@ -368,11 +390,11 @@ class PublishTargetsListWidget(QWidget):
         builds_found = False
         try:
             # List directory contents, handle potential permission errors
-            entries = sorted(os.listdir(self.monitored_directory))
+            entries = sorted(os.listdir(dir_to_scan))
             print(f"  - Scanning entries: {entries}")
 
             for entry in entries:
-                full_path = os.path.join(self.monitored_directory, entry)
+                full_path = os.path.join(dir_to_scan, entry)
 
                 # Filter out non-directories and specific config folders
                 # Check if entry name matches any StoreEnum value
@@ -389,12 +411,12 @@ class PublishTargetsListWidget(QWidget):
                     print(f"    - Skipping non-directory entry: {entry}")
 
         except OSError as e:
-            print(f"  - Error listing directory '{self.monitored_directory}': {e}")
+            print(f"  - Error listing directory '{dir_to_scan}': {e}")
             self.empty_message_label.setText(f"Error reading directory:\n{e}")
             builds_found = False  # Ensure empty state is shown on error
         except Exception as e:  # Catch other potential errors
             print(
-                f"  - Unexpected error processing directory '{self.monitored_directory}': {e}"
+                f"  - Unexpected error processing directory '{dir_to_scan}': {e}"
             )
             self.empty_message_label.setText(f"An unexpected error occurred.")
             builds_found = False

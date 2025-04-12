@@ -118,6 +118,10 @@ class BuildBridgeWindow(QMainWindow):
         if not selected_items:
             return None
         return selected_items[0].text()
+    
+    def focusInEvent(self, a0):
+        return super().focusInEvent(a0)
+    
 
     def refresh_builds(self, build_dir):
         self.build_list_widget.refresh_builds(build_dir)

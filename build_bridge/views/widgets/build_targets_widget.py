@@ -31,14 +31,14 @@ class BuildTargetListWidget(QWidget):
 
     build_ready_signal = pyqtSignal(str)
 
-    def __init__(self, build_target_id: int | None, parent=None): # Accept ID
+    def __init__(self, build_target_id: int | None, parent=None):  # Accept ID
         super().__init__()
         self.parent = parent
         self.vcs_client = parent.vcs_client if parent else None
-        self._build_target_id = build_target_id # Store the ID
+        self._build_target_id = build_target_id  # Store the ID
 
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(10, 10, 10, 10) # Keep outer margins
+        outer_layout.setContentsMargins(10, 10, 10, 10)  # Keep outer margins
 
         heading_label = QLabel("Build Target")
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
@@ -61,29 +61,30 @@ class BuildTargetListWidget(QWidget):
 
         self.content_layout = QHBoxLayout(self.contrast_frame)
         self.content_layout.setContentsMargins(5, 5, 5, 5)
-        self.content_layout.setSpacing(8) # Slightly reduced spacing
+        self.content_layout.setSpacing(8)  # Slightly reduced spacing
 
         # --- Widgets for the "Build Target Exists" state ---
-        self.target_label = QLabel() # Renamed for clarity
-        self.target_label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred) # Allow expansion
+        self.target_label = QLabel()
+        self.target_label.setSizePolicy(
+            QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred
+        )
 
-        self.build_version_label = QLabel("Build Version:") # Explicit label
-        self.build_version_input = QLineEdit("0.1") # Renamed for clarity
-        self.build_version_input.setMaximumWidth(80) # Prevent excessive width
-        self.build_version_input.setToolTip("Enter the desired version string for this build (e.g., 1.0, 0.2-beta)")
+        self.build_version_label = QLabel("Build Version:")
+        self.build_version_input = QLineEdit("0.1")
+        self.build_version_input.setMaximumWidth(80)
+        self.build_version_input.setToolTip(
+            "Enter the desired version string for this build (e.g., 1.0, 0.2-beta)"
+        )
 
         self.edit_button = QPushButton("Edit")
         self.build_button = QPushButton("Build")
 
-        # --- Widget for the "No Build Target" state ---
+        # Widget for the "No Build Target" state ---
         self.add_button = QPushButton("+ Add new Build Target")
-        # Keep sizing policy for add button
-
-        # Add widgets for the "Exists" state
 
         self.content_layout.addWidget(self.target_label)
 
-        self.content_layout.addStretch(1) # Push buttons to the right
+        self.content_layout.addStretch(1)
 
         self.content_layout.addWidget(self.build_version_label)
         self.content_layout.addWidget(self.build_version_input)
@@ -96,11 +97,13 @@ class BuildTargetListWidget(QWidget):
         # We'll add spacers specifically when *only* the add button is shown.
         self.content_layout.addWidget(self.add_button)
 
-
         # Spacers for centering the 'Add' button when it's alone
-        self.left_spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self.right_spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
+        self.left_spacer = QSpacerItem(
+            40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        self.right_spacer = QSpacerItem(
+            40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
 
         # Connect signals
         self.edit_button.clicked.connect(self.open_edit_dialog)
@@ -116,7 +119,7 @@ class BuildTargetListWidget(QWidget):
         """Helper to show/hide widgets based on target presence."""
         # --- Widgets for existing target ---
         self.target_label.setVisible(show_target_details)
-        self.build_version_label.setVisible(show_target_details) # Show/hide new label
+        self.build_version_label.setVisible(show_target_details)  # Show/hide new label
         self.build_version_input.setVisible(show_target_details)
         self.edit_button.setVisible(show_target_details)
         self.build_button.setVisible(show_target_details)
@@ -129,26 +132,28 @@ class BuildTargetListWidget(QWidget):
         # --- Manage Spacers for Centering 'Add' Button ---
         # Remove existing spacers first if they are there
         if self.content_layout.itemAt(0) == self.left_spacer:
-             self.content_layout.removeItem(self.left_spacer)
-        if self.content_layout.itemAt(self.content_layout.count() - 1) == self.right_spacer:
-             self.content_layout.removeItem(self.right_spacer)
+            self.content_layout.removeItem(self.left_spacer)
+        if (
+            self.content_layout.itemAt(self.content_layout.count() - 1)
+            == self.right_spacer
+        ):
+            self.content_layout.removeItem(self.right_spacer)
 
         # Add spacers ONLY if the 'Add' button is the only visible element
         if not show_target_details:
-             # Insert spacer at the beginning
+            # Insert spacer at the beginning
             self.content_layout.insertItem(0, self.left_spacer)
-             # Add spacer at the end (after the add_button which is now the last widget)
+            # Add spacer at the end (after the add_button which is now the last widget)
             self.content_layout.addItem(self.right_spacer)
 
         # Invalidate layout to reflect spacer changes
         self.content_layout.invalidate()
         self.content_layout.activate()
 
-
     def _load_and_display_target(self):
         """Fetches the BuildTarget by ID and updates the UI visibility and content."""
         if self._build_target_id is None:
-            self._set_widgets_visibility(False) # Show only Add button centered
+            self._set_widgets_visibility(False)  # Show only Add button centered
             return
 
         try:
@@ -157,39 +162,43 @@ class BuildTargetListWidget(QWidget):
                 build_target = session.get(BuildTarget, self._build_target_id)
 
                 if build_target:
-                    # Use a potentially more descriptive representation if available
-                    # Or keep __repr__ if that's clear enough
-                    display_text = build_target.__repr__() # Example: "ProjectName - Win64 - Development"
+
+                    display_text = build_target.__repr__()
                     self.target_label.setText(display_text)
-                    self.target_label.setToolTip(f"Currently configured build target:\n{display_text}") # Add tooltip
+                    self.target_label.setToolTip(
+                        f"Currently configured build target:\n{display_text}"
+                    )
                     self.build_button.setEnabled(True)
-                    self._set_widgets_visibility(True) # Show target details
+                    self._set_widgets_visibility(True)
                 else:
                     print(f"BuildTarget with ID {self._build_target_id} not found.")
-                    self._build_target_id = None # Reset ID if not found
-                    self._set_widgets_visibility(False) # Show only Add button centered
+                    self._build_target_id = None  # Reset ID if not found
+                    self._set_widgets_visibility(False)  # Show only Add button centered
         except Exception as e:
-            print(f"Error loading BuildTarget ID {self._build_target_id}: {e}", exc_info=True)
-            self._build_target_id = None # Reset on error
-            self._set_widgets_visibility(False) # Show only Add button centered
+            print(
+                f"Error loading BuildTarget ID {self._build_target_id}: {e}",
+                exc_info=True,
+            )
+            self._build_target_id = None  # Reset on error
+            self._set_widgets_visibility(False)  # Show only Add button centered
 
     def open_edit_dialog(self):
         # This function now serves both "Edit" and "Add" clicks
         dialog = BuildTargetSetupDialog(build_target_id=self._build_target_id)
         # Ensure signal connection is robust
         try:
-             # Check if already connected (less critical here, but good practice)
-             # dialog.build_target_created.disconnect(self.on_new_build_target)
-             pass # Disconnect if needed
+            # Check if already connected (less critical here, but good practice)
+            # dialog.build_target_created.disconnect(self.on_new_build_target)
+            pass  # Disconnect if needed
         except TypeError:
-             pass # Signal not connected
+            pass  # Signal not connected
         dialog.build_target_created.connect(self.on_new_build_target)
         dialog.exec()
 
     def on_new_build_target(self, new_build_target_id: int):
         print(f"Received new/updated build target ID: {new_build_target_id}")
         self._build_target_id = new_build_target_id
-        self._load_and_display_target() # Refresh UI
+        self._load_and_display_target()  # Refresh UI
 
     def trigger_build(self):
         if self._build_target_id is None:
@@ -224,19 +233,21 @@ class BuildTargetListWidget(QWidget):
 
                 # Eager load project relationship
                 if not current_build_target.project:
-                     # This assumes the relationship lazy loading works or is handled
-                     # If session.get doesn't load relationships, explicitly query/load it
-                     # For simplicity, assuming project is loaded via relationship access:
+                    # This assumes the relationship lazy loading works or is handled
+                    # If session.get doesn't load relationships, explicitly query/load it
+                    # For simplicity, assuming project is loaded via relationship access:
                     try:
-                        _ = current_build_target.project.name # Access attribute to trigger load
+                        _ = (
+                            current_build_target.project.name
+                        )  # Access attribute to trigger load
                     except AttributeError:
-                         # Handle case where project is genuinely None after access attempt
-                         QMessageBox.critical(
+                        # Handle case where project is genuinely None after access attempt
+                        QMessageBox.critical(
                             self,
                             "Error",
                             "Associated project data not found for the build target.",
-                         )
-                         return
+                        )
+                        return
 
                 # Get necessary paths and names
                 builds_root = current_build_target.project.archive_directory
@@ -244,12 +255,20 @@ class BuildTargetListWidget(QWidget):
                 project_name = current_build_target.project.name
 
                 if not all([builds_root, source_dir, project_name]):
-                     QMessageBox.critical(
-                         self,
-                         "Configuration Error",
-                         "Project archive directory, source directory, or name is missing.",
-                     )
-                     return
+                    QMessageBox.critical(
+                        self,
+                        "Configuration Error",
+                        "Project archive directory, source directory, or name is missing.",
+                    )
+                    return
+                
+                engine_base_path = current_build_target.unreal_engine_base_path
+                if not engine_base_path or not os.path.isdir(engine_base_path):
+                    QMessageBox.warning(self, "Configuration Error",
+                                        "Unreal Engine base path is not configured or invalid for this specific Build Target.\n\n"
+                                        "Please use the 'Edit' button to configure it.")
+                    return # Stop the build process
+                print(f"Using Unreal Engine Path from Build Target config: {engine_base_path}")
 
                 project_build_dir_root = Path(builds_root) / project_name / release_name
 
@@ -269,9 +288,14 @@ class BuildTargetListWidget(QWidget):
 
                     try:
                         shutil.rmtree(project_build_dir_root)
-                        print(f"Removed existing build directory: {project_build_dir_root}")
+                        print(
+                            f"Removed existing build directory: {project_build_dir_root}"
+                        )
                     except Exception as e:
-                        print(f"Failed to delete existing build directory: {e}", exc_info=True)
+                        print(
+                            f"Failed to delete existing build directory: {e}",
+                            exc_info=True,
+                        )
                         QMessageBox.critical(
                             self,
                             "Cleanup Error",
@@ -298,27 +322,43 @@ class BuildTargetListWidget(QWidget):
                     unreal_builder = UnrealBuilder(
                         source_dir=source_dir,
                         # Make engine path configurable via SettingsDialog later
-                        engine_path="C:/Program Files/Epic Games",
+                        engine_path=engine_base_path,
                         target_platform=target_platform_val,
                         target_config=build_type_val,
                         output_dir=project_build_dir_root,
-                        clean=False, # Confirm if 'clean' should be an option
+                        clean=False,  # Confirm if 'clean' should be an option
                         valve_package_pad=optimize_steam,
                     )
                 # Specific error handling for UnrealBuilder initialization
                 except ProjectFileNotFoundError as e:
-                     QMessageBox.critical(self, "Project File Error", f"Project file not found: {str(e)}")
-                     return
+                    QMessageBox.critical(
+                        self, "Project File Error", f"Project file not found: {str(e)}"
+                    )
+                    return
                 except EngineVersionError as e:
-                     QMessageBox.critical(self, "Engine Version Error", f"Could not determine Unreal Engine version: {str(e)}")
-                     return
+                    QMessageBox.critical(
+                        self,
+                        "Engine Version Error",
+                        f"Could not determine Unreal Engine version: {str(e)}",
+                    )
+                    return
                 except UnrealEngineNotInstalledError as e:
-                     QMessageBox.critical(self, "Unreal Engine Not Found", f"Unreal Engine not found. Please check configuration.\nError: {str(e)}")
-                     return
-                except Exception as e: # Catch other builder init errors
-                     print(f"Unexpected error creating UnrealBuilder: {e}", exc_info=True)
-                     QMessageBox.critical(self, "Build Setup Error", f"Failed to initialize the builder:\n{str(e)}")
-                     return
+                    QMessageBox.critical(
+                        self,
+                        "Unreal Engine Not Found",
+                        f"Unreal Engine not found. Please check configuration.\nError: {str(e)}",
+                    )
+                    return
+                except Exception as e:  # Catch other builder init errors
+                    print(
+                        f"Unexpected error creating UnrealBuilder: {e}", exc_info=True
+                    )
+                    QMessageBox.critical(
+                        self,
+                        "Build Setup Error",
+                        f"Failed to initialize the builder:\n{str(e)}",
+                    )
+                    return
 
                 # Show the build progress dialog
                 print(f"Starting build dialog for release '{release_name}'...")
@@ -328,10 +368,16 @@ class BuildTargetListWidget(QWidget):
                     pass
                 except TypeError:
                     pass
-                dialog.build_ready_signal.connect(self.build_ready_signal) # Connect signal from build dialog
-                dialog.exec() # Show modal build dialog
+                dialog.build_ready_signal.connect(
+                    self.build_ready_signal
+                )  # Connect signal from build dialog
+                dialog.exec()  # Show modal build dialog
 
         except Exception as e:
             # Catch errors during session management or top-level logic
             print(f"Error during trigger_build: {e}", exc_info=True)
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred during the build process: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An unexpected error occurred during the build process: {e}",
+            )

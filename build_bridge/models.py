@@ -3,7 +3,7 @@ import os
 
 from anyio import Path
 from sqlalchemy import JSON, Boolean, Column, Enum, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
 import keyring
 
 from build_bridge.database import Base
@@ -57,6 +57,8 @@ class BuildTarget(Base):
 
     project_id = Column(Integer, ForeignKey("project.id"), nullable=False)
     project = relationship("Project", back_populates="build_targets")
+
+    unreal_engine_base_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
     vcs_config = relationship("VCSConfig", uselist=False, back_populates="build_target")
     target_branch = Column(String, nullable=False, default="")

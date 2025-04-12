@@ -37,15 +37,17 @@ class PublishTargetEntry(QWidget):
             self.build_id = os.path.basename(build_root)
         else:
             self.build_id = "Invalid Path"
-            print(f"Warning: Invalid build_root passed to PublishTargetEntry: {build_root}")
+            print(
+                f"Warning: Invalid build_root passed to PublishTargetEntry: {build_root}"
+            )
 
         # Main horizontal layout
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5) # Keep margins
-        layout.setSpacing(10) # Adjusted spacing
+        layout.setContentsMargins(10, 5, 10, 5)  # Keep margins
+        layout.setSpacing(10)  # Adjusted spacing
 
         # --- Left Side: Build Label and Platform Selector ---
-        project_name_str = "Unknown Project" # Default
+        project_name_str = "Unknown Project"  # Default
         try:
             with session_scope() as session:
                 # Use one_or_none() for safety if project might not exist
@@ -53,48 +55,56 @@ class PublishTargetEntry(QWidget):
                 if project:
                     project_name_str = project.name
         except Exception as e:
-                 print(f"Error fetching project name: {e}")
-                 # Keep default project_name_str
+            print(f"Error fetching project name: {e}")
+            # Keep default project_name_str
 
         # Build Label
         self.label = QLabel(f"{project_name_str} - {self.build_id}")
         # Let the label take necessary space, MinimumExpanding allows growth if needed
-        self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        self.label.setWordWrap(True) # Allow wrapping if name is too long
+        self.label.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+        )
+        self.label.setWordWrap(True)  # Allow wrapping if name is too long
         self.label.setMaximumWidth(350)
-        
+
         # Platform Selector
-        self.platform_label = QLabel("Target Platform:") # Added label for clarity
+        self.platform_label = QLabel("Target Platform:")  # Added label for clarity
         self.platform_menu_combo = QComboBox()
-        self.platform_menu_combo.setMinimumWidth(100) # Give combo box a decent minimum size
+        self.platform_menu_combo.setMinimumWidth(
+            100
+        )  # Give combo box a decent minimum size
 
         # Populate ComboBox
         # self.platform_menu_combo.addItem("Select...", None) # Optional placeholder
         for store_enum in self.store_publishers.keys():
-            self.platform_menu_combo.addItem(str(store_enum.value), store_enum) # Use .value and ensure it's a string
+            self.platform_menu_combo.addItem(
+                str(store_enum.value), store_enum
+            )  # Use .value and ensure it's a string
 
         # --- Right Side: Action Buttons ---
         browse_archive_button = QPushButton("Browse")
         browse_archive_button.setToolTip(f"Open build folder:\n{self.build_root}")
-        browse_archive_button.setFixedHeight(28) # Keep fixed height for consistency
+        browse_archive_button.setFixedHeight(28)  # Keep fixed height for consistency
         browse_archive_button.clicked.connect(self.browse_archive_directory)
 
         self.edit_button = QPushButton("Profile")
-        self.edit_button.setToolTip("Edit publish profile for the selected target platform")
+        self.edit_button.setToolTip(
+            "Edit publish profile for the selected target platform"
+        )
         self.edit_button.setFixedHeight(28)
         self.edit_button.clicked.connect(self.edit_publish_profile)
 
         self.publish_button = QPushButton("Publish")
         self.publish_button.setFixedHeight(28)
         self.publish_button.clicked.connect(self.handle_publish)
-        self.publish_button.setToolTip("") # Tooltip updated dynamically by can_publish
+        self.publish_button.setToolTip("")  # Tooltip updated dynamically by can_publish
 
         # --- Assemble Layout ---
         layout.addWidget(self.label)
         layout.addWidget(self.platform_label)
         layout.addWidget(self.platform_menu_combo)
 
-        layout.addStretch(1) # Add stretch HERE to push buttons right within the row
+        layout.addStretch(1)  # Add stretch HERE to push buttons right within the row
 
         layout.addWidget(browse_archive_button)
         layout.addWidget(self.edit_button)
@@ -107,9 +117,9 @@ class PublishTargetEntry(QWidget):
 
         # Initial state check for publish button
         # Defer initial check slightly or ensure profile data is ready if needed immediately
-        self.on_target_platform_changed() # Call to set initial state
+        self.on_target_platform_changed()  # Call to set initial state
 
-        self.setLayout(layout) # Set the layout for the widget
+        self.setLayout(layout)  # Set the layout for the widget
 
     def on_target_platform_changed(self):
         # Called when the ComboBox selection changes
@@ -121,13 +131,15 @@ class PublishTargetEntry(QWidget):
 
     def get_publish_profile_for_store(self, store: StoreEnum, session):
         # Fetches the profile for the given store enum
-        if store is None: # Handle placeholder if used
-             return None
+        if store is None:  # Handle placeholder if used
+            return None
         # Ensure filtering by the correct attribute (e.g., store_type or name)
         # Assuming PublishProfile has a 'store_type' field matching StoreEnum.value
         profile = (
             session.query(PublishProfile)
-            .filter_by(store_type=store.value) # Use .value if that holds the DB key
+            .filter_by(
+                store_type=store.value, build_id=self.build_id
+            )  # Use .value if that holds the DB key
             .first()
         )
         return profile
@@ -138,107 +150,139 @@ class PublishTargetEntry(QWidget):
 
         # Handle case where placeholder ("Select...") might be selected
         if selected_platform_enum is None:
-             self.publish_button.setToolTip("Please select a target platform.")
-             return False
+            self.publish_button.setToolTip("Please select a target platform.")
+            return False
 
         # Basic validation (directory exists?)
         if not self.build_root or not os.path.isdir(self.build_root):
-             self.publish_button.setToolTip(f"Build directory is invalid or not found:\n{self.build_root}")
-             return False
+            self.publish_button.setToolTip(
+                f"Build directory is invalid or not found:\n{self.build_root}"
+            )
+            return False
 
         try:
-             # 1. Validate basic structure (e.g., contains .exe) - kept your logic
-             self.validate_build_content() # Renamed internal check for clarity
+            # 1. Validate basic structure (e.g., contains .exe) - kept your logic
+            self.validate_build_content()  # Renamed internal check for clarity
 
-             # 2. Validate profile for the selected platform
-             with session_scope() as session:
-                 publish_profile = self.get_publish_profile_for_store(
-                     selected_platform_enum, session
-                 )
+            # 2. Validate profile for the selected platform
+            with session_scope() as session:
+                publish_profile = self.get_publish_profile_for_store(
+                    selected_platform_enum, session
+                )
 
-                 publisher_class = self.store_publishers.get(selected_platform_enum)
-                 if not publisher_class:
-                      raise InvalidConfigurationError(f"No publisher implementation found for {selected_platform_enum.value}")
+                publisher_class = self.store_publishers.get(selected_platform_enum)
+                if not publisher_class:
+                    raise InvalidConfigurationError(
+                        f"No publisher implementation found for {selected_platform_enum.value}"
+                    )
+                pp = self.get_publish_profile_for_store(selected_platform_enum, session)
+                publisher_instance = publisher_class(
+                    publish_profile=pp
+                )  # Instantiate publisher
 
-                 publisher_instance = publisher_class() # Instantiate publisher
+                if publish_profile:
+                    # Let the specific publisher validate its required profile fields
+                    publisher_instance.validate_publish_profile(publish_profile)
+                else:
+                    raise InvalidConfigurationError(
+                        f"Publishing profile for '{selected_platform_enum.value}' not found or not configured."
+                    )
 
-                 if publish_profile:
-                     # Let the specific publisher validate its required profile fields
-                     publisher_instance.validate_publish_profile(publish_profile)
-                 else:
-                     raise InvalidConfigurationError(
-                         f"Publishing profile for '{selected_platform_enum.value}' not found or not configured."
-                     )
-
-             # If all checks pass
-             self.publish_button.setToolTip(f"Publish build '{self.build_id}' to {selected_platform_enum.value}")
-             return True
+            # If all checks pass
+            self.publish_button.setToolTip(
+                f"Publish build '{self.build_id}' to {selected_platform_enum.value}"
+            )
+            return True
 
         except InvalidConfigurationError as e:
-             # Update tooltip with the specific configuration error
-             self.publish_button.setToolTip(f"Cannot publish: {e}")
-             # Optionally log the error too
-             # print(f"Validation Error for build '{self.build_id}', platform '{selected_platform_enum.value}': {e}")
-             return False
-        except Exception as e: # Catch unexpected errors during validation
-              self.publish_button.setToolTip(f"Unexpected validation error: {e}")
-              print(f"Unexpected validation error: {e}") # Log unexpected errors
-              return False
+            # Update tooltip with the specific configuration error
+            self.publish_button.setToolTip(f"Cannot publish: {e}")
+            # Optionally log the error too
+            # print(f"Validation Error for build '{self.build_id}', platform '{selected_platform_enum.value}': {e}")
+            return False
+        except Exception as e:  # Catch unexpected errors during validation
+            self.publish_button.setToolTip(f"Unexpected validation error: {e}")
+            print(f"Unexpected validation error: {e}")  # Log unexpected errors
+            return False
 
     def validate_build_content(self):
         """Validates that the build directory looks like a build (e.g., contains .exe)."""
         # Renamed from 'validate' to be more specific
         if not self.build_root or not os.path.isdir(self.build_root):
-             raise InvalidConfigurationError("Build directory path is invalid.")
+            raise InvalidConfigurationError("Build directory path is invalid.")
 
         # Check for .exe (Windows focus, adjust if needed for cross-platform)
         try:
-            has_exe_in_root = any(f.lower().endswith(".exe") for f in os.listdir(self.build_root) if os.path.isfile(os.path.join(self.build_root, f)))
+            has_exe_in_root = any(
+                f.lower().endswith(".exe")
+                for f in os.listdir(self.build_root)
+                if os.path.isfile(os.path.join(self.build_root, f))
+            )
 
             first_subfolder_path = None
             for item in os.listdir(self.build_root):
                 full_item_path = os.path.join(self.build_root, item)
                 if os.path.isdir(full_item_path):
                     first_subfolder_path = full_item_path
-                    break # Found the first directory
+                    break  # Found the first directory
 
             has_exe_in_subfolder = False
             if first_subfolder_path:
-                has_exe_in_subfolder = any(f.lower().endswith(".exe") for f in os.listdir(first_subfolder_path) if os.path.isfile(os.path.join(first_subfolder_path, f)))
+                has_exe_in_subfolder = any(
+                    f.lower().endswith(".exe")
+                    for f in os.listdir(first_subfolder_path)
+                    if os.path.isfile(os.path.join(first_subfolder_path, f))
+                )
 
             if not has_exe_in_root and not has_exe_in_subfolder:
-                raise InvalidConfigurationError("Build folder or its first subfolder does not contain an executable (.exe).")
+                raise InvalidConfigurationError(
+                    "Build folder or its first subfolder does not contain an executable (.exe)."
+                )
 
         except OSError as e:
-             raise InvalidConfigurationError(f"Error accessing build directory content: {e}")
-
+            raise InvalidConfigurationError(
+                f"Error accessing build directory content: {e}"
+            )
 
     def browse_archive_directory(self):
         if self.build_root and os.path.isdir(self.build_root):
             try:
                 # Use os.startfile on Windows, subprocess.call for cross-platform
-                if os.name == 'nt': # Windows
+                if os.name == "nt":  # Windows
                     os.startfile(self.build_root)
-                elif sys.platform == 'darwin': # macOS
-                    subprocess.call(['open', self.build_root])
-                else: # Linux and other POSIX
-                    subprocess.call(['xdg-open', self.build_root])
+                elif sys.platform == "darwin":  # macOS
+                    subprocess.call(["open", self.build_root])
+                else:  # Linux and other POSIX
+                    subprocess.call(["xdg-open", self.build_root])
             except Exception as e:
                 print(f"Error opening directory {self.build_root}: {e}")
-                QMessageBox.warning(self, "Error", f"Could not open directory:\n{self.build_root}\n\nError: {e}")
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Could not open directory:\n{self.build_root}\n\nError: {e}",
+                )
         else:
-             QMessageBox.warning(self, "Error", f"Build directory not found or invalid:\n{self.build_root}")
-
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Build directory not found or invalid:\n{self.build_root}",
+            )
 
     def edit_publish_profile(self):
         selected_platform_enum = self.platform_menu_combo.currentData()
         if selected_platform_enum is None:
-             QMessageBox.information(self, "Select Platform", "Please select a target platform before editing its profile.")
-             return
+            QMessageBox.information(
+                self,
+                "Select Platform",
+                "Please select a target platform before editing its profile.",
+            )
+            return
 
-        sel_platform_name = selected_platform_enum.value # Get the display name/value
+        sel_platform_name = selected_platform_enum.value  # Get the display name/value
 
-        dialog = PlatformPublishDialog(platform=sel_platform_name, build_id=self.build_id)
+        dialog = PlatformPublishDialog(
+            platform=sel_platform_name, build_id=self.build_id
+        )
         try:
             # dialog.profile_changed_signal.disconnect(self.on_publish_profile_added_or_updated) # If needed
             pass
@@ -251,43 +295,57 @@ class PublishTargetEntry(QWidget):
     def handle_publish(self):
         # can_publish() check ensures this is only callable when valid
         selected_platform_enum = self.platform_menu_combo.currentData()
-        if selected_platform_enum is None: # Should not happen if button is enabled, but check anyway
-            QMessageBox.warning(self,"Error", "No target platform selected.")
+        if (
+            selected_platform_enum is None
+        ):  # Should not happen if button is enabled, but check anyway
+            QMessageBox.warning(self, "Error", "No target platform selected.")
             return
 
         publisher_class = self.store_publishers.get(selected_platform_enum)
         if not publisher_class:
-            QMessageBox.critical(self, "Error", f"No publisher found for {selected_platform_enum.value}")
-            return
-
-        publisher_instance = publisher_class()
-        print(f"Attempting to publish build '{self.build_id}' to {selected_platform_enum.value}...")
-
-        try:
-            # The publisher's 'publish' method should internally fetch
-            # the necessary profile using session_scope and validate again if needed.
-            publisher_instance.publish(content_dir=self.build_root, build_id=self.build_id)
-            # Optionally show success message
-            QMessageBox.information(self, "Publish Successful", f"Build '{self.build_id}' published to {selected_platform_enum.value}.")
-        except InvalidConfigurationError as e:
-            QMessageBox.warning(
-                self,
-                "Publishing Error",
-                f"Failed to publish '{self.build_id}' to {selected_platform_enum.value}:\n\n{str(e)}",
-            )
-        except NotImplementedError: # If a publisher's publish method isn't done
-              QMessageBox.critical(
-                  self,
-                  "Not Implemented",
-                  f"Publishing for {selected_platform_enum.value} is not yet implemented."
-              )
-        except Exception as e: # Catch other potential errors during publish
-            print(f"Error during publish execution: {e}") # Log it
             QMessageBox.critical(
-                self,
-                "Publishing Failed",
-                f"An unexpected error occurred while publishing to {selected_platform_enum.value}:\n\n{str(e)}"
+                self, "Error", f"No publisher found for {selected_platform_enum.value}"
             )
+            return
+        with session_scope() as session:
+            pp = self.get_publish_profile_for_store(selected_platform_enum, session)
+
+            publisher_instance = publisher_class(pp)
+            print(
+                f"Attempting to publish build '{self.build_id}' to {selected_platform_enum.value}..."
+            )
+
+            try:
+                # The publisher's 'publish' method should internally fetch
+                # the necessary profile using session_scope and validate again if needed.
+                publisher_instance.publish(
+                    content_dir=self.build_root, build_id=self.build_id
+                )
+                # Optionally show success message
+                QMessageBox.information(
+                    self,
+                    "Publish Successful",
+                    f"Build '{self.build_id}' published to {selected_platform_enum.value}.",
+                )
+            except InvalidConfigurationError as e:
+                QMessageBox.warning(
+                    self,
+                    "Publishing Error",
+                    f"Failed to publish '{self.build_id}' to {selected_platform_enum.value}:\n\n{str(e)}",
+                )
+            except NotImplementedError:  # If a publisher's publish method isn't done
+                QMessageBox.critical(
+                    self,
+                    "Not Implemented",
+                    f"Publishing for {selected_platform_enum.value} is not yet implemented.",
+                )
+            except Exception as e:  # Catch other potential errors during publish
+                print(f"Error during publish execution: {e}")  # Log it
+                QMessageBox.critical(
+                    self,
+                    "Publishing Failed",
+                    f"An unexpected error occurred while publishing to {selected_platform_enum.value}:\n\n{str(e)}",
+                )
 
 
 class PublishTargetsListWidget(QWidget):
@@ -304,18 +362,28 @@ class PublishTargetsListWidget(QWidget):
 
         # --- Refresh Button ---
         self.refresh_button = QPushButton("🔄 Refresh")
-        self.refresh_button.setToolTip("Rescan the currently monitored build directory for changes")
+        self.refresh_button.setToolTip(
+            "Rescan the currently monitored build directory for changes"
+        )
         self.refresh_button.clicked.connect(lambda: self.refresh_builds())
-        self.refresh_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.refresh_button.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+        )
         main_layout.addWidget(self.refresh_button)
         # --- End Refresh Button ---
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setVisible(False)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.scroll_area.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
 
         self.scroll_content = QWidget()
         self.vbox = QVBoxLayout(self.scroll_content)
@@ -329,15 +397,15 @@ class PublishTargetsListWidget(QWidget):
         self.empty_message_label.setStyleSheet("font-style: italic; color: gray;")
         self.empty_message_label.setContentsMargins(10, 20, 10, 20)
         self.empty_message_label.setVisible(True)
-        self.empty_message_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.empty_message_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
 
         main_layout.addWidget(self.scroll_area)
         main_layout.addWidget(self.empty_message_label)
         # --- End Scroll Area Setup ---
 
-
         self.refresh_builds()
-
 
     def refresh_builds(self, new_dir: str = None):
         """
@@ -375,9 +443,7 @@ class PublishTargetsListWidget(QWidget):
             if not dir_to_scan:
                 self.empty_message_label.setText("Builds directory not set.")
             else:
-                self.empty_message_label.setText(
-                    f"Directory not found:\n{dir_to_scan}"
-                )
+                self.empty_message_label.setText(f"Directory not found:\n{dir_to_scan}")
 
         # If directory is invalid, ensure UI shows empty state and return
         if not is_valid_dir:
@@ -415,12 +481,10 @@ class PublishTargetsListWidget(QWidget):
             self.empty_message_label.setText(f"Error reading directory:\n{e}")
             builds_found = False  # Ensure empty state is shown on error
         except Exception as e:  # Catch other potential errors
-            print(
-                f"  - Unexpected error processing directory '{dir_to_scan}': {e}"
-            )
+            print(f"  - Unexpected error processing directory '{dir_to_scan}': {e}")
             self.empty_message_label.setText(f"An unexpected error occurred.")
             builds_found = False
-        
+
         self.vbox.addStretch(1)
 
         # --- 4. Set final visibility based on whether builds were found ---

@@ -49,7 +49,7 @@ class ItchPublishProfileWidget(QWidget):
             self.profile = (
                 self.session.query(ItchPublishProfile)
                 .filter_by(build_id=self.build_id)
-                .one_or_none()
+                .first()
             )
 
             if self.profile is None:

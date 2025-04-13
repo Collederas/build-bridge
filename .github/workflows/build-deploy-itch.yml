@@ -50,16 +50,16 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          poetry run pyinstaller --noconsole `
-            --icon=build_bridge/icons/buildbridge.ico `
-            --add-data "build_bridge/icons;icons" `
-            --name BuildBridge `
-            --exclude-module tkinter `
-            --exclude-module numpy `
-            --exclude-module scipy `
-            --exclude-module pandas `
-            --exclude-module matplotlib `
-            .\app.py
+          poetry run pyinstaller --noconsole \
+            --icon=build_bridge/icons/buildbridge.ico \
+            --add-data "build_bridge/icons:icons" \
+            --name BuildBridge \
+            --exclude-module tkinter \
+            --exclude-module numpy \
+            --exclude-module scipy \
+            --exclude-module pandas \
+            --exclude-module matplotlib \
+            ./app.py
         shell: bash
 
       - name: Zip the build

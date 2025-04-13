@@ -10,28 +10,22 @@ from PyQt6.QtWidgets import (
 )
 
 from PyQt6.QtCore import pyqtSignal
+from sqlalchemy.orm import object_session
 
 from build_bridge.database import session_scope
-from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile, PublishProfile, StoreEnum
+from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile
 from build_bridge.views.dialogs import settings_dialog
 
 
 class ItchPublishProfileWidget(QWidget):
     profile_saved_signal = pyqtSignal()
 
-    def __init__(self, publish_profile: PublishProfile, parent=None):
-        self.profile = publish_profile
+    def __init__(self, publish_profile: ItchPublishProfile, session, parent=None):
+        self.publish_profile = publish_profile
+        self.session = session # used to commit the session and query auxiliary models
 
-        # Set window title based on whether it's new or existing
-        if not self.profile:
-            self.setWindowTitle(f"Create Itch.io Publish Profile ({self.build_id})")
-        elif self.profile:
-            self.setWindowTitle(f"Edit Itch.io Publish Profile ({self.build_id})")
-        else:
-            # Should not happen if _load_or_initialize_profile works correctly
-            self.setWindowTitle("Itch.io Publish Profile Error")
-            QMessageBox.critical(self, "Error", "Failed to load or initialize profile.")
-            return  # Prevent further initialization if profile loading failed
+        super().__init__(parent=parent) 
+        self.setWindowTitle(f"Edit Itch.io Publish Profile ({publish_profile.build_id})")
 
         self._init_ui()
         self._populate_fields()  # Populate UI fields after UI is built
@@ -47,7 +41,7 @@ class ItchPublishProfileWidget(QWidget):
         form_layout.addRow("Project:", self.project_combo)
 
         # --- Read-only Build ID ---
-        self.build_id_input = QLineEdit(self.build_id)
+        self.build_id_input = QLineEdit(self.publish_profile.build_id)
         self.build_id_input.setReadOnly(True)
         form_layout.addRow("Build ID:", self.build_id_input)
 
@@ -90,56 +84,69 @@ class ItchPublishProfileWidget(QWidget):
 
     def _populate_fields(self):
         """Populate UI fields with data from self.profile."""
-        if not self.profile:
-            # This case should ideally be handled before UI init, but as a safeguard:
-            QMessageBox.critical(self, "Error", "Profile data is not available.")
-            return
 
-        # Load Projects into ComboBox
-        self._load_projects()
+        with self.session.no_autoflush: # no autoflush because we might be editing a profile that is not saved yet.
+            if not self.publish_profile:
+                # This case should ideally be handled before UI init, but as a safeguard:
+                QMessageBox.critical(self, "Error", "Profile data is not available.")
+                return
 
-        # Load Auth options into ComboBox
-        self._refresh_auth_options()
+            # Load Projects into ComboBox
+            self._load_projects()
 
-        # --- Populate based on loaded/new profile ---
-        if self.profile.id is not None:  # Check if it's an existing profile (has an ID)
-            # Select current project
-            if self.profile.project:
-                project_index = self.project_combo.findData(
-                    self.profile.project.id
-                )  # Find by ID
-                if project_index >= 0:
-                    self.project_combo.setCurrentIndex(project_index)
-                else:
-                    # Handle case where saved project is no longer valid
-                    QMessageBox.warning(
-                        self,
-                        "Warning",
-                        f"Saved project '{self.profile.project.name}' not found. Please select a project.",
-                    )
+            # Load Auth options into ComboBox
+            self._refresh_auth_options()
 
-            # Set other fields
-            bt = self.session.query(BuildTarget).one_or_none()
-            if bt:
-                platform = bt.target_platform.lower()
-
-            if preset_channel := self.profile.itch_channel_name:
-                channel_name = preset_channel
-            elif bt:
-                channel_name = platform
+            # --- Populate based on loaded/new profile ---
+            if self.publish_profile.id is not None:  # Check if it's an existing profile (has an ID)
+                # Select current project
+                if self.publish_profile.project:
+                    project_index = self.project_combo.findData(
+                        self.publish_profile.project.id
+                    )  # Find by ID
+                    if project_index >= 0:
+                        self.project_combo.setCurrentIndex(project_index)
+                    else:
+                        # Handle case where saved project is no longer valid
+                        QMessageBox.warning(
+                            self,
+                            "Warning",
+                            f"Saved project '{self.publish_profile.project.name}' not found. Please select a project.",
+                        )
+            
+            existing_channel = self.publish_profile.itch_channel_name
+            
+            # Check we dont have an existing channel
+            if existing_channel and not existing_channel == "":
+                print(f"ItchPublishProfileWidget: Setting initial channel name to existing value: {existing_channel}")
+                channel_name = existing_channel
             else:
-                channel_name = ""
+                bt = self.session.query(BuildTarget).one_or_none() # ASSUMED ONE FOR WHOLE APP
 
-            print(f"ItchPublishProfile: setting channel_name to {channel_name}")
-            self.user_game_id_input.setText(self.profile.itch_user_game_id or "")
+                if bt:
+                    target_platform_lowercase = bt.target_platform.lower()
+                print(f"ItchPublishProfileWidget: Setting initial channel name to inferred from platform of build target: {target_platform_lowercase}")
+                channel_name = target_platform_lowercase
+
             self.channel_name_input.setText(channel_name)
 
-        else:
-            # Defaults for a new profile
-            self.user_game_id_input.setText("")
-            self.channel_name_input.setText("default-channel")
+            existing_game_id = self.publish_profile.itch_user_game_id
+            game_id = ""
 
-        # Trigger initial display update for builder path (important for new profiles too)
+            if existing_game_id and not existing_game_id == "":
+                game_id = existing_game_id
+            else:
+                # Do we have itch configured AND a project?
+                conf = self.session.query(ItchConfig).one_or_none()
+                proj = self.session.query(Project).one_or_none()
+
+                if conf and proj:
+                    # Then we can make a guess
+                    game_id = f"{conf.username}/{proj.name.lower().replace(' ', '-')}"
+            
+            self.user_game_id_input.setText(game_id)
+    
+
         self._on_project_changed()
 
     def _load_projects(self):
@@ -170,13 +177,10 @@ class ItchPublishProfileWidget(QWidget):
             self.project_combo.setEnabled(False)
 
     def _on_project_changed(self):
-        """Update the read-only builder path based on selected project and update profile project."""
-        path = "N/A - Select a project"
-        if self.profile.project is None and self.project_combo.currentData():
-            # If selected project is valid and exists, then assign it to the profile
-            project = self.session.query(Project).get(self.project_combo.currentData())
-            if project:
-                self.profile.project = project
+        # If project changes, we update the publish profile
+        if current_proj := self.project_combo.currentData():  # data = proj_id
+            project = self.session.query(Project).get(current_proj)
+            self.publish_profile.project = project
 
     def _open_itch_settings(self):
         settings = settings_dialog.SettingsDialog(
@@ -192,7 +196,7 @@ class ItchPublishProfileWidget(QWidget):
         self.auth_combo.clear()
 
         with session_scope() as session:
-            itch_config = session.query(ItchConfig).first() # One
+            itch_config = session.query(ItchConfig).one_or_none()
 
             try:
                 if not itch_config:
@@ -213,7 +217,7 @@ class ItchPublishProfileWidget(QWidget):
 
     def save_profile(self):
         """Validate inputs and save the current profile's details."""
-        if not self.profile:
+        if not self.publish_profile:
             QMessageBox.critical(self, "Error", "Cannot save, profile data is missing.")
             return
 
@@ -252,26 +256,17 @@ class ItchPublishProfileWidget(QWidget):
             self.auth_combo.setFocus()
             return
 
-        # --- Update Profile Object ---
         try:
-            # Fetch related objects from DB using validated IDs
-            selected_project = (
-                self.session.query(Project).filter_by(id=selected_project_id).one()
-            )
-            selected_auth = (
-                self.session.query(ItchConfig).filter_by(id=selected_auth_id).one()
-            )
 
-            # !!! Add the profile to the session ONLY if it's new !!!
-            if self.is_new_profile:
-                # Now it's safe to add, as we're about to set required fields
-                self.session.add(self.profile)
+            # Add profile to session if it don't exist (it was created by the outer widget (PublishProfileEntry))
+            if not object_session(self.publish_profile):
+                self.session.add(self.publish_profile)
 
             # Assign validated values (including the required project)
-            self.profile.project = selected_project
-            self.profile.itch_user_game_id = user_game_id
-            self.profile.itch_channel_name = channel_name
-            self.profile.itch_config = selected_auth
+            self.publish_profile.project_id = selected_project_id
+            self.publish_profile.itch_user_game_id = user_game_id
+            self.publish_profile.itch_channel_name = channel_name
+            self.publish_profile.itch_config_id = selected_auth_id
 
             # --- Commit Changes ---
             self.session.commit()

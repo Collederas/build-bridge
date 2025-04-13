@@ -1,3 +1,5 @@
+import os
+from tkinter import N
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
@@ -21,9 +23,8 @@ from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.models import Project, PerforceConfig
 from build_bridge.utils.paths import get_resource_path
-from build_bridge.views.widgets import itch_config_widget
-from build_bridge.views.widgets.steam_config_widget import SteamConfigWidget
-from build_bridge.views.widgets.itch_config_widget import ItchConfigWidget
+from build_bridge.views.widgets.config_widget_steam import SteamConfigWidget
+from build_bridge.views.widgets.config_widget_itch import ItchConfigWidget
 
 
 class SettingsDialog(QDialog):
@@ -142,9 +143,14 @@ class SettingsDialog(QDialog):
 
     def browse_archive_directory(self):
         """Open a file dialog to select the archive directory."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory")
-        if folder:
-            self.archive_dir_input.setText(folder)
+        curr_dir = self.archive_dir_input.text().strip()
+        if os.path.isdir(curr_dir):
+            new_folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory", curr_dir)
+        else:
+            new_folder = QFileDialog.getExistingDirectory(self, "Select Archive Directory")
+
+        if new_folder:
+            self.archive_dir_input.setText(new_folder)
 
     def create_vcs_page(self):
         page = QWidget()

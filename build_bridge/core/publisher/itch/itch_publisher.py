@@ -56,7 +56,7 @@ class ItchPublisher(BasePublisher):
                 "Butler not found. Please set it in Settings."
             )
 
-    def publish(self, content_dir: str, build_id: str):
+    def publish(self, content_dir: str):
         """
         Prepares the butler command and launches the ItchUploadDialog to execute it.
 
@@ -64,7 +64,7 @@ class ItchPublisher(BasePublisher):
             content_dir: Path to the directory containing the built game files.
             build_id: The version or identifier for this build (e.g., "1.0.0").
         """
-        print(f"Preparing Itch.io publish for build: {build_id}")
+        print(f"Preparing Itch.io publish for build: {self.publish_profile.build_id}")
 
         # --- Construct Butler Command Arguments ---
         # Note: command executable is passed separately to QProcess
@@ -76,7 +76,7 @@ class ItchPublisher(BasePublisher):
             str(Path(content_dir).resolve()),  # Ensure absolute path
             f"{itch_target}:{self.publish_profile.itch_channel_name}",
             "--userversion",
-            build_id,
+            self.publish_profile.build_id,
         ]
 
         print(f"Command: {butler_exe} {' '.join(arguments)}")
@@ -92,7 +92,7 @@ class ItchPublisher(BasePublisher):
                 title=self.publish_profile.project.name,
                 arguments=arguments,
                 display_info={  # Pass info for display in the dialog
-                    "build_id": build_id,
+                    "build_id": self.publish_profile.build_id,
                     "target": itch_target,
                     "content_dir": content_dir,
                 },

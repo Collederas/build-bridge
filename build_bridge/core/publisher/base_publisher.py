@@ -8,7 +8,7 @@ class BasePublisher(ABC):
     # almost useless. Probably worth removing it.
 
     @abstractmethod
-    def validate_publish_profile(self, publish_profile):
+    def validate_publish_profile(self):
         """Validate store-specific conf potentially misconfigured
         or missing from the given profile."""
 

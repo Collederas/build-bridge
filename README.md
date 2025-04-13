@@ -8,7 +8,7 @@ The idea is:
 
 ## AI DISCLAIMER
 
-This is a tool I developed for personal needs and I've been putting it together in a few weeks. While the overall design is intentional, I heavily relied on AI to code review and sometimes even to re-generate various pages.
+While the overall design is intentional, I heavily relied on AI to code review and sometimes even to re-generate various pages.
 
 ## Contact
 

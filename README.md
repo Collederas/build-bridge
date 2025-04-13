@@ -8,7 +8,7 @@ The idea is:
 
 ## AI DISCLAIMER
 
-While the overall design is intentional, I heavily relied on AI to code review and sometimes even to re-generate various pages.
+While the overall design is intentional, I heavily relied on LLMs to code review and sometimes even to re-generate various pages.
 
 ## Contact
 

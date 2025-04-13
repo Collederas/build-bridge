@@ -1,6 +1,6 @@
 # Build Bridge
 
-Build Bridge is a simple Windows App that I created to help me managing my builds while playtesting a game. 
+Build Bridge is a simple Windows App that I created to help managing my builds while playtesting a game. 
 
 The idea is:
 - to have a prefefined build directory where builds are stored by version number

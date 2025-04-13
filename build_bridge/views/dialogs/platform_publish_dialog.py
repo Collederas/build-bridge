@@ -13,10 +13,10 @@ from PyQt6.QtCore import pyqtSignal
 from build_bridge.database import SessionFactory
 from build_bridge.models import StoreEnum
 from build_bridge.utils.paths import get_resource_path
-from build_bridge.views.widgets.steam_publish_profile_widget import (
+from build_bridge.views.widgets.publish_profile_widget_steam import (
     SteamPublishProfileWidget,
 )
-from build_bridge.views.widgets.itch_publish_profile_widget import (
+from build_bridge.views.widgets.publish_profile_widget_itch import (
     ItchPublishProfileWidget,
 )
 from PyQt6.QtGui import QIcon

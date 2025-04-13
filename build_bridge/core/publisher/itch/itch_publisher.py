@@ -35,23 +35,23 @@ class ItchPublisher(BasePublisher):
     def __init__(self, publish_profile: PublishProfile):
         self.publish_profile = publish_profile
 
-    def validate_publish_profile(self, publish_profile):
+    def validate_publish_profile(self):
         """Ensures config is valid alnd allows publishing"""
-        if not publish_profile:
+        if not self.publish_profile:
             raise InvalidConfigurationError(f"Itch.io Publish Profile not found.")
 
-        if not publish_profile.itch_user_game_id:
+        if not self.publish_profile.itch_user_game_id:
             raise InvalidConfigurationError("Itch.io User/Game ID is not configured.")
 
-        if not publish_profile:
+        if not self.publish_profile:
             raise InvalidConfigurationError("Itch.io publish profile not loaded.")
 
-        if not publish_profile.itch_config.api_key:
+        if not self.publish_profile.itch_config.api_key:
             raise InvalidConfigurationError(
                 "Itch.io API Key not found or configured. Please set it in Settings."
             )
 
-        if not publish_profile.itch_config.butler_path:
+        if not self.publish_profile.itch_config.butler_path:
             raise InvalidConfigurationError(
                 "Butler not found. Please set it in Settings."
             )

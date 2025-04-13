@@ -27,14 +27,12 @@ class SteamPublishProfileWidget(QWidget):
 
     def __init__(self, session, build_id: str, parent=None):
         super().__init__(parent)
-        self.session = session  # Database session for CRUD operations
-        self.build_id = build_id  # The build_id of the profile to load/create
+        self.session = session
+        self.build_id = build_id
 
-        # Attempt to load existing profile or prepare a new one
         self.profile = None
         self._load_or_initialize_profile()
 
-        # Set window title based on whether it's new or existing
         if self.profile and self.session.is_modified(
             self.profile
         ):  # Check if it was just added

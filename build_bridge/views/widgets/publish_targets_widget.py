@@ -32,6 +32,7 @@ class PublishTargetEntry(QWidget):
     def __init__(self, build_root):
         super().__init__()
         self.build_root = build_root
+        self.publish_profile = None
 
         if build_root and os.path.exists(build_root):
             self.build_id = os.path.basename(build_root)
@@ -112,46 +113,42 @@ class PublishTargetEntry(QWidget):
 
         # Connect signals after widgets are created
         self.platform_menu_combo.currentIndexChanged.connect(
-            self.on_target_platform_changed
+            self.on_store_changed
         )
 
         # Initial state check for publish button
         # Defer initial check slightly or ensure profile data is ready if needed immediately
-        self.on_target_platform_changed()  # Call to set initial state
+        self.on_store_changed()  # Call to set initial state
 
         self.setLayout(layout)  # Set the layout for the widget
 
-    def on_target_platform_changed(self):
-        # Called when the ComboBox selection changes
+    def on_store_changed(self):
+        # Called when the Store dropdown selection changes
+        self.get_publish_profile_for_store()
         self.publish_button.setEnabled(self.can_publish())
 
     def on_publish_profile_added_or_updated(self):
         # Called after the profile dialog is closed (if signal connected)
         self.publish_button.setEnabled(self.can_publish())
 
-    def get_publish_profile_for_store(self, store: StoreEnum, session):
-        # Fetches the profile for the given store enum
-        if store is None:  # Handle placeholder if used
-            return None
-        # Ensure filtering by the correct attribute (e.g., store_type or name)
-        # Assuming PublishProfile has a 'store_type' field matching StoreEnum.value
+    def get_publish_profile_for_store(self):
+        selected_platform_enum = self.platform_menu_combo.currentData()
+
+        if selected_platform_enum is None: # Should not happen
+            return
+        
+        self.session = 
         profile = (
-            session.query(PublishProfile)
+            self.session.query(PublishProfile)
             .filter_by(
-                store_type=store.value, build_id=self.build_id
-            )  # Use .value if that holds the DB key
+                store_type=selected_platform_enum.value, build_id=self.build_id
+            )
             .first()
         )
         return profile
 
     def can_publish(self) -> bool:
         """Checks if the current configuration allows publishing."""
-        selected_platform_enum = self.platform_menu_combo.currentData()
-
-        # Handle case where placeholder ("Select...") might be selected
-        if selected_platform_enum is None:
-            self.publish_button.setToolTip("Please select a target platform.")
-            return False
 
         # Basic validation (directory exists?)
         if not self.build_root or not os.path.isdir(self.build_root):
@@ -162,7 +159,7 @@ class PublishTargetEntry(QWidget):
 
         try:
             # 1. Validate basic structure (e.g., contains .exe) - kept your logic
-            self.validate_build_content()  # Renamed internal check for clarity
+            self.validate_build_content()
 
             # 2. Validate profile for the selected platform
             with session_scope() as session:
@@ -170,12 +167,14 @@ class PublishTargetEntry(QWidget):
                     selected_platform_enum, session
                 )
 
+                # TODO: Using Publisher for validation here is bad. Validating data
+                # should be done in a separate layer
                 publisher_class = self.store_publishers.get(selected_platform_enum)
                 if not publisher_class:
                     raise InvalidConfigurationError(
                         f"No publisher implementation found for {selected_platform_enum.value}"
                     )
-                pp = self.get_publish_profile_for_store(selected_platform_enum, session)
+                
                 publisher_instance = publisher_class(
                     publish_profile=pp
                 )  # Instantiate publisher

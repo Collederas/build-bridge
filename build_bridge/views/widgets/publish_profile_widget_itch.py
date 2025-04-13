@@ -11,25 +11,19 @@ from PyQt6.QtWidgets import (
 
 from PyQt6.QtCore import pyqtSignal
 
-from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile, StoreEnum
+from build_bridge.database import session_scope
+from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile, PublishProfile, StoreEnum
 from build_bridge.views.dialogs import settings_dialog
 
 
 class ItchPublishProfileWidget(QWidget):
     profile_saved_signal = pyqtSignal()
 
-    def __init__(self, session, build_id: str, parent=None):
-        super().__init__(parent)
-        self.session = session
-
-        self.build_id = build_id  # The build_id of the profile to load/create
-
-        # Attempt to load existing profile or prepare a new one
-        self.profile = None
-        self._load_or_initialize_profile()
+    def __init__(self, publish_profile: PublishProfile, parent=None):
+        self.profile = publish_profile
 
         # Set window title based on whether it's new or existing
-        if self.profile and self.session.is_modified(self.profile):
+        if not self.profile:
             self.setWindowTitle(f"Create Itch.io Publish Profile ({self.build_id})")
         elif self.profile:
             self.setWindowTitle(f"Edit Itch.io Publish Profile ({self.build_id})")
@@ -41,31 +35,6 @@ class ItchPublishProfileWidget(QWidget):
 
         self._init_ui()
         self._populate_fields()  # Populate UI fields after UI is built
-
-    def _load_or_initialize_profile(self):
-        """Loads the profile by build_id or prepares data for a new instance."""
-        self.is_new_profile = False  # Reset flag
-        try:
-            self.profile = (
-                self.session.query(ItchPublishProfile)
-                .filter_by(build_id=self.build_id)
-                .first()
-            )
-
-            if self.profile is None:
-                print(
-                    f"Preparing new Itch.io Publish Profile for build {self.build_id}"
-                )
-                # Create a transient instance, DO NOT add to session yet
-                self.profile = ItchPublishProfile(build_id=self.build_id, store_type=StoreEnum.itch)
-                self.is_new_profile = True
-                # Set defaults for transient object display
-                self.profile.itch_user_game_id = ""
-                self.profile.itch_channel_name = "default-channel"
-
-        except Exception as e:
-            QMessageBox.critical(self, "Database Error", f"Failed to load profile: {e}")
-            self.profile = None  # Ensure profile is None if loading failed
 
     def _init_ui(self):
         """Initialize the User Interface elements."""
@@ -130,7 +99,7 @@ class ItchPublishProfileWidget(QWidget):
         self._load_projects()
 
         # Load Auth options into ComboBox
-        self._refresh_auth_options()  # Also handles selecting current auth
+        self._refresh_auth_options()
 
         # --- Populate based on loaded/new profile ---
         if self.profile.id is not None:  # Check if it's an existing profile (has an ID)
@@ -214,52 +183,33 @@ class ItchPublishProfileWidget(QWidget):
             default_page=2
         )  # Assuming Itch.io settings is page 3
         settings.exec()
+
+        # Refresh settings when back
         self._refresh_auth_options()
 
     def _refresh_auth_options(self):
-        """Refresh the Itch.io Auth dropdown and try to re-select current."""
-        user_selected_auth = self.auth_combo.currentData()
+        """Refresh the Itch.io Auth dropdown. This is to detect if there is a configured ItchConfig in the db."""
         self.auth_combo.clear()
-        try:
-            itch_config = (
-                self.session.query(ItchConfig).order_by(ItchConfig.username).all()
-            )
 
-            if self.profile and self.profile.itch_config:
-                current_auth_id = self.profile.itch_config.id
-            elif itch_config:
-                current_auth_id = itch_config[0].id
-            else:
-                selected_index = -1  # Default to no selection
+        with session_scope() as session:
+            itch_config = session.query(ItchConfig).first() # One
 
-            if not itch_config:
-                self.auth_combo.addItem("No Itch.io accounts configured", None)
+            try:
+                if not itch_config:
+                    self.auth_combo.addItem("No Itch.io accounts configured", None)
+                    self.auth_combo.setEnabled(False)
+                else:
+                    self.auth_combo.setEnabled(True)
+                    self.auth_combo.addItem("Select Auth Profile...", None)
+                    self.auth_combo.addItem(itch_config.username, itch_config.id)
+
+                self.auth_combo.setCurrentIndex(1)
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Database Error", f"Failed to load Itch.io authentications: {e}"
+                )
                 self.auth_combo.setEnabled(False)
-            else:
-                self.auth_combo.setEnabled(True)
-                self.auth_combo.addItem("Select Auth Profile...", None)  # Placeholder
-                for i, auth in enumerate(itch_config):
-                    # Store auth ID as data for reliable retrieval
-                    if auth.username:
-                        self.auth_combo.addItem(auth.username, auth.id)
-                    if auth.id == current_auth_id or auth.id == user_selected_auth:
-                        selected_index = i + 1  # +1 because of placeholder item
-
-                if selected_index != -1:
-                    self.auth_combo.setCurrentIndex(selected_index)
-                elif current_auth_id is not None:
-                    # Saved auth ID exists but wasn't found in the current list
-                    QMessageBox.warning(
-                        self,
-                        "Auth Not Found",
-                        f"Previously selected Itch.io account ID {current_auth_id} not found. Please re-select.",
-                    )
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Database Error", f"Failed to load Itch.io authentications: {e}"
-            )
-            self.auth_combo.setEnabled(False)
 
     def save_profile(self):
         """Validate inputs and save the current profile's details."""

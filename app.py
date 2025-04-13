@@ -15,7 +15,7 @@ from build_bridge.utils.paths import get_resource_path
 from build_bridge.database import SessionFactory, initialize_database
 from build_bridge.models import BuildTarget, Project
 from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
-from build_bridge.views.widgets.publish_profile_list_widget import (
+from build_bridge.views.widgets.publish_profile_read_widgets import (
     PublishProfileListWidget,
 )
 from build_bridge.views.dialogs.settings_dialog import SettingsDialog

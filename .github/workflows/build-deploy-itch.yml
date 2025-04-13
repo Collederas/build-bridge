@@ -50,6 +50,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
+          source .venv/bin/activate
           pyinstaller.exe --noconsole `
             --icon=build_bridge/icons/buildbridge.ico `
             --add-data "build_bridge/icons;icons" `

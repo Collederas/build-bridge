@@ -1,0 +1,72 @@
+name: Build and Deploy to Itch.io
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to simulate (e.g., v0.1.1-test)'
+        required: true
+        default: 'v0.1.1-test'
+      deploy_to_itch:
+        description: 'Deploy to itch.io? (true/false)'
+        type: boolean
+        default: false
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install . # Or .[dev] if you updated pyproject.toml
+        shell: powershell
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller.exe --noconsole `
+            --icon=build_bridge/icons/buildbridge.ico `
+            --add-data "build_bridge/icons;icons" `
+            --name BuildBridge `
+            --exclude-module tkinter `
+            --exclude-module numpy `
+            --exclude-module scipy `
+            --exclude-module pandas `
+            --exclude-module matplotlib `
+            .\app.py
+        shell: powershell
+
+      - name: Zip the build
+        run: |
+          $tag = "${{ github.event.inputs.tag_name || github.ref_name }}"
+          Compress-Archive -Path .\dist\BuildBridge\* -DestinationPath BuildBridge-$tag.zip
+        shell: powershell
+
+# Only run following 2 if an actual tag has been pushed or if deployment has been requested specifically
+      - name: Install Butler
+        run: |
+          choco install butler
+        shell: powershell
+        if: ${{ github.event.inputs.deploy_to_itch == 'true' || github.event_name != 'workflow_dispatch' }}
+
+      - name: Deploy to Itch.io
+        if: ${{ github.event.inputs.deploy_to_itch == 'true' || github.event_name != 'workflow_dispatch' }}
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          set TAG=${{ github.event.inputs.tag_name || github.ref_name }}
+          butler push BuildBridge-%TAG%.zip collederas/build-bridge:windows --userversion %TAG%
+        shell: cmd

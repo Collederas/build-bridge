@@ -62,12 +62,6 @@ jobs:
             ./app.py
         shell: bash
 
-      - name: Zip the build
-        run: |
-          $tag = "${{ github.event.inputs.tag_name || github.ref_name }}"
-          Compress-Archive -Path .\dist\BuildBridge\* -DestinationPath BuildBridge-$tag.zip
-        shell: powershell
-
 # Only run following 2 if an actual tag has been pushed or if deployment has been requested specifically
       - name: Install Butler
         run: |
@@ -81,5 +75,5 @@ jobs:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
           set TAG=${{ github.event.inputs.tag_name || github.ref_name }}
-          butler push BuildBridge-%TAG%.zip collederas/build-bridge:windows --userversion %TAG%
+          butler push .\dist\BuildBridge collederas/build-bridge:windows --userversion %TAG%
         shell: cmd

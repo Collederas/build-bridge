@@ -60,13 +60,13 @@ jobs:
             --exclude-module pandas `
             --exclude-module matplotlib `
             .\app.py
-        shell: powershell
+        shell: bash
 
       - name: Zip the build
         run: |
           $tag = "${{ github.event.inputs.tag_name || github.ref_name }}"
           Compress-Archive -Path .\dist\BuildBridge\* -DestinationPath BuildBridge-$tag.zip
-        shell: powershell
+        shell: bash
 
 # Only run following 2 if an actual tag has been pushed or if deployment has been requested specifically
       - name: Install Butler

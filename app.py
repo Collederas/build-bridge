@@ -1,5 +1,4 @@
 import sys
-from tkinter import NO
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -13,11 +12,12 @@ from PyQt6.QtGui import QIcon
 
 from build_bridge.utils.paths import get_resource_path
 
-from build_bridge.core.vcs.p4client import P4Client
 from build_bridge.database import SessionFactory, initialize_database
 from build_bridge.models import BuildTarget, Project
 from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
-from build_bridge.views.widgets.publish_targets_widget import PublishTargetsListWidget
+from build_bridge.views.widgets.publish_profile_read_widgets import (
+    PublishProfileListWidget,
+)
 from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 
@@ -74,8 +74,8 @@ class BuildBridgeWindow(QMainWindow):
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         builds_layout.addWidget(heading_label)
 
-        self.build_list_widget = PublishTargetsListWidget()
-        
+        self.build_list_widget = PublishProfileListWidget()
+
         if self.project:
             builds_dir = self.project.builds_path
         else:
@@ -100,14 +100,18 @@ class BuildBridgeWindow(QMainWindow):
                 # Re-query or refresh the project in the main window's session
                 if self.project:
                     self.session.refresh(self.project)
-                    print(f"Refreshed project '{self.project.name}' in main window session.")
+                    print(
+                        f"Refreshed project '{self.project.name}' in main window session."
+                    )
                     self.build_list_widget.refresh_builds(self.project.builds_path)
 
                 else:
                     # If no project existed initially, try loading one now
                     self.project = self.session.query(Project).first()
                     if self.project:
-                        print(f"Loaded newly created project '{self.project.name}' into main window.")
+                        print(
+                            f"Loaded newly created project '{self.project.name}' into main window."
+                        )
                         self.build_list_widget.refresh_builds(self.project.builds_path)
 
             except Exception as e:
@@ -118,10 +122,9 @@ class BuildBridgeWindow(QMainWindow):
         if not selected_items:
             return None
         return selected_items[0].text()
-    
+
     def focusInEvent(self, a0):
         return super().focusInEvent(a0)
-    
 
     def refresh_builds(self, build_dir):
         self.build_list_widget.refresh_builds(build_dir)

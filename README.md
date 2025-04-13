@@ -30,14 +30,14 @@ I very much welcome feedback and bug reports. You can use:
 
 I wrote [the docs](https://collederas.github.io/build-bridge/)!
 
-### Prerequisites
+## Prerequisites
 
 * Python (>=3.9,<3.14)
 * Unreal Engine (Version detected from `.uproject` file)
 * For Steam publishing: [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD#Downloading_SteamCMD)
 * For Itch.io publishing: [Butler](https://itchio.itch.io/butler)
 
-### Installation & Setup
+## Installation & Setup
 
 1.  **Clone/Download:** Get the project code.
 2. **Install poetry**

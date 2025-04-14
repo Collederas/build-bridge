@@ -49,7 +49,10 @@ I wrote [the docs](https://collederas.github.io/build-bridge/)!
     poetry install
     ```
 3.  **Database Initialization:** The application uses a SQLite database stored in the user's application data directory (`%APPDATA%\BuildBridge` on Windows). The database should be initialized with alembic:
-    ```alembic upgrade head```
-You can customize the database location by setting the `BUILD_BRIDGE_DB_PATH` environment variable.
-4. Run the app
-   ```python app.py```
+    ```
+    alembic upgrade head
+    ```
+5. **Run the app**
+   ```bash
+   python app.py
+   ```

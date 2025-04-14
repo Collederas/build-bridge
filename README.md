@@ -12,7 +12,7 @@ While the overall design is intentional, I heavily relied on LLMs to code review
 
 ## Contact
 
-I very much welcome feedback and bug reports. You can use:
+I very much welcome feedback and bug reports. You can:
 - Create or comment on [GitHub Issues](https://github.com/Collederas/build-bridge/issues).
 - Leave a comment on [Build Bridge Itch Page](https://collederas.itch.io/build-bridge)
 

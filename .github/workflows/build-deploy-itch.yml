@@ -16,7 +16,7 @@ on:
         default: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: windows-latest
 
     steps:
@@ -54,15 +54,13 @@ jobs:
             --icon=build_bridge/icons/buildbridge.ico \
             --add-data "build_bridge/icons:icons" \
             --name BuildBridge \
-            --exclude-module tkinter \
-            --exclude-module numpy \
-            --exclude-module scipy \
-            --exclude-module pandas \
-            --exclude-module matplotlib \
             ./app.py
         shell: bash
 
-# Only run following 2 if an actual tag has been pushed or if deployment has been requested specifically
+  deploy:
+    runs-on: windows-latest
+    needs: build
+    steps:
       - name: Install Butler
         run: |
           choco install butler

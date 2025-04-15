@@ -19,7 +19,7 @@ I very much welcome feedback and bug reports. You can:
 ## Core components
 
 * **Unreal Engine Build system:** Uses the engine in the user's system (this is a **prerequisite**) to wrap the RunUAT.bat process. Arguments and preferences can be filled through the graphical interface in a dialog.
-* **Publish system:** Allows to publish and publish detail configuration through GUI. Takes care of any publishing setup required on Steam.
+* **Publish system:** Allows to configure punlishing preferences through GUI.
     * **Steam:** Configures `app_build.vdf` file. Uses `steamcmd` for uploads.
     * **Itch.io:** Uses `butler` for uploads.
 * **Configuration Management:**

@@ -50,13 +50,13 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          poetry run pyinstaller --noconsole \
-            --icon=build_bridge/icons/buildbridge.ico \
-            --add-data "build_bridge/icons:icons" \
-            --name BuildBridge \
-            ./app.py
-        shell: bash
-        
+          .venv\Scripts\python.exe -m PyInstaller --noconsole ^
+            --icon=build_bridge\icons\buildbridge.ico ^
+            --add-data "build_bridge\icons:icons" ^
+            --name BuildBridge ^
+            app.py
+        shell: cmd
+
       - name: Install Butler
         run: |
           choco install butler

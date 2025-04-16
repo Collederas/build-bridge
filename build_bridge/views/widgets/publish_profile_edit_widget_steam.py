@@ -18,7 +18,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 from sqlalchemy.orm import object_session
 
-from build_bridge.models import Project, SteamConfig, SteamPublishProfile, StoreEnum
+from build_bridge.models import (
+    Project,
+    PublishProfile,
+    SteamConfig,
+    SteamPublishProfile,
+    StoreEnum,
+)
 from build_bridge.views.dialogs import settings_dialog
 
 
@@ -136,7 +142,7 @@ class SteamPublishProfileWidget(QWidget):
             self._refresh_auth_options()
 
             # --- Populate based on loaded/new profile ---
-        
+
             # Select current project
             if self.publish_profile.project:
                 project_index = self.project_combo.findData(
@@ -152,10 +158,34 @@ class SteamPublishProfileWidget(QWidget):
                         f"Saved project '{self.publish_profile.project.name}' not found. Please select a project.",
                     )
 
+                # Is there another publish profile for steam on this project? Then let's use it
+                # as most likely thing didn't change that much
+                existing_profile = self.session.query(PublishProfile).filter_by(
+                    project=self.publish_profile.project, store_type=StoreEnum.steam
+                ).first()
+
+                app_id = (
+                    self.publish_profile.app_id
+                    or (existing_profile and existing_profile.app_id)
+                    or 480
+                )
+
+                description = (
+                    self.publish_profile.description
+                    or (existing_profile and existing_profile.description)
+                    or ""
+                )
+
+                depots = (
+                    self.publish_profile.depots
+                    or (existing_profile and existing_profile.depots)
+                    or {}
+                )
+
                 # Set other fields
-                self.app_id_input.setValue(self.publish_profile.app_id if self.publish_profile.app_id else 480)
-                self.description_input.setText(self.publish_profile.description or "")
-                self._load_depots_table(self.publish_profile.depots or {})
+                self.app_id_input.setValue(app_id)
+                self.description_input.setText(description)
+                self._load_depots_table(depots)
 
             else:
                 # Defaults for a new profile
@@ -216,7 +246,6 @@ class SteamPublishProfileWidget(QWidget):
                 self, "Database Error", f"Failed to load Steam Config: {e}"
             )
             self.auth_combo.setEnabled(False)
-
 
     def _on_project_changed(self):
         """Update the read-only builder path based on selected project and update profile project."""
@@ -391,7 +420,7 @@ class SteamPublishProfileWidget(QWidget):
         try:
             if not object_session(self.publish_profile):
                 self.session.add(self.publish_profile)
-            
+
             # Assign validated values (including the required project)
             self.publish_profile.project_id = selected_project_id
             self.publish_profile.app_id = app_id
@@ -399,12 +428,18 @@ class SteamPublishProfileWidget(QWidget):
 
             # Builder path is derived, not saved explicitly
             self.publish_profile.steam_config_id = selected_auth_id
-            self.publish_profile.depots = depots_to_save  # Assign the validated dictionary
+            self.publish_profile.depots = (
+                depots_to_save  # Assign the validated dictionary
+            )
 
             # --- Commit Changes ---
             self.session.commit()
             self.profile_saved_signal.emit()
-            QMessageBox.information(self, "Success", f"Steam Profile for build {self.publish_profile.build_id} saved successfully.")
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Steam Profile for build {self.publish_profile.build_id} saved successfully.",
+            )
 
         except Exception as e:
             self.session.rollback()  # Rollback on any error during commit

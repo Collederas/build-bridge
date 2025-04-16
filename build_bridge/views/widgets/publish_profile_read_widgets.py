@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from build_bridge.models import ItchConfig, ItchPublishProfile, SteamPublishProfile, StoreEnum
+from build_bridge.models import ItchPublishProfile, SteamPublishProfile, StoreEnum
 
 from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
 from build_bridge.database import SessionFactory
@@ -309,6 +309,7 @@ class PublishProfileEntry(QWidget):
         if existing_publish_profile:
             self.publish_profile = existing_publish_profile
 
+        # CREATE NEW PUBLISH PROFILE
         if not existing_publish_profile:
             project = self.session.query(Project).one_or_none()
             # The profile does not exist for this store and this build. We create it

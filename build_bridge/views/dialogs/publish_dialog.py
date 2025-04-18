@@ -116,11 +116,14 @@ class GenericUploadDialog(QDialog):
             self.cancel_button.clicked.connect(self.reject)
             return
 
-        self.append_log(f"Starting process...")
+        self.append_log(f"Starting process via cmd /c...")
         self.append_log(f"Executable: {self.executable}")
+        self.append_log(f"Arguments: {' '.join(self.arguments)}")
         self.append_log("-" * 20)
 
-        self.process.start(self.executable, self.arguments)
+        # Run steamcmd through cmd /c
+        cmd_arguments = ["/c", str(self.executable)] + self.arguments
+        self.process.start("cmd", cmd_arguments)
 
         if not self.process.waitForStarted(5000):
             self.append_log(

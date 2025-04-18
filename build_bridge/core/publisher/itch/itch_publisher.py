@@ -3,7 +3,7 @@ from pathlib import Path
 from build_bridge.core.publisher.base_publisher import BasePublisher
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.models import PublishProfile
-from build_bridge.views.dialogs.store_upload_dialog import GenericUploadDialog
+from build_bridge.views.dialogs.publish_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
 
 

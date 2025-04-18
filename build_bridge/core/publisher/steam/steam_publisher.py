@@ -5,7 +5,7 @@ from build_bridge.core.publisher.base_publisher import BasePublisher
 from build_bridge.core.publisher.steam.steam_pipe_configurator import (
     SteamPipeConfigurator,
 )
-from build_bridge.views.dialogs.store_upload_dialog import GenericUploadDialog
+from build_bridge.views.dialogs.publish_dialog import GenericUploadDialog
 
 def check_steam_success(exit_code: int, log_content: str) -> bool:
     """
@@ -19,13 +19,21 @@ def check_steam_success(exit_code: int, log_content: str) -> bool:
         True if the upload seems successful, False otherwise.
     """
     log_lower = log_content.lower()
-    login_ok = "logged in ok" in log_lower
+
+    # Check for successful login
+    login_ok = "to steam public...ok" in log_lower
+
+    # Check for successful build
     build_success = (
-        "app build successful" in log_lower or "success" in log_lower
-    )  # Add more indicators
-    no_errors = (
-        "error" not in log_lower and "failed" not in log_lower
-    )  # Basic error check
+        "app build successful" in log_lower or 
+        "successfully finished" in log_lower
+    )
+
+    # Check for absence of actual errors (exclude benign cases like 'stderr')
+    no_errors = not (
+        "error" in log_lower.replace("stderr", "") or 
+        "failed" in log_lower
+    )
 
     return exit_code == 0 and login_ok and build_success and no_errors
 

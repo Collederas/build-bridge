@@ -123,14 +123,6 @@ class SteamPublishProfileWidget(QWidget):
         main_layout.addLayout(form_layout)
         main_layout.addWidget(self.steam_config_button)
 
-        # --- Save/Cancel Buttons ---
-        button_layout = QHBoxLayout()
-        self.save_button = QPushButton("Save")
-        self.save_button.clicked.connect(self.save_profile)
-        button_layout.addStretch()
-        button_layout.addWidget(self.save_button)
-        main_layout.addLayout(button_layout)
-
         self.setLayout(main_layout)
 
     def _populate_fields(self):

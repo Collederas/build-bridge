@@ -410,13 +410,11 @@ class PublishProfileEntry(QWidget):
     def browse_archive_directory(self):
         if self.build_root and os.path.isdir(self.build_root):
             try:
-                # Use os.startfile on Windows, subprocess.call for cross-platform
-                if os.name == "nt":  # Windows
+                if os.name == "nt":
                     os.startfile(self.build_root)
-                elif sys.platform == "darwin":  # macOS
-                    subprocess.call(["open", self.build_root])
-                else:  # Linux and other POSIX
-                    subprocess.call(["xdg-open", self.build_root])
+                else:
+                    QMessageBox.warning(self, "Unsupported OS", "Unsupported OS")
+                    return
             except Exception as e:
                 print(f"Error opening directory {self.build_root}: {e}")
                 QMessageBox.warning(
@@ -441,7 +439,7 @@ class PublishProfileEntry(QWidget):
             )
             return
 
-        dialog = PublishProfileDialog(
+        edit_dialog = PublishProfileDialog(
             session=self.session, publish_profile=self.publish_profile
         )
         try:
@@ -450,8 +448,8 @@ class PublishProfileEntry(QWidget):
         except TypeError:
             pass
         # Connect signal to re-check publish possibility after editing
-        dialog.profile_changed_signal.connect(self.on_publish_profile_added_or_updated)
-        dialog.exec()
+        edit_dialog.profile_changed_signal.connect(self.on_publish_profile_added_or_updated)
+        edit_dialog.exec()
 
     def handle_publish(self):
         selected_platform_enum = self.store_type_combo.currentData()

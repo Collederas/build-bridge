@@ -1,12 +1,10 @@
-from turtle import pu
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
-    QTabWidget,
     QLabel,
     QPushButton,
     QMessageBox,
-    QFrame,
+    QHBoxLayout
 )
 
 from PyQt6.QtCore import pyqtSignal
@@ -32,12 +30,6 @@ class PublishProfileDialog(QDialog):
     def __init__(self, session, publish_profile: PublishProfile, parent=None):
         """
         Initialize the platform-specific publish dialog.
-
-        Args:
-            session: Database session
-            build_id: The build ID for the profile
-            platform: "steam", "itch", or None (which shows both tabs)
-            parent: Parent widget
         """
         super().__init__(parent)
 
@@ -86,40 +78,39 @@ class PublishProfileDialog(QDialog):
                 f"Invalid platform '{store_type}'. Valid options are 'steam' or 'itch'.",
             )
 
+        # --- Save Button ---
+        button_layout = QHBoxLayout()
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save_profile)
+
+        button_layout.addStretch()
+        button_layout.addWidget(self.save_button)
+        main_layout.addLayout(button_layout)
+
         self.setLayout(main_layout)
 
     def _create_steam_dialog(self, parent_layout):
         """Create a Steam-only dialog."""
-        self.steam_widget = SteamPublishProfileWidget(
+        self.widget = SteamPublishProfileWidget(
             publish_profile=self.publish_profile, session=self.session, parent=self
         )
-        parent_layout.addWidget(self.steam_widget)
-        self.steam_widget.profile_saved_signal.connect(self.new_profile_created)
+        parent_layout.addWidget(self.widget)
+        self.widget.profile_saved_signal.connect(self.new_profile_created)
 
     def _create_itch_dialog(self, parent_layout):
         """Create an Itch-only dialog."""
-        self.itch_widget = ItchPublishProfileWidget(
+        self.widget = ItchPublishProfileWidget(
             publish_profile=self.publish_profile, session=self.session, parent=self
         )
-        parent_layout.addWidget(self.itch_widget)
-        self.itch_widget.profile_saved_signal.connect(self.new_profile_created)
+        parent_layout.addWidget(self.widget)
+        self.widget.profile_saved_signal.connect(self.new_profile_created)
 
     def new_profile_created(self):
         self.profile_changed_signal.emit()
         self.close()
 
-    def _create_button_layout(self):
-        from PyQt6.QtWidgets import QHBoxLayout
-
-        button_layout = QHBoxLayout()
-
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(self.reject)
-
-        button_layout.addStretch()
-        button_layout.addWidget(cancel_button)
-
-        return button_layout
+    def save_profile(self):
+        self.widget.save_profile()
 
     def reject(self):
         self.session.rollback()

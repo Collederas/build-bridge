@@ -46,13 +46,14 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root --with dev
-        shell: bash
+        shell: cmd
 
       - name: Build with PyInstaller
         run: |
           .venv\Scripts\python.exe -m PyInstaller --noconsole ^
             --icon=build_bridge\icons\buildbridge.ico ^
             --add-data "build_bridge\icons:icons" ^
+            --hidden-import=anyio ^
             --name BuildBridge ^
             app.py
         shell: cmd

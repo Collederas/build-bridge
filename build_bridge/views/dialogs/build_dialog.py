@@ -8,9 +8,12 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QPushButton,
     QHBoxLayout,
+    QWidget,
+    QCheckBox,
+    QLineEdit,
 )
-from PyQt6.QtCore import QProcess, pyqtSignal
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QProcess, pyqtSignal, Qt
+from PyQt6.QtGui import QIcon, QTextCursor, QTextDocument
 
 from build_bridge.core.builder.unreal_builder import UnrealBuilder
 from build_bridge.utils.paths import get_resource_path
@@ -24,6 +27,7 @@ class BuildWindowDialog(QDialog):
         self.builder = builder
         self.build_in_progress = False
         self.process = None
+        self.filter_streaming = False  # Initialize filter_streaming
         self.setup_ui()
         self.start_build()
 
@@ -34,14 +38,43 @@ class BuildWindowDialog(QDialog):
         self.setWindowIcon(QIcon(icon_path))
 
         self.layout = QVBoxLayout()
+        self.layout.setSpacing(5)  # Reduce spacing for a compact look
+        self.layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Build output log
+        # Filter checkbox
+        self.filter_checkbox = QCheckBox("Hide LogStreaming messages")
+        self.filter_checkbox.stateChanged.connect(self.toggle_filter)
+        self.layout.addWidget(self.filter_checkbox)
+
+        # Search bar (hidden by default)
+        self.search_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search logs (Ctrl+F)")
+        self.search_input.returnPressed.connect(self.find_next)
+        self.search_input.textChanged.connect(self.reset_search)
+        self.search_layout.addWidget(self.search_input)
+
+        self.find_next_button = QPushButton("Next")
+        self.find_next_button.clicked.connect(self.find_next)
+        self.search_layout.addWidget(self.find_next_button)
+
+        self.find_prev_button = QPushButton("Previous")
+        self.find_prev_button.clicked.connect(self.find_prev)
+        self.search_layout.addWidget(self.find_prev_button)
+
+        self.search_layout_widget = QWidget()
+        self.search_layout_widget.setLayout(self.search_layout)
+        self.search_layout_widget.setVisible(False)
+        self.layout.addWidget(self.search_layout_widget)
+
+        # Build output log (single instance)
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
-        self.output_text.setMinimumHeight(200)  # Initial height, will adjust later
+        self.output_text.setMinimumHeight(200)
+        self.output_text.setAcceptRichText(True)  # for color coding
         self.layout.addWidget(self.output_text)
 
-        # Button layout
+        # Button layout (remove duplicate)
         self.button_layout = QHBoxLayout()
         self.action_button = QPushButton("Cancel Build")
         self.action_button.clicked.connect(self.cancel_build)
@@ -52,6 +85,8 @@ class BuildWindowDialog(QDialog):
         self.setLayout(self.layout)
 
     def start_build(self):
+        self.output_text.clear()
+
         try:
             if self.build_in_progress:
                 self.append_output("A build is already in progress.")
@@ -63,8 +98,6 @@ class BuildWindowDialog(QDialog):
             self.process.finished.connect(self.build_finished)
             self.process.errorOccurred.connect(self.handle_error)
 
-            # This was AI suggestion that I accepted and now looking at it I cringe a bit.
-            # But it works so for now it stays.
             command = self.builder.get_build_command()
             program = command[0]
             arguments = command[1:]
@@ -79,10 +112,10 @@ class BuildWindowDialog(QDialog):
             self.action_button.clicked.connect(self.cancel_build)
             if not self.process.waitForStarted(5000):
                 raise Exception(
-                    f"Failed to start process: {self.process.errorString()}"
+                    f"ERROR: Failed to start process: {self.process.errorString()}"
                 )
         except Exception as e:
-            self.append_output(f"Failed to start build: {str(e)}")
+            self.append_output(f"ERROR: Failed to start build: {str(e)}")
             print(f"Build start failed: {str(e)}", exc_info=True)
             self.build_finished(-1, QProcess.ExitStatus.CrashExit)
 
@@ -99,12 +132,12 @@ class BuildWindowDialog(QDialog):
     def cancel_build(self):
         """Immediately force-cancel the running build."""
         if not self.process or self.process.state() == QProcess.ProcessState.NotRunning:
-            self.append_output("\nNo active build process to cancel.")
+            self.append_output("\nWARNING: No active build process to cancel.")
             return
 
         try:
             self.action_button.setEnabled(False)
-            self.append_output("\nCancelling build (forcing termination)...")
+            self.append_output("\nWARNING: Cancelling build (forcing termination)...")
             print("Attempting to force-cancel build")
 
             pid = self.process.processId()
@@ -116,7 +149,7 @@ class BuildWindowDialog(QDialog):
                     text=True,
                 )
                 if result.returncode == 0:
-                    self.append_output("Build process and children terminated.")
+                    self.append_output("SUCCESS: Build process and children terminated.")
                     print(f"Process {pid} and children terminated via taskkill.")
                 else:
                     self.append_output(f"WARNING: Termination failed: {result.stderr}")
@@ -124,7 +157,7 @@ class BuildWindowDialog(QDialog):
             else:
                 # On Unix-like systems, kill the process group
                 os.killpg(os.getpgid(pid), 9)  # SIGKILL
-                self.append_output("Build process and children terminated.")
+                self.append_output("SUCCESS: Build process and children terminated.")
                 print(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
 
             # Wait briefly to confirm termination
@@ -134,7 +167,7 @@ class BuildWindowDialog(QDialog):
                 print(f"Process {pid} may not have terminated.")
 
         except Exception as e:
-            self.append_output(f"Cancel failed: {str(e)}")
+            self.append_output(f"ERROR: Cancel failed: {str(e)}")
             print(f"Force cancel failed: {str(e)}", exc_info=True)
         finally:
             self.reset_after_cancel()
@@ -142,7 +175,7 @@ class BuildWindowDialog(QDialog):
     def reset_after_cancel(self):
         self.build_in_progress = False
         if self.process:
-            self.process.readyReadStandardOutput.disconnect()  # Stop output processing
+            self.process.readyReadStandardOutput.disconnect()
         self.action_button.setText("Retry Build")
         self.action_button.clicked.disconnect()
         self.action_button.clicked.connect(self.start_build)
@@ -158,31 +191,21 @@ class BuildWindowDialog(QDialog):
             self.process = None
         event.accept()
 
-    def handle_output(self):
-        """Handle output from the QProcess."""
-        data = (
-            self.process.readAllStandardOutput()
-            .data()
-            .decode("utf-8", errors="replace")
-        )
-        self.append_output(data)
-        print(f"Process output: {data.strip()}")
-
-    def handle_error(self, error):
+    def handle_error(self):
         """Handle QProcess errors."""
-        self.append_output(f"Process error: {self.process.errorString()}\n")
-        print(f"Process error {error}: {self.process.errorString()}")
+        self.append_output(f"ERROR: Process error: {self.process.errorString()}\n")
+        print(f"Process error: {self.process.errorString()}")
 
     def build_finished(self, exit_code, exit_status):
         """Handle build completion."""
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
-            self.append_output("\nBUILD COMPLETED SUCCESSFULLY")
+            self.append_output("\nSUCCESS: BUILD COMPLETED SUCCESSFULLY")
             print("Build completed successfully")
             self.action_button.setText("Close")
             self.build_ready_signal.emit(str(self.builder.output_dir))
             self.action_button.clicked.connect(self.accept)
         else:
-            self.append_output(f"\nBUILD FAILED (Exit code: {exit_code})")
+            self.append_output(f"\nERROR: BUILD FAILED (Exit code: {exit_code})")
             print(f"Build failed with exit code {exit_code}")
             self.action_button.setText("Close")
 
@@ -192,11 +215,77 @@ class BuildWindowDialog(QDialog):
         self.action_button.setEnabled(True)
 
     def append_output(self, text: str):
-        """Append text to the output widget."""
         try:
-            self.output_text.append(text.strip())
+            lines = text.strip().split("\n")
+            for line in lines:
+                if not line.strip():
+                    continue
+                if self.filter_streaming and "LOGSTREAMING:" in line.upper():
+                    continue  # Skip LogStreaming lines if filter enabled
+                line_upper = line.upper()
+                if ":" in line:
+                    category = line.split(":", 1)[0]
+                    formatted_line = f"<b>{category}</b>:{line[len(category) + 1:]}"
+                else:
+                    formatted_line = line
+                if "ERROR:" in line_upper or ": ERROR" in line_upper:
+                    formatted_text = f'<span style="color: red;">{formatted_line}</span>'
+                elif "WARNING:" in line_upper or ": WARNING" in line_upper:
+                    formatted_text = f'<span style="color: orange;">{formatted_line}</span>'
+                elif "SUCCESS:" in line_upper:
+                    formatted_text = f'<span style="color: green;">{formatted_line}</span>'
+                elif "LOGCOOK:" in line_upper or "COOKED PACKAGES" in line_upper:
+                    formatted_text = f'<span style="color: blue;">{formatted_line}</span>'
+                else:
+                    formatted_text = formatted_line
+                self.output_text.append(formatted_text)
             self.output_text.verticalScrollBar().setValue(
                 self.output_text.verticalScrollBar().maximum()
             )
         except Exception as e:
             print(f"Error updating GUI: {str(e)}", exc_info=True)
+
+    def toggle_filter(self, state):
+        self.filter_streaming = state == 2  # Checked state
+
+    def keyPressEvent(self, event):
+        """Handle Ctrl+F to toggle search bar."""
+        if event.key() == Qt.Key.Key_F and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.search_layout_widget.setVisible(not self.search_layout_widget.isVisible())
+            if self.search_layout_widget.isVisible():
+                self.search_input.setFocus()
+                self.search_input.selectAll()
+            else:
+                self.output_text.setFocus()
+        else:
+            super().keyPressEvent(event)
+
+    def find_next(self):
+        """Find the next occurrence of the search query."""
+        query = self.search_input.text()
+        if query:
+            found = self.output_text.find(query)
+            if not found:
+                # Wrap around to the start
+                cursor = self.output_text.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.Start)
+                self.output_text.setTextCursor(cursor)
+                self.output_text.find(query)
+
+    def find_prev(self):
+        """Find the previous occurrence of the search query."""
+        query = self.search_input.text()
+        if query:
+            found = self.output_text.find(query, QTextDocument.FindFlag.FindBackward)
+            if not found:
+                # Wrap around to the end
+                cursor = self.output_text.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                self.output_text.setTextCursor(cursor)
+                self.output_text.find(query, QTextDocument.FindFlag.FindBackward)
+
+    def reset_search(self):
+        """Reset the cursor when the search query changes."""
+        cursor = self.output_text.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        self.output_text.setTextCursor(cursor)

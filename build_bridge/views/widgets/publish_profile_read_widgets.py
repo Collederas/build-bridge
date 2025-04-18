@@ -49,7 +49,7 @@ class PublishProfileListWidget(QWidget):
         self.refresh_button.setToolTip(
             "Rescan the currently monitored build directory for changes"
         )
-        self.refresh_button.clicked.connect(lambda: self.refresh_builds())
+        self.refresh_button.clicked.connect(self.refresh_builds)
         self.refresh_button.setSizePolicy(
             QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
         )
@@ -96,25 +96,25 @@ class PublishProfileListWidget(QWidget):
         Refreshes the list of builds displayed by scanning the monitored directory.
         Clears previous entries and shows/hides the 'No builds' message.
         """
-
-        if new_dir is not None:
-            # Update the instance's directory path if a new one was passed
+        print(f"=====NEW DIR: {new_dir}=====")
+        
+        # Update monitored_directory only if a new valid directory is provided
+        if new_dir is not None and os.path.isdir(new_dir):
             print(f"  - Updating monitored directory to: {new_dir}")
             self.monitored_directory = new_dir
+        else:
+            print(f"  - Keeping existing monitored directory: {self.monitored_directory}")
 
+        # Use the current monitored_directory for scanning
         dir_to_scan = self.monitored_directory
         print(f"  - Refreshing based on directory: {dir_to_scan}")
 
-        # --- 1. ALWAYS Clear existing widgets FIRST ---
+        # --- 1. Clear existing widgets ---
         while self.vbox.count():
             child = self.vbox.takeAt(0)
             if child.widget():
                 print(f"  - Clearing widget: {child.widget()}")
                 child.widget().deleteLater()
-        # --- End Clearing ---
-
-        # Update monitored directory path
-        self.monitored_directory = new_dir
 
         # --- 2. Check if the directory is valid ---
         is_valid_dir = False
@@ -123,13 +123,11 @@ class PublishProfileListWidget(QWidget):
             print(f"  - Directory '{dir_to_scan}' is valid.")
         else:
             print(f"  - Directory '{dir_to_scan}' is invalid or None.")
-            # Update label text if needed
-            if not dir_to_scan:
-                self.empty_message_label.setText("Builds directory not set.")
-            else:
-                self.empty_message_label.setText(f"Directory not found:\n{dir_to_scan}")
+            self.empty_message_label.setText(
+                "Builds directory not set." if not dir_to_scan else f"Directory not found:\n{dir_to_scan}"
+            )
 
-        # If directory is invalid, ensure UI shows empty state and return
+        # If directory is invalid, show empty state and return
         if not is_valid_dir:
             self.scroll_area.setVisible(False)
             self.empty_message_label.setVisible(True)
@@ -139,25 +137,18 @@ class PublishProfileListWidget(QWidget):
         # --- 3. Populate builds if directory is valid ---
         builds_found = False
         try:
-            # List directory contents, handle potential permission errors
             entries = sorted(os.listdir(dir_to_scan))
             print(f"  - Scanning entries: {entries}")
 
             for entry in entries:
                 full_path = os.path.join(dir_to_scan, entry)
-
-                # Filter out non-directories and specific config folders
-                # Check if entry name matches any StoreEnum value
                 is_config_dir = any(entry == store.value for store in StoreEnum)
 
                 if os.path.isdir(full_path) and not is_config_dir:
                     print(f"    - Found potential build directory: {entry}")
-
-                    # ADDING WIDGET ENTRY
                     widget = PublishProfileEntry(full_path, session=self.session)
                     self.vbox.addWidget(widget)
                     builds_found = True
-
                 elif is_config_dir:
                     print(f"    - Skipping config directory: {entry}")
                 else:
@@ -166,28 +157,25 @@ class PublishProfileListWidget(QWidget):
         except OSError as e:
             print(f"  - Error listing directory '{dir_to_scan}': {e}")
             self.empty_message_label.setText(f"Error reading directory:\n{e}")
-            builds_found = False  # Ensure empty state is shown on error
-        except Exception as e:  # Catch other potential errors
+            builds_found = False
+        except Exception as e:
             print(f"  - Unexpected error processing directory '{dir_to_scan}': {e}")
-            self.empty_message_label.setText(f"An unexpected error occurred.")
+            self.empty_message_label.setText("An unexpected error occurred.")
             builds_found = False
 
         self.vbox.addStretch(1)
 
-        # --- 4. Set final visibility based on whether builds were found ---
+        # --- 4. Set final visibility ---
         if builds_found:
             print("  - Builds found. Showing scroll area, hiding empty message.")
             self.scroll_area.setVisible(True)
             self.empty_message_label.setVisible(False)
         else:
             print("  - No builds found. Hiding scroll area, showing empty message.")
-            if is_valid_dir:  # Only reset text if the dir was valid but empty
-                self.empty_message_label.setText(
-                    "No builds available in the monitored directory."
-                )
+            if is_valid_dir:
+                self.empty_message_label.setText("No builds available in the monitored directory.")
             self.scroll_area.setVisible(False)
             self.empty_message_label.setVisible(True)
-
 
 class PublishProfileEntry(QWidget):
     store_publishers = {StoreEnum.itch: ItchPublisher, StoreEnum.steam: SteamPublisher}

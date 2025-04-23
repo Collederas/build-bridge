@@ -118,7 +118,6 @@ class GenericUploadDialog(QDialog):
 
         self.append_log(f"Starting process via cmd /c...")
         self.append_log(f"Executable: {self.executable}")
-        self.append_log(f"Arguments: {' '.join(self.arguments)}")
         self.append_log("-" * 20)
 
         # Run steamcmd through cmd /c

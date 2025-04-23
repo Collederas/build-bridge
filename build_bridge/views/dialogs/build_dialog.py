@@ -20,7 +20,7 @@ from build_bridge.utils.paths import get_resource_path
 
 
 class BuildWindowDialog(QDialog):
-    build_ready_signal = pyqtSignal(str)  # payload = build_dir
+    build_ready_signal = pyqtSignal()
 
     def __init__(self, builder: UnrealBuilder, parent=None):
         super().__init__(parent)
@@ -104,7 +104,7 @@ class BuildWindowDialog(QDialog):
 
             self.append_output("Starting build...\n")
             self.append_output(f"Command: {program} {' '.join(arguments)}\n")
-            print(f"Starting build with command: {program} {' '.join(arguments)}")
+            print(f"Starting build: {program} {' '.join(arguments)}")
 
             self.process.start(program, arguments)
 
@@ -202,7 +202,7 @@ class BuildWindowDialog(QDialog):
             self.append_output("\nSUCCESS: BUILD COMPLETED SUCCESSFULLY")
             print("Build completed successfully")
             self.action_button.setText("Close")
-            self.build_ready_signal.emit(str(self.builder.output_dir))
+            self.build_ready_signal.emit()
             self.action_button.clicked.connect(self.accept)
         else:
             self.append_output(f"\nERROR: BUILD FAILED (Exit code: {exit_code})")

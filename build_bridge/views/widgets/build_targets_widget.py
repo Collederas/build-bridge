@@ -30,7 +30,7 @@ from build_bridge.views.dialogs.build_target_setup_dialog import BuildTargetSetu
 class BuildTargetListWidget(QWidget):
     """Lists the available Build Targets or shows an Add button."""
 
-    build_ready_signal = pyqtSignal(str)
+    build_ready_signal = pyqtSignal()
 
     def __init__(self, build_target_id: int | None, parent=None):  # Accept ID
         super().__init__()

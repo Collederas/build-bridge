@@ -126,8 +126,8 @@ class BuildBridgeWindow(QMainWindow):
     def focusInEvent(self, a0):
         return super().focusInEvent(a0)
 
-    def refresh_builds(self, build_dir):
-        self.build_list_widget.refresh_builds(build_dir)
+    def refresh_builds(self):
+        self.build_list_widget.refresh_builds()
 
     def closeEvent(self, event):
         if self.vcs_client:

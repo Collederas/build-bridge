@@ -100,6 +100,10 @@ class SteamPublishProfile(PublishProfile):
 
     depots = Column(JSON, nullable=False, default=dict)
 
+    playtest_app_id = Column(Integer, nullable=True)
+    playtest_description = Column(String, nullable=True)
+    playtest_depots = Column(JSON, nullable=True)
+
     steam_config_id = Column(Integer, ForeignKey("steam_config.id"), nullable=False)
     steam_config = relationship("SteamConfig", back_populates="publish_profiles")
 

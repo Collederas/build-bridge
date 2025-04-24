@@ -154,7 +154,7 @@ class SteamPublishProfileWidget(QWidget):
                 # as most likely thing didn't change that much
                 existing_profile = self.session.query(PublishProfile).filter_by(
                     project=self.publish_profile.project, store_type=StoreEnum.steam
-                ).first()
+                ).order_by(PublishProfile.build_id.desc()).first()
 
                 app_id = (
                     self.publish_profile.app_id
@@ -220,6 +220,7 @@ class SteamPublishProfileWidget(QWidget):
         This is a bit pointless now because in settings -for now- only
         1 config can be added.
         """
+        self.auth_combo.clear()
         steam_config = self.session.query(SteamConfig).first()
 
         try:
@@ -228,8 +229,8 @@ class SteamPublishProfileWidget(QWidget):
             else:
                 self.auth_combo.setEnabled(True)
                 self.auth_combo.addItem(steam_config.username, steam_config.id)
-
-            self.auth_combo.setCurrentIndex(1)
+            
+            self.auth_combo.setCurrentIndex(0)
 
         except Exception as e:
             QMessageBox.critical(
@@ -310,7 +311,7 @@ class SteamPublishProfileWidget(QWidget):
         start_dir = (
             current_path_item.text()
             if current_path_item and current_path_item.text()
-            else ""
+            else str(self.publish_profile.project.builds_path)
         )  # Start Browse from current path if set
 
         path = QFileDialog.getExistingDirectory(

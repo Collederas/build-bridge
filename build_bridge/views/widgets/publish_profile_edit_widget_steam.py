@@ -224,11 +224,9 @@ class SteamPublishProfileWidget(QWidget):
 
         try:
             if not steam_config:
-                self.auth_combo.addItem("No Steam accounts configured", None)
                 self.auth_combo.setEnabled(False)
             else:
                 self.auth_combo.setEnabled(True)
-                self.auth_combo.addItem("Select Auth Profile...", None)
                 self.auth_combo.addItem(steam_config.username, steam_config.id)
 
             self.auth_combo.setCurrentIndex(1)

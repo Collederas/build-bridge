@@ -155,10 +155,10 @@ class SteamPublishProfileWidget(QWidget):
 
             # REGULAR TAB
             existing_profile = None
-            if self.publish_profile.project and not self.publish_profile.app_id: # Only fetch defaults if App ID is missing
+            if self.publish_profile.project:
                 existing_profile = self.session.query(SteamPublishProfile).filter(
                     SteamPublishProfile.project == self.publish_profile.project,
-                    SteamPublishProfile.id != self.publish_profile.id # Exclude self
+                    SteamPublishProfile.build_id == self.publish_profile.build_id
                     ).order_by(SteamPublishProfile.build_id.desc()).first()
 
 
@@ -167,11 +167,17 @@ class SteamPublishProfileWidget(QWidget):
                      (existing_profile and existing_profile.app_id) or \
                      480 # Default to Spacewar
             self.app_id_input.setValue(app_id)
+            
+            description = ""
 
             # Regular Description
-            description = self.publish_profile.description or \
-                          (existing_profile and existing_profile.description) or \
-                          ""
+            if existing_profile:
+                if existing_desc := existing_profile.description:
+                    description = existing_desc
+                else:
+                    description = f"v{existing_profile.build_id}"
+            
+                
             self.description_input.setText(description)
 
             # Regular Depots
@@ -186,12 +192,8 @@ class SteamPublishProfileWidget(QWidget):
                               (existing_profile and getattr(existing_profile, 'playtest_app_id', None)) or \
                               0
             self.playtest_app_id_input.setValue(playtest_app_id)
-
-            playtest_description = getattr(self.publish_profile, 'playtest_description', None) or \
-                                   (existing_profile and getattr(existing_profile, 'playtest_description', None)) or \
-                                   ""
             
-            self.playtest_description_input.setText(playtest_description)
+            self.playtest_description_input.setText(description)
 
             playtest_depots = getattr(self.publish_profile, 'playtest_depots', None) or \
                               (existing_profile and getattr(existing_profile, 'playtest_depots', None)) or \

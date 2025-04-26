@@ -15,9 +15,9 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QVBoxLayout,
     QCheckBox,
-    QGridLayout
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 
 from build_bridge.models import ItchPublishProfile, SteamPublishProfile, StoreEnum
 from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
@@ -70,7 +70,6 @@ class PublishProfileListWidget(QWidget):
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.refresh_button.setFixedWidth(100)  # Fixed width to prevent stretching
-        self.refresh_button.setStyleSheet(REFRESH_BUTTON_STYLE)  # Apply style
         main_layout.addWidget(self.refresh_button)
         # --- End Refresh Button ---
 
@@ -102,7 +101,6 @@ class PublishProfileListWidget(QWidget):
         self.empty_message_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.empty_message_label.setStyleSheet(EMPTY_MESSAGE_STYLE)  # Apply style
 
         main_layout.addWidget(self.scroll_area)
         main_layout.addWidget(self.empty_message_label)
@@ -217,7 +215,7 @@ class PublishProfileEntry(QWidget):
 
         # First row: Label and Platform Selector with Checkbox
         self.top_row = QHBoxLayout()
-        self.top_row.setSpacing(10)
+        self.top_row.setSpacing(25)
 
         # Build Label
         project_name_str = "Unknown Project"
@@ -228,10 +226,13 @@ class PublishProfileEntry(QWidget):
         except Exception as e:
             print(f"Error fetching project name: {e}")
 
-        self.label = QLabel(f"{project_name_str} - {self.build_id}")
-        self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        self.label.setWordWrap(True)
-        self.top_row.addWidget(self.label)
+        display_name_font = QFont()
+        display_name_font.setBold(True)
+        self.display_name_label = QLabel(f"{project_name_str} - {self.build_id}")
+        self.display_name_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self.display_name_label.setWordWrap(True)
+        self.display_name_label.setFont(display_name_font)
+        self.top_row.addWidget(self.display_name_label)
 
         # Platform Selector with Checkbox
         self.platform_widget = QWidget()
@@ -257,6 +258,7 @@ class PublishProfileEntry(QWidget):
         self.playtest_checkbox.setVisible(False)
         self.playtest_checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.platform_layout.addWidget(self.playtest_checkbox)
+        self.playtest_checkbox.stateChanged.connect(self.update_publish_button_enabled)
 
         # Prevent the platform layout from stretching unnecessarily
         self.platform_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -279,7 +281,6 @@ class PublishProfileEntry(QWidget):
         browse_archive_button.setFixedHeight(28)
         browse_archive_button.setFixedWidth(70)
         browse_archive_button.clicked.connect(self.browse_archive_directory)
-        browse_archive_button.setStyleSheet(BROWSE_BUTTON_STYLE)
         self.bottom_row.addWidget(browse_archive_button)
 
         self.edit_button = QPushButton("Profile")
@@ -287,7 +288,6 @@ class PublishProfileEntry(QWidget):
         self.edit_button.setFixedHeight(28)
         self.edit_button.setFixedWidth(70)
         self.edit_button.clicked.connect(self.edit_publish_profile)
-        self.edit_button.setStyleSheet(EDIT_BUTTON_STYLE)
         self.bottom_row.addWidget(self.edit_button)
 
         self.publish_button = QPushButton("Publish")
@@ -295,7 +295,6 @@ class PublishProfileEntry(QWidget):
         self.publish_button.setFixedWidth(70)
         self.publish_button.clicked.connect(self.handle_publish)
         self.publish_button.setToolTip("")
-        self.publish_button.setStyleSheet(PUBLISH_BUTTON_STYLE)
         self.bottom_row.addWidget(self.publish_button)
 
         self.main_layout.addLayout(self.bottom_row)

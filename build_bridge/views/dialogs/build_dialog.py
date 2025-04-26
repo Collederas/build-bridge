@@ -27,7 +27,6 @@ class BuildWindowDialog(QDialog):
         self.builder = builder
         self.build_in_progress = False
         self.process = None
-        self.filter_streaming = False  # Initialize filter_streaming
         self.setup_ui()
         self.start_build()
 
@@ -41,10 +40,6 @@ class BuildWindowDialog(QDialog):
         self.layout.setSpacing(5)  # Reduce spacing for a compact look
         self.layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Filter checkbox
-        self.filter_checkbox = QCheckBox("Hide LogStreaming messages")
-        self.filter_checkbox.stateChanged.connect(self.toggle_filter)
-        self.layout.addWidget(self.filter_checkbox)
 
         # Search bar (hidden by default)
         self.search_layout = QHBoxLayout()
@@ -220,8 +215,7 @@ class BuildWindowDialog(QDialog):
             for line in lines:
                 if not line.strip():
                     continue
-                if self.filter_streaming and "LOGSTREAMING:" in line.upper():
-                    continue  # Skip LogStreaming lines if filter enabled
+                
                 line_upper = line.upper()
                 if ":" in line:
                     category = line.split(":", 1)[0]
@@ -244,9 +238,6 @@ class BuildWindowDialog(QDialog):
             )
         except Exception as e:
             print(f"Error updating GUI: {str(e)}", exc_info=True)
-
-    def toggle_filter(self, state):
-        self.filter_streaming = state == 2  # Checked state
 
     def keyPressEvent(self, event):
         """Handle Ctrl+F to toggle search bar."""

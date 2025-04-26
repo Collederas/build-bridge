@@ -40,8 +40,9 @@ def check_steam_success(exit_code: int, log_content: str) -> bool:
 
 class SteamPublisher(BasePublisher):
 
-    def __init__(self, publish_profile: SteamPublishProfile):
+    def __init__(self, publish_profile: SteamPublishProfile,  publish_playtest=False):
         self.publish_profile = publish_profile
+        self.publish_playtest = publish_playtest
 
     def validate_publish_profile(self):
         """Raises InvalidCoinfigurtionError on any fail"""        
@@ -49,6 +50,10 @@ class SteamPublisher(BasePublisher):
             raise InvalidConfigurationError("No publish profile in db.")
 
         steam_config = self.publish_profile.steam_config
+
+        if self.publish_playtest:
+            if any([self.publish_profile.playtest_app_id == 0, not self.publish_profile.playtest_depots]):
+                raise InvalidConfigurationError("Playtest configuration is incomplete.")
 
         if not steam_config:
             raise InvalidConfigurationError(
@@ -63,7 +68,7 @@ class SteamPublisher(BasePublisher):
 
         self.validate_publish_profile()
 
-        configurator = SteamPipeConfigurator(publish_profile=self.publish_profile)
+        configurator = SteamPipeConfigurator(publish_profile=self.publish_profile, publish_playtest=self.publish_playtest)
 
         vdf_path = configurator.create_or_update_vdf_file(content_root=content_dir)
 

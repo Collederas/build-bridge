@@ -14,7 +14,9 @@ from PyQt6.QtWidgets import (
     QSpacerItem,
     QMessageBox,
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QFont
+
 from build_bridge.core.builder.unreal_builder import (
     EngineVersionError,
     ProjectFileNotFoundError,
@@ -64,8 +66,10 @@ class BuildTargetListWidget(QWidget):
         self.content_layout.setContentsMargins(5, 5, 5, 5)
         self.content_layout.setSpacing(8)  # Slightly reduced spacing
 
-        # --- Widgets for the "Build Target Exists" state ---
+        display_name_font = QFont()
+        display_name_font.setBold(True)
         self.target_label = QLabel()
+        self.target_label.setFont(display_name_font)
         self.target_label.setSizePolicy(
             QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred
         )

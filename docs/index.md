@@ -118,15 +118,23 @@ If everything goes well, after you accept the access on your Steam app you shoul
 
 ### Publish Profile
 This dialog (Build List entry -> Profile button):
-        ![Publish Profile Edit Button]({{ 'assets/images/build_list_publish.png' | relative_url }})
+![Publish Profile Edit Button]({{ 'assets/images/build_list_publish.png' | relative_url }})
 allows you to specify the fields that will end up in the vdf file.
-        ![Steam Publish Profile]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
+![Steam Publish Profile]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
 
 Build Bridge automatically creates the required vdf file, using the single file approach (no separation for depots).
 It will place the build files in an auto-generated Steam folder in your Project's Builds directory.
 {: .notice--info }
-/
-        ![Steam Config Folder]({{ 'assets/images/builds_folder.png' | relative_url }})
+![Steam Config Folder]({{ 'assets/images/builds_folder.png' | relative_url }})
+
+#### Playtest
+In version 0.5.0 support for a secondary Steam Profile was added, to allow publishing on to the [Steam Playtest](https://store.steampowered.com/news/group/4145017/view/2954884882167446257) version of your app.
+
+In the Edit Publish Profile dialog, you will find a tab dedicated to the Playtest setup:
+        ![Steam Publish Profile]({{ 'assets/images/playtest_edit.png' | relative_url }})
+
+In order to target this configuration when you press Publish, you need to check the related checkbox (available only when targeting Steam)
+        ![Steam Publish Profile]({{ 'assets/images/playtest_checkbox.png' | relative_url }})
 
 
 ## Itch

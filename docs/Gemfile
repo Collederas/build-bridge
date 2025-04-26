@@ -5,6 +5,8 @@ gem "minimal-mistakes-jekyll"
 gem "kramdown-parser-gfm"
 gem "jekyll-remote-theme"
 gem "wdm", ">= 0.1.0" if Gem.win_platform?
+gem 'base64', '~> 0.1.0'
+gem "bigdecimal"
 
 group :jekyll_plugins do
   gem "jekyll-include-cache"

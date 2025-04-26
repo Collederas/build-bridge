@@ -51,6 +51,10 @@ class SteamPublisher(BasePublisher):
 
         steam_config = self.publish_profile.steam_config
 
+        if self.publish_playtest:
+            if any([self.publish_profile.playtest_app_id == 0, not self.publish_profile.playtest_depots]):
+                raise InvalidConfigurationError("Playtest configuration is incomplete.")
+
         if not steam_config:
             raise InvalidConfigurationError(
                 "Steam configuration is missing. Create one in Settings."

@@ -145,7 +145,7 @@ You can test a connection without butler (as it is done via simple HTTP API call
         ![Itch Config Folder]({{ 'assets/images/settings_itch_testing_success.png' | relative_url }})
 
 ### Publish Profile
-This dialog (Build List entry -> Publish button) allows you to specify the fields that butler uses to publish the build on your game's page.
+This dialog (Build List entry -> Profile button) allows you to specify the fields that butler uses to publish the build on your game's page.
         ![Itch Publish Profile]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
 
 

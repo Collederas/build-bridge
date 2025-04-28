@@ -504,8 +504,6 @@ class PublishProfileEntry(QWidget):
 
             publisher_instance.publish(content_dir=self.build_root)
 
-            QMessageBox.information(self, "Publish Success", f"Successfully published '{self.build_id}' to {selected_store_enum}.")
-
         except InvalidConfigurationError as e:
             QMessageBox.warning(
                 self,

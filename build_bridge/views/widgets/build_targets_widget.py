@@ -1,4 +1,4 @@
-import os
+import os, logging
 from pathlib import Path
 import shutil
 
@@ -176,11 +176,11 @@ class BuildTargetListWidget(QWidget):
                     self.build_button.setEnabled(True)
                     self._set_widgets_visibility(True)
                 else:
-                    print(f"BuildTarget with ID {self._build_target_id} not found.")
+                    logging.info(f"BuildTarget with ID {self._build_target_id} not found.")
                     self._build_target_id = None  # Reset ID if not found
                     self._set_widgets_visibility(False)  # Show only Add button centered
         except Exception as e:
-            print(
+            logging.info(
                 f"Error loading BuildTarget ID {self._build_target_id}: {e}",
                 exc_info=True,
             )
@@ -201,7 +201,7 @@ class BuildTargetListWidget(QWidget):
         dialog.exec()
 
     def on_new_build_target(self, new_build_target_id: int):
-        print(f"Received new/updated build target ID: {new_build_target_id}")
+        logging.info(f"Received new/updated build target ID: {new_build_target_id}")
         self._build_target_id = new_build_target_id
         self._load_and_display_target()  # Refresh UI
 
@@ -273,7 +273,7 @@ class BuildTargetListWidget(QWidget):
                                         "Unreal Engine base path is not configured or invalid for this specific Build Target.\n\n"
                                         "Please use the 'Edit' button to configure it.")
                     return # Stop the build process
-                print(f"Using Unreal Engine Path from Build Target config: {engine_base_path}")
+                logging.info(f"Using Unreal Engine Path from Build Target config: {engine_base_path}")
 
                 project_build_dir_root = Path(builds_root) / project_name / release_name
 
@@ -293,11 +293,11 @@ class BuildTargetListWidget(QWidget):
 
                     try:
                         shutil.rmtree(project_build_dir_root)
-                        print(
+                        logging.info(
                             f"Removed existing build directory: {project_build_dir_root}"
                         )
                     except Exception as e:
-                        print(
+                        logging.info(
                             f"Failed to delete existing build directory: {e}",
                             exc_info=True,
                         )
@@ -314,7 +314,7 @@ class BuildTargetListWidget(QWidget):
                     build_type_val = current_build_target.build_type.value
                     optimize_steam = current_build_target.optimize_for_steam
                 except AttributeError as e:
-                    print(f"Missing build target attribute: {e}", exc_info=True)
+                    logging.info(f"Missing build target attribute: {e}", exc_info=True)
                     QMessageBox.critical(
                         self,
                         "Configuration Error",
@@ -355,7 +355,7 @@ class BuildTargetListWidget(QWidget):
                     )
                     return
                 except Exception as e:  # Catch other builder init errors
-                    print(
+                    logging.info(
                         f"Unexpected error creating UnrealBuilder: {e}", exc_info=True
                     )
                     QMessageBox.critical(
@@ -366,7 +366,7 @@ class BuildTargetListWidget(QWidget):
                     return
 
                 # Show the build progress dialog
-                print(f"Starting build dialog for release '{release_name}'...")
+                logging.info(f"Starting build dialog for release '{release_name}'...")
                 dialog = BuildWindowDialog(unreal_builder, parent=self)
                 try:
                     # dialog.build_ready_signal.disconnect(self.build_ready_signal) # If needed
@@ -380,7 +380,7 @@ class BuildTargetListWidget(QWidget):
 
         except Exception as e:
             # Catch errors during session management or top-level logic
-            print(f"Error during trigger_build: {e}", exc_info=True)
+            logging.info(f"Error during trigger_build: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
                 "Error",

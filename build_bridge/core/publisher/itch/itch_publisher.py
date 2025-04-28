@@ -64,7 +64,7 @@ class ItchPublisher(BasePublisher):
             content_dir: Path to the directory containing the built game files.
             build_id: The version or identifier for this build (e.g., "1.0.0").
         """
-        print(f"Preparing Itch.io publish for build: {self.publish_profile.build_id}")
+        logging.info(f"Preparing Itch.io publish for build: {self.publish_profile.build_id}")
 
         # --- Construct Butler Command Arguments ---
         # Note: command executable is passed separately to QProcess
@@ -79,8 +79,8 @@ class ItchPublisher(BasePublisher):
             self.publish_profile.build_id,
         ]
 
-        print(f"Command: {butler_exe} {' '.join(arguments)}")
-        print(f"Target: {itch_target}")
+        logging.info(f"Command: {butler_exe} {' '.join(arguments)}")
+        logging.info(f"Target: {itch_target}")
         # --- Launch Dialog ---
         try:
             dialog = GenericUploadDialog(
@@ -104,11 +104,11 @@ class ItchPublisher(BasePublisher):
             if result == QDialog.DialogCode.Rejected:
                 # Check if rejection was due to failure or cancellation
                 # The dialog itself should log the specific reason
-                print(
+                logging.info(
                     "Itch.io upload dialog closed with Rejected status (failed or cancelled)."
                 )
             else:
-                print(
+                logging.info(
                     "Itch.io upload dialog closed with Accepted status (likely successful)."
                 )
 
@@ -118,5 +118,5 @@ class ItchPublisher(BasePublisher):
                 f"Butler executable not found at '{butler_exe}'."
             )
         except Exception as e:
-            print(f"An error occurred launching or running the Itch upload dialog: {e}")
+            logging.info(f"An error occurred launching or running the Itch upload dialog: {e}")
             raise

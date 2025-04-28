@@ -1,4 +1,4 @@
-import os
+import os, logging
 from tkinter import N
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
@@ -34,7 +34,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(600, 400)
-        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         self.default_page = default_page
@@ -55,7 +55,7 @@ class SettingsDialog(QDialog):
 
             # If no project exists, create one
             if not self.project:
-                print("Settings: No project found, creating new project")
+                logging.info("Settings: No project found, creating new project")
                 self.project = Project()
                 self.project.name = ""
                 self.project.source_dir = ""
@@ -63,12 +63,12 @@ class SettingsDialog(QDialog):
                 self.session.add(self.project)
                 self.session.commit()  # Save immediately to ensure it has an ID
             else:
-                print(f"Settings: Found existing project: '{self.project.name}'")
+                logging.info(f"Settings: Found existing project: '{self.project.name}'")
                 # Ensure project is attached to our session
                 if self.project not in self.session:
                     self.session.add(self.project)
         except Exception as e:
-            print("Settings: Error loading project: {str(e)}")
+            logging.info("Settings: Error loading project: {str(e)}")
             self.project = None
 
     def setup_ui(self):
@@ -239,7 +239,7 @@ class SettingsDialog(QDialog):
     def load_form_data(self):
         """Load existing data from build_bridge.database into UI fields."""
         if not self.project:
-            print("Settings: Warning: No project available to load data from")
+            logging.info("Settings: Warning: No project available to load data from")
             return
 
         try:
@@ -256,7 +256,7 @@ class SettingsDialog(QDialog):
             )
 
         except Exception as e:
-            print("Settings: Error loading form data: {str(e)}")
+            logging.info("Settings: Error loading form data: {str(e)}")
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
@@ -289,10 +289,10 @@ class SettingsDialog(QDialog):
             #     )
             #     self.perforce_config.client = self.p4_client_input.text().strip()
             #     self.session.add(self.perforce_config)
-            #     print("Settings: saving vcs settings: user {self.p4_user_input.text().strip()}")
+            #     logging.info("Settings: saving vcs settings: user {self.p4_user_input.text().strip()}")
 
             # except Exception as e:
-            #     print("Settings: Error saving Perforce settings: {str(e)}")
+            #     logging.info("Settings: Error saving Perforce settings: {str(e)}")
             #     QMessageBox.critical(
             #         self, "Error", f"Failed to save Perforce settings: {str(e)}"
             #     )
@@ -309,7 +309,7 @@ class SettingsDialog(QDialog):
       
     
                 self.steam_config_widget.store_password()
-                print(
+                logging.info(
                     "Settings: Steam settings validated. Keyring saved."
                 )
 
@@ -317,7 +317,7 @@ class SettingsDialog(QDialog):
 
             except (InvalidConfigurationError, ValueError) as e:
                 error_msg = f"Failed to save Steam settings: {str(e)}"
-                print(error_msg)
+                logging.info(error_msg)
                 errors_occurred.append(error_msg)
 
 
@@ -329,12 +329,12 @@ class SettingsDialog(QDialog):
                 self.session.add(self.itch_config_widget.itch_config)
                 
                 self.itch_config_widget.store_api_key()
-                print(
+                logging.info(
                     "Settings: Itch settings validated. Keyring saved."
                 )
             except (InvalidConfigurationError, ValueError) as e:
                 error_msg = f"Failed to save Itch.io settings: {str(e)}"
-                print(error_msg)
+                logging.info(error_msg)
                 errors_occurred.append(error_msg)
 
             # Commit changes to the database and ensure they're flushed
@@ -345,20 +345,20 @@ class SettingsDialog(QDialog):
             if self._initial_archive_dir != self.project.archive_directory:
                 self.monitored_dir_changed_signal.emit(str(self.project.builds_path))
 
-            print("Settings: Commit successful")
+            logging.info("Settings: Commit successful")
 
-            print(
+            logging.info(
                 f"Settings: Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Builds will be stored in: '{self.project.builds_path}'"
             )
 
             if errors_occurred:
                 # Inform user about non-critical failures AFTER successful commit of essentials
-                print(
+                logging.info(
                     "Settings: Errors occurred saving some settings:\n\n"
                     + "\n".join(errors_occurred)
                 )
             else:
-                print(
+                logging.info(
                     "Settings: All settings saved successfully. User can publish to all platforms!"
                 )
 
@@ -366,12 +366,12 @@ class SettingsDialog(QDialog):
         except Exception as e:
             # CRITICAL FAILURE -> causes settings roll back
             # This catches errors during essential data preparation or the final commit itself.
-            print(f"CRITICAL Error saving settings: {str(e)}")
+            logging.info(f"CRITICAL Error saving settings: {str(e)}")
             try:
                 self.session.rollback()
-                print("Session rolled back due to critical error.")
+                logging.info("Session rolled back due to critical error.")
             except Exception as rb_e:
-                print(f"Error during rollback: {rb_e}")
+                logging.info(f"Error during rollback: {rb_e}")
 
     def accept(self):
         """User clicked Apply - close dialog but keep session open"""

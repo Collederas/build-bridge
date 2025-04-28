@@ -1,4 +1,5 @@
-from turtle import pd
+import logging
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -301,7 +302,7 @@ class SteamPublishProfileWidget(QWidget):
         """Load depots into the specified table."""
         table_widget.setRowCount(0) # Clear existing rows
         if not isinstance(depots_dict, dict):
-            print(f"Warning: Depots data is not a dictionary: {depots_dict}")
+            logging.info(f"Warning: Depots data is not a dictionary: {depots_dict}")
             return
         for depot_id, depot_path in depots_dict.items():
             # Pass the target table to _insert_depot_row

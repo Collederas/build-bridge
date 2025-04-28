@@ -27,7 +27,7 @@ class P4Client(VCSClient):
 
     def _connect(self) -> None:
         if not self.is_connected:
-            print("p4 not connected. Attempting connection now.")
+            logging.info("p4 not connected. Attempting connection now.")
             if self.config:
                 self.p4.port = self.config.server_address
                 self.p4.user = self.config.user
@@ -38,12 +38,12 @@ class P4Client(VCSClient):
                 self.p4.connect()
                 if self.p4.password:  # Only run login if a password is set
                     self.p4.run_login()
-                    print(f"p4 connection established. Logged in as {self.p4.user}")
+                    logging.info(f"p4 connection established. Logged in as {self.p4.user}")
             except P4Exception as e:
-                print(e)
+                logging.info(e)
                 raise ConnectionError(f"P4 connection error: {e}")
         else:
-            print("Already connected")
+            logging.info("Already connected")
 
     def _disconnect(self):
         self.p4.disconnect()

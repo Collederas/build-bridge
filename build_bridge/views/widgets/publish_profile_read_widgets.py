@@ -1,4 +1,4 @@
-import os
+import os, logging
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -113,33 +113,33 @@ class PublishProfileListWidget(QWidget):
         Refreshes the list of builds displayed by scanning the monitored directory.
         Clears previous entries and shows/hides the 'No builds' message.
         """
-        print(f"=====NEW DIR: {new_dir}=====")
+        logging.info(f"=====NEW DIR: {new_dir}=====")
         
         # Update monitored_directory only if a new valid directory is provided
         if new_dir is not None and os.path.isdir(new_dir):
-            print(f"  - Updating monitored directory to: {new_dir}")
+            logging.info(f"  - Updating monitored directory to: {new_dir}")
             self.monitored_directory = new_dir
         else:
-            print(f"  - Keeping existing monitored directory: {self.monitored_directory}")
+            logging.info(f"  - Keeping existing monitored directory: {self.monitored_directory}")
 
         # Use the current monitored_directory for scanning
         dir_to_scan = self.monitored_directory
-        print(f"  - Refreshing based on directory: {dir_to_scan}")
+        logging.info(f"  - Refreshing based on directory: {dir_to_scan}")
 
         # --- 1. Clear existing widgets ---
         while self.vbox.count():
             child = self.vbox.takeAt(0)
             if child.widget():
-                print(f"  - Clearing widget: {child.widget()}")
+                logging.info(f"  - Clearing widget: {child.widget()}")
                 child.widget().deleteLater()
 
         # --- 2. Check if the directory is valid ---
         is_valid_dir = False
         if dir_to_scan and os.path.isdir(dir_to_scan):
             is_valid_dir = True
-            print(f"  - Directory '{dir_to_scan}' is valid.")
+            logging.info(f"  - Directory '{dir_to_scan}' is valid.")
         else:
-            print(f"  - Directory '{dir_to_scan}' is invalid or None.")
+            logging.info(f"  - Directory '{dir_to_scan}' is invalid or None.")
             self.empty_message_label.setText(
                 "Builds directory not set." if not dir_to_scan else f"Directory not found:\n{dir_to_scan}"
             )
@@ -147,35 +147,35 @@ class PublishProfileListWidget(QWidget):
         # If directory is invalid, show empty state and return
         if not is_valid_dir:
             self.empty_message_label.setVisible(True)
-            print("  - Showing empty message (invalid dir), returning.")
+            logging.info("  - Showing empty message (invalid dir), returning.")
             return
 
         # --- 3. Populate builds if directory is valid ---
         builds_found = False
         try:
             entries = sorted(os.listdir(dir_to_scan))
-            print(f"  - Scanning entries: {entries}")
+            logging.info(f"  - Scanning entries: {entries}")
 
             for entry in entries:
                 full_path = os.path.join(dir_to_scan, entry)
                 is_config_dir = any(entry == store.value for store in StoreEnum)
 
                 if os.path.isdir(full_path) and not is_config_dir:
-                    print(f"    - Found potential build directory: {entry}")
+                    logging.info(f"    - Found potential build directory: {entry}")
                     widget = PublishProfileEntry(full_path, session=self.session)
                     self.vbox.addWidget(widget)
                     builds_found = True
                 elif is_config_dir:
-                    print(f"    - Skipping config directory: {entry}")
+                    logging.info(f"    - Skipping config directory: {entry}")
                 else:
-                    print(f"    - Skipping non-directory entry: {entry}")
+                    logging.info(f"    - Skipping non-directory entry: {entry}")
 
         except OSError as e:
-            print(f"  - Error listing directory '{dir_to_scan}': {e}")
+            logging.info(f"  - Error listing directory '{dir_to_scan}': {e}")
             self.empty_message_label.setText(f"Error reading directory:\n{e}")
             builds_found = False
         except Exception as e:
-            print(f"  - Unexpected error processing directory '{dir_to_scan}': {e}")
+            logging.info(f"  - Unexpected error processing directory '{dir_to_scan}': {e}")
             self.empty_message_label.setText("An unexpected error occurred.")
             builds_found = False
 
@@ -203,7 +203,7 @@ class PublishProfileEntry(QWidget):
             self.build_id = os.path.basename(build_root)
         else:
             self.build_id = "Invalid Path"
-            print(
+            logging.info(
                 f"Warning: Invalid build_root passed to PublishTargetEntry: {build_root}"
             )
 
@@ -224,7 +224,7 @@ class PublishProfileEntry(QWidget):
             if project:
                 project_name_str = project.name
         except Exception as e:
-            print(f"Error fetching project name: {e}")
+            logging.info(f"Error fetching project name: {e}")
 
         display_name_font = QFont()
         display_name_font.setBold(True)
@@ -389,7 +389,7 @@ class PublishProfileEntry(QWidget):
             return False
         except Exception as e:
             self.publish_button.setToolTip(f"Unexpected validation error: {e}")
-            print(f"Unexpected validation error: {e}")
+            logging.info(f"Unexpected validation error: {e}")
             return False
 
     def validate_build_content(self):
@@ -443,7 +443,7 @@ class PublishProfileEntry(QWidget):
                     QMessageBox.warning(self, "Unsupported OS", "Unsupported OS")
                     return
             except Exception as e:
-                print(f"Error opening directory {self.build_root}: {e}")
+                logging.info(f"Error opening directory {self.build_root}: {e}")
                 QMessageBox.warning(
                     self,
                     "Error",
@@ -497,10 +497,10 @@ class PublishProfileEntry(QWidget):
                     self.publish_profile,
                     publish_playtest=publish_playtest_value
                 )
-                print(f"Attempting to publish build '{self.build_id}' to Steam (Playtest: {publish_playtest_value})...")
+                logging.info(f"Attempting to publish build '{self.build_id}' to Steam (Playtest: {publish_playtest_value})...")
             else:
                 publisher_instance = publisher_class(self.publish_profile)
-                print(f"Attempting to publish build '{self.build_id}' to {selected_store_enum}...")
+                logging.info(f"Attempting to publish build '{self.build_id}' to {selected_store_enum}...")
 
             publisher_instance.publish(content_dir=self.build_root)
 
@@ -517,7 +517,7 @@ class PublishProfileEntry(QWidget):
                 f"Publishing for {selected_store_enum.value} is not yet implemented.",
             )
         except Exception as e:
-            print(f"Error during publish execution: {e}")
+            logging.info(f"Error during publish execution: {e}")
             QMessageBox.critical(
                 self,
                 "Publishing Failed",

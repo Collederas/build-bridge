@@ -229,23 +229,23 @@ class ItchConfig(Base):
             key_name = self.username
 
             if not service_id:
-                print("ItchConfigModel: Cannot retrieve API key: ItchConfig username not set.")
+                logging.info("ItchConfigModel: Cannot retrieve API key: ItchConfig username not set.")
                 return None
 
             try:
                 self._api_key = keyring.get_password(service_id, key_name)
             except keyring.errors.PasswordNotFoundError:
-                print(f"ItchConfigModel:No Itch API key found in keyring for {service_id}/{key_name}.")
+                logging.info(f"ItchConfigModel:No Itch API key found in keyring for {service_id}/{key_name}.")
                 self._api_key = None
                 raise
             except keyring.errors.KeyringError as e:
-                print(
+                logging.info(
                     f"ItchConfigModel:Keyring error retrieving Itch API key for {service_id}/{key_name}: {e}"
                 )
                 self._api_key = None
                 raise
             except Exception as e:
-                print(
+                logging.info(
                     f"ItchConfigModel:Unexpected error retrieving Itch API key for {service_id}/{key_name}: {e}"
                 )
                 self._api_key = None
@@ -266,29 +266,29 @@ class ItchConfig(Base):
             try:
                 keyring.delete_password(service_id, key_name)
                 self._api_key = None
-                print(f"Itch API key cleared from keyring for {service_id}/{key_name}.")
+                logging.info(f"Itch API key cleared from keyring for {service_id}/{key_name}.")
             except keyring.errors.PasswordDeleteError:
-                print(
+                logging.info(
                     f"Itch API key not found in keyring to delete for {service_id}/{key_name}."
                 )
             except Exception as e:
-                print(
+                logging.info(
                     f"Failed to delete Itch API key from keyring for {service_id}/{key_name}: {e}"
                 )
         else:
             try:
                 keyring.set_password(service_id, key_name, value)
                 self._api_key = value
-                print(
+                logging.info(
                     f"Itch API key stored securely in keyring for {service_id}/{key_name}."
                 )
             except keyring.errors.KeyringError as e:
-                print(
+                logging.info(
                     f"Keyring error storing Itch API key for {service_id}/{key_name}: {e}"
                 )
                 raise RuntimeError(f"Failed to store Itch API key: {e}") from e
             except Exception as e:
-                print(
+                logging.info(
                     f"Unexpected error storing Itch API key for {service_id}/{key_name}: {e}"
                 )
                 raise RuntimeError(

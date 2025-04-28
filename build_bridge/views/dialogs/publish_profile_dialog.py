@@ -1,3 +1,5 @@
+import logging
+
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -19,6 +21,7 @@ from build_bridge.views.widgets.publish_profile_edit_widget_itch import (
 )
 from PyQt6.QtGui import QIcon
 
+from PyQt6.QtCore import QStandardPaths
 
 class PublishProfileDialog(QDialog):
     """
@@ -32,7 +35,6 @@ class PublishProfileDialog(QDialog):
         Initialize the platform-specific publish dialog.
         """
         super().__init__(parent)
-
         self.steam_widget = None
         self.itch_widget = None
         self.publish_profile = publish_profile
@@ -45,7 +47,7 @@ class PublishProfileDialog(QDialog):
 
         self.setMinimumWidth(650)
         self.setMinimumHeight(500)
-        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         self._init_ui()

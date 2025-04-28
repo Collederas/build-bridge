@@ -1,4 +1,4 @@
-import os
+import os, logging
 from jinja2 import Template
 
 from build_bridge.models import SteamPublishProfile
@@ -68,8 +68,8 @@ class SteamPipeConfigurator:
             vdf_file.write(vdf_content)
 
         if vdf_created:
-            print(f"VDF file generated at: {app_build_vdf_path}")
+            logging.info(f"VDF file generated at: {app_build_vdf_path}")
         else:
-            print(f"Existing VDF file updated at: {app_build_vdf_path}")
+            logging.info(f"Existing VDF file updated at: {app_build_vdf_path}")
             
         return app_build_vdf_path

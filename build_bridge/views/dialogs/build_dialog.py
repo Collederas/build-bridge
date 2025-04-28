@@ -1,4 +1,4 @@
-import os
+import os, logging
 import subprocess
 import platform
 
@@ -33,7 +33,7 @@ class BuildWindowDialog(QDialog):
     def setup_ui(self):
         self.setWindowTitle("Unreal Engine Builder")
         self.setMinimumSize(600, 400)
-        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         self.layout = QVBoxLayout()
@@ -99,7 +99,7 @@ class BuildWindowDialog(QDialog):
 
             self.append_output("Starting build...\n")
             self.append_output(f"Command: {program} {' '.join(arguments)}\n")
-            print(f"Starting build: {program} {' '.join(arguments)}")
+            logging.info(f"Starting build: {program} {' '.join(arguments)}")
 
             self.process.start(program, arguments)
 
@@ -111,7 +111,7 @@ class BuildWindowDialog(QDialog):
                 )
         except Exception as e:
             self.append_output(f"ERROR: Failed to start build: {str(e)}")
-            print(f"Build start failed: {str(e)}", exc_info=True)
+            logging.info(f"Build start failed: {str(e)}", exc_info=True)
             self.build_finished(-1, QProcess.ExitStatus.CrashExit)
 
     def handle_output(self):
@@ -122,7 +122,7 @@ class BuildWindowDialog(QDialog):
                 .decode("utf-8", errors="replace")
             )
             self.append_output(data)
-            print(f"Process output: {data.strip()}")
+            logging.info(f"Process output: {data.strip()}")
 
     def cancel_build(self):
         """Immediately force-cancel the running build."""
@@ -133,7 +133,7 @@ class BuildWindowDialog(QDialog):
         try:
             self.action_button.setEnabled(False)
             self.append_output("\nWARNING: Cancelling build (forcing termination)...")
-            print("Attempting to force-cancel build")
+            logging.info("Attempting to force-cancel build")
 
             pid = self.process.processId()
             if platform.system() == "Windows":
@@ -145,25 +145,25 @@ class BuildWindowDialog(QDialog):
                 )
                 if result.returncode == 0:
                     self.append_output("SUCCESS: Build process and children terminated.")
-                    print(f"Process {pid} and children terminated via taskkill.")
+                    logging.info(f"Process {pid} and children terminated via taskkill.")
                 else:
                     self.append_output(f"WARNING: Termination failed: {result.stderr}")
-                    print(f"taskkill failed: {result.stderr}")
+                    logging.info(f"taskkill failed: {result.stderr}")
             else:
                 # On Unix-like systems, kill the process group
                 os.killpg(os.getpgid(pid), 9)  # SIGKILL
                 self.append_output("SUCCESS: Build process and children terminated.")
-                print(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
+                logging.info(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
 
             # Wait briefly to confirm termination
             self.process.waitForFinished(2000)
             if self.process.state() != QProcess.ProcessState.NotRunning:
                 self.append_output("WARNING: Process may still be running!")
-                print(f"Process {pid} may not have terminated.")
+                logging.info(f"Process {pid} may not have terminated.")
 
         except Exception as e:
             self.append_output(f"ERROR: Cancel failed: {str(e)}")
-            print(f"Force cancel failed: {str(e)}", exc_info=True)
+            logging.info(f"Force cancel failed: {str(e)}", exc_info=True)
         finally:
             self.reset_after_cancel()
 
@@ -189,19 +189,19 @@ class BuildWindowDialog(QDialog):
     def handle_error(self):
         """Handle QProcess errors."""
         self.append_output(f"ERROR: Process error: {self.process.errorString()}\n")
-        print(f"Process error: {self.process.errorString()}")
+        logging.info(f"Process error: {self.process.errorString()}")
 
     def build_finished(self, exit_code, exit_status):
         """Handle build completion."""
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
             self.append_output("\nSUCCESS: BUILD COMPLETED SUCCESSFULLY")
-            print("Build completed successfully")
+            logging.info("Build completed successfully")
             self.action_button.setText("Close")
             self.build_ready_signal.emit()
             self.action_button.clicked.connect(self.accept)
         else:
             self.append_output(f"\nERROR: BUILD FAILED (Exit code: {exit_code})")
-            print(f"Build failed with exit code {exit_code}")
+            logging.info(f"Build failed with exit code {exit_code}")
             self.action_button.setText("Close")
 
             self.action_button.clicked.disconnect()
@@ -237,7 +237,7 @@ class BuildWindowDialog(QDialog):
                 self.output_text.verticalScrollBar().maximum()
             )
         except Exception as e:
-            print(f"Error updating GUI: {str(e)}", exc_info=True)
+            logging.info(f"Error updating GUI: {str(e)}", exc_info=True)
 
     def keyPressEvent(self, event):
         """Handle Ctrl+F to toggle search bar."""

@@ -1,4 +1,4 @@
-import os
+import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QFormLayout, QMessageBox, QApplication, QFileDialog
@@ -104,12 +104,12 @@ class SteamConfigWidget(QWidget):
 
     def load_settings(self):
         """Loads configuration into the input fields."""
-        print("SteamConfigWidget: Loading settings...")
+        logging.info("SteamConfigWidget: Loading settings...")
         try:
             # Query for the single config entry, create if doesn't exist
             self.steam_config = self.session.query(SteamConfig).first()
             if not self.steam_config:
-                print("SteamConfigWidget: No config found, creating new one in session.")
+                logging.info("SteamConfigWidget: No config found, creating new one in session.")
                 self.steam_config = SteamConfig()
                 self._initial_username = ""
                 self._initial_steamcmd_path = ""
@@ -125,11 +125,11 @@ class SteamConfigWidget(QWidget):
             self.steamcmd_path_input.setText(self._initial_steamcmd_path)
             self.password_input.clear() # Always clear password field on load
 
-            print(f"SteamConfigWidget: Loaded config. User: {self._initial_username}")
+            logging.info(f"SteamConfigWidget: Loaded config. User: {self._initial_username}")
             self._reset_status_label()
 
         except Exception as e:
-            print(f"SteamConfigWidget: Error loading settings: {e}")
+            logging.info(f"SteamConfigWidget: Error loading settings: {e}")
             self.status_label.setText(f"Error loading config: {e}")
             self.status_label.setStyleSheet("color: red; font-style: normal;")
             # Disable inputs/button on load error?
@@ -138,10 +138,10 @@ class SteamConfigWidget(QWidget):
             # ... disable others
 
     def validate(self):
-        print("SteamConfigWidget: Validating Itch settings...")
+        logging.info("SteamConfigWidget: Validating Itch settings...")
 
         if not self.steam_config:
-            print("SteamConfigWidget: Cannot save, config object missing.")
+            logging.info("SteamConfigWidget: Cannot save, config object missing.")
             raise InvalidConfigurationError("Steam configuration object not found during save.")
         
         if not self.steam_config.steamcmd_path and not self.steamcmd_path_input.text().strip():
@@ -160,7 +160,7 @@ class SteamConfigWidget(QWidget):
             self._initial_steamcmd_path = new_steamcmd_path
 
         except ValueError as e:
-            print(f"SteamConfigWidget: Error preparing settings for save: {e}")
+            logging.info(f"SteamConfigWidget: Error preparing settings for save: {e}")
             raise (f"Validation of some fields failed. Steam is misconfigured: {e}") from e
 
     def store_password(self):
@@ -168,17 +168,17 @@ class SteamConfigWidget(QWidget):
         # --- Handle Password ---
         entered_password = self.password_input.text()
         if entered_password:
-            print("SteamConfigWidget: Password field entered, updating stored password.")
+            logging.info("SteamConfigWidget: Password field entered, updating stored password.")
             self.steam_config.password = entered_password # calls keyring
         else:
             # If field is empty, DO NOT overwrite existing stored password
-            print("SteamConfigWidget: Password field empty, stored password remains unchanged.")
+            logging.info("SteamConfigWidget: Password field empty, stored password remains unchanged.")
 
         self.password_input.clear() # Clear password field after handling
 
     def reset_to_initial_state(self):
         """Resets input fields to their initially loaded values."""
-        print("SteamConfigWidget: Resetting UI to initial state...")
+        logging.info("SteamConfigWidget: Resetting UI to initial state...")
         self.username_input.setText(self._initial_username)
         self.steamcmd_path_input.setText(self._initial_steamcmd_path)
         self.password_input.clear()
@@ -201,7 +201,7 @@ class SteamConfigWidget(QWidget):
 
     def _test_connection_with_steamcmd(self):
         """Tests connection using steamcmd with CURRENTLY ENTERED values."""
-        print("SteamConfigWidget: Initiating connection test via steamcmd...")
+        logging.info("SteamConfigWidget: Initiating connection test via steamcmd...")
 
         # --- Get values DIRECTLY from input fields for testing ---
         steamcmd_path = self.steamcmd_path_input.text().strip()
@@ -217,13 +217,13 @@ class SteamConfigWidget(QWidget):
 
         # Optional: Warn if password field is empty but maybe expected
         if not password:
-             print("SteamConfigWidget: Password field empty for test. SteamCMD might prompt if required.")
+             logging.info("SteamConfigWidget: Password field empty for test. SteamCMD might prompt if required.")
         else:
-             print("SteamConfigWidget: SECURITY WARNING - Using password from input field for command line (insecure).")
+             logging.info("SteamConfigWidget: SECURITY WARNING - Using password from input field for command line (insecure).")
 
 
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
-            print("SteamConfigWidget: Test process already running.")
+            logging.info("SteamConfigWidget: Test process already running.")
             QMessageBox.information(self, "Busy", "A connection test is already in progress.")
             return
 
@@ -248,7 +248,7 @@ class SteamConfigWidget(QWidget):
             command_args.append(password)
         command_args.append("+quit")
 
-        print(f"SteamConfigWidget: Starting test process: {command_exe} {' '.join(command_args[:2])} ***** +quit")
+        logging.info(f"SteamConfigWidget: Starting test process: {command_exe} {' '.join(command_args[:2])} ***** +quit")
 
         self.process.start(command_exe, command_args)
 
@@ -262,16 +262,16 @@ class SteamConfigWidget(QWidget):
             output_bytes = self.process.readAllStandardOutput()
             output_string = output_bytes.data().decode(errors='ignore').strip()
             if output_string:
-                print(f"SteamCMD Test Output: {output_string}")
+                logging.info(f"SteamCMD Test Output: {output_string}")
                 self._accumulated_output += output_string + "\n"
         except Exception as e:
-            print(f"Error reading test process output: {e}")
+            logging.info(f"Error reading test process output: {e}")
 
 
     def _handle_test_error(self, error: QProcess.ProcessError):
         """Handles errors in starting/running the QProcess itself during test."""
         if not self.process: return
-        print(f"SteamConfigWidget: QProcess error occurred during test: {error}")
+        logging.info(f"SteamConfigWidget: QProcess error occurred during test: {error}")
         error_map = { ... } # Same map as before
         error_msg = f"Process error: {error_map.get(error, 'Unknown')}"
         self._update_status_label(False, error_msg)
@@ -282,7 +282,7 @@ class SteamConfigWidget(QWidget):
     def _handle_test_finished(self, exit_code: int, exit_status: QProcess.ExitStatus):
         """Handles the completion of the test QProcess."""
         if self.process is None: return
-        print(f"SteamConfigWidget: Test process finished. ExitCode: {exit_code}, ExitStatus: {exit_status}")
+        logging.info(f"SteamConfigWidget: Test process finished. ExitCode: {exit_code}, ExitStatus: {exit_status}")
 
         success = False
         message = ""
@@ -310,7 +310,7 @@ class SteamConfigWidget(QWidget):
         else:
              # Exit code 0, normal exit, no obvious errors detected
              # Treat this as a successful connection test for the purpose of the UI
-             print("SteamConfigWidget: Test finished successfully.")
+             logging.info("SteamConfigWidget: Test finished successfully.")
              success = True
              message = "Connection successful!"
 
@@ -325,14 +325,14 @@ class SteamConfigWidget(QWidget):
 
     def cleanup(self):
         """Kills any running QProcess."""
-        print(f"{self.__class__.__name__}: Running cleanup...")
+        logging.info(f"{self.__class__.__name__}: Running cleanup...")
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
-            print(f"{self.__class__.__name__}: Terminating running test process...")
+            logging.info(f"{self.__class__.__name__}: Terminating running test process...")
             self.process.kill() # Force kill steamcmd
             if not self.process.waitForFinished(1000): # Wait briefly
-                 print(f"{self.__class__.__name__}: Process did not finish after kill signal.")
+                 logging.info(f"{self.__class__.__name__}: Process did not finish after kill signal.")
             self.process = None
-            print(f"{self.__class__.__name__}: Process terminated.")
+            logging.info(f"{self.__class__.__name__}: Process terminated.")
         else:
-            print(f"{self.__class__.__name__}: No active process found.")   
+            logging.info(f"{self.__class__.__name__}: No active process found.")   
  

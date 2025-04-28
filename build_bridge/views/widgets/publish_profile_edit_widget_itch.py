@@ -1,3 +1,5 @@
+import logging
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -22,10 +24,12 @@ class ItchPublishProfileWidget(QWidget):
 
     def __init__(self, publish_profile: ItchPublishProfile, session, parent=None):
         self.publish_profile = publish_profile
-        self.session = session # used to commit the session and query auxiliary models
+        self.session = session  # used to commit the session and query auxiliary models
 
-        super().__init__(parent=parent) 
-        self.setWindowTitle(f"Edit Itch.io Publish Profile ({publish_profile.build_id})")
+        super().__init__(parent=parent)
+        self.setWindowTitle(
+            f"Edit Itch.io Publish Profile ({publish_profile.build_id})"
+        )
 
         self._init_ui()
         self._populate_fields()  # Populate UI fields after UI is built
@@ -76,7 +80,9 @@ class ItchPublishProfileWidget(QWidget):
     def _populate_fields(self):
         """Populate UI fields with data from self.profile."""
 
-        with self.session.no_autoflush: # no autoflush because we might be editing a profile that is not saved yet.
+        with (
+            self.session.no_autoflush
+        ):  # no autoflush because we might be editing a profile that is not saved yet.
             if not self.publish_profile:
                 # This case should ideally be handled before UI init, but as a safeguard:
                 QMessageBox.critical(self, "Error", "Profile data is not available.")
@@ -89,7 +95,9 @@ class ItchPublishProfileWidget(QWidget):
             self._refresh_auth_options()
 
             # --- Populate based on loaded/new profile ---
-            if self.publish_profile.id is not None:  # Check if it's an existing profile (has an ID)
+            if (
+                self.publish_profile.id is not None
+            ):  # Check if it's an existing profile (has an ID)
                 # Select current project
                 if self.publish_profile.project:
                     project_index = self.project_combo.findData(
@@ -104,20 +112,29 @@ class ItchPublishProfileWidget(QWidget):
                             "Warning",
                             f"Saved project '{self.publish_profile.project.name}' not found. Please select a project.",
                         )
-            
+
             existing_channel = self.publish_profile.itch_channel_name
-            
+            channel_name = ""
+
             # Check we dont have an existing channel
             if existing_channel and not existing_channel == "":
-                print(f"ItchPublishProfileWidget: Setting initial channel name to existing value: {existing_channel}")
+                logging.info(
+                    f"ItchPublishProfileWidget: Setting initial channel name to existing value: {existing_channel}"
+                )
                 channel_name = existing_channel
             else:
-                bt = self.session.query(BuildTarget).one_or_none() # ASSUMED ONE FOR WHOLE APP
+                bt = self.session.query(
+                    BuildTarget
+                ).one_or_none()  # ASSUMED ONE FOR WHOLE APP
 
                 if bt:
                     target_platform_lowercase = bt.target_platform.lower()
-                print(f"ItchPublishProfileWidget: Setting initial channel name to inferred from platform of build target: {target_platform_lowercase}")
-                channel_name = target_platform_lowercase
+                    logging.info(
+                        f"ItchPublishProfileWidget: Setting initial channel name to inferred" \
+                        f"from platform of build target: {target_platform_lowercase}"
+                    )
+
+                    channel_name = target_platform_lowercase
 
             self.channel_name_input.setText(channel_name)
 
@@ -134,9 +151,8 @@ class ItchPublishProfileWidget(QWidget):
                 if conf and proj:
                     # Then we can make a guess
                     game_id = f"{conf.username}/{proj.name.lower().replace(' ', '-')}"
-            
+
             self.user_game_id_input.setText(game_id)
-    
 
         self._on_project_changed()
 
@@ -202,7 +218,9 @@ class ItchPublishProfileWidget(QWidget):
 
             except Exception as e:
                 QMessageBox.critical(
-                    self, "Database Error", f"Failed to load Itch.io authentications: {e}"
+                    self,
+                    "Database Error",
+                    f"Failed to load Itch.io authentications: {e}",
                 )
                 self.auth_combo.setEnabled(False)
 

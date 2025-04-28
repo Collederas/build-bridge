@@ -1,4 +1,4 @@
-import sys
+import sys, logging
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon
 
+from build_bridge.log import setup_logging
 from build_bridge.utils.paths import get_resource_path
 
 from build_bridge.database import SessionFactory, initialize_database, run_migrations
@@ -22,12 +23,10 @@ from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 
 class BuildBridgeWindow(QMainWindow):
-    # vcs_clients = (P4Client,)
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Build Bridge")
-        self.setWindowIcon(QIcon(str(get_resource_path("icons/buildbridge.ico"))))
+        self.setWindowIcon(QIcon(str(get_resource_path("build_bridge/icons/buildbridge.ico"))))
         self.setGeometry(100, 100, 700, 500)
 
         self.session = SessionFactory()
@@ -57,7 +56,8 @@ class BuildBridgeWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(10)  # Add some spacing between sections
+        main_layout.setSpacing(10)
+
 
         # Build Targt Section
         build_target_id = self.build_target.id if self.build_target else None
@@ -95,12 +95,12 @@ class BuildBridgeWindow(QMainWindow):
         result = dialog.exec()
 
         if result == QDialog.DialogCode.Accepted:
-            print("Settings accepted, refreshing main window project data...")
+            logging.info("Settings accepted, refreshing main window project data...")
             try:
                 # Re-query or refresh the project in the main window's session
                 if self.project:
                     self.session.refresh(self.project)
-                    print(
+                    logging.info(
                         f"Refreshed project '{self.project.name}' in main window session."
                     )
                     self.build_list_widget.refresh_builds(self.project.builds_path)
@@ -109,13 +109,13 @@ class BuildBridgeWindow(QMainWindow):
                     # If no project existed initially, try loading one now
                     self.project = self.session.query(Project).first()
                     if self.project:
-                        print(
+                        logging.info(
                             f"Loaded newly created project '{self.project.name}' into main window."
                         )
                         self.build_list_widget.refresh_builds(self.project.builds_path)
 
             except Exception as e:
-                print(f"Error refreshing project in main window after settings: {e}")
+                logging.info(f"Error refreshing project in main window after settings: {e}")
 
     def get_selected_branch(self):
         selected_items = self.branch_list.selectedItems()
@@ -144,5 +144,6 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_logging()
     run_migrations()
     main()

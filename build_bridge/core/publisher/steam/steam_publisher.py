@@ -1,4 +1,3 @@
-from build_bridge.database import session_scope
 from build_bridge.models import SteamPublishProfile
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.core.publisher.base_publisher import BasePublisher

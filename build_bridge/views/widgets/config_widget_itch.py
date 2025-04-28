@@ -1,4 +1,4 @@
-import os
+import logging
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -118,12 +118,12 @@ class ItchConfigWidget(QWidget):
     # --- SettingsDialog Integration Methods ---
     def load_settings(self):
         """Loads Itch.io configuration into the input fields."""
-        print("ItchConfigWidget: Loading settings...")
+        logging.info("ItchConfigWidget: Loading settings...")
         try:
             # Query or create the single config entry
             self.itch_config = self.session.query(ItchConfig).first()
             if not self.itch_config:
-                print("ItchConfigWidget: No config found, creating new one in session.")
+                logging.info("ItchConfigWidget: No config found, creating new one in session.")
                 self.itch_config = ItchConfig()
                 self._initial_username = ""
                 self._initial_butler_path = ""
@@ -140,27 +140,27 @@ class ItchConfigWidget(QWidget):
             self.butler_path_input.setText(self._initial_butler_path)
             self.api_key_input.clear()  # Always clear API key field on load
 
-            print(
+            logging.info(
                 f"ItchConfigWidget: Loaded config. User/Game: {self._initial_username}"
             )
             self._reset_status_label()
             self.test_button.setEnabled(True)
 
         except Exception as e:
-            print(f"ItchConfigWidget: Error loading settings: {e}")
+            logging.info(f"ItchConfigWidget: Error loading settings: {e}")
             self.status_label.setText(f"Error loading config: {e}")
             self.status_label.setStyleSheet("color: red; font-style: normal;")
             self.test_button.setEnabled(False)
             # Disable inputs?
 
     def validate(self):
-        print("ItchConfigWidget: Validating Itch settings...")
+        logging.info("ItchConfigWidget: Validating Itch settings...")
 
         if not self.itch_config:
-            print("ItchConfigWidget: Cannot save, config object missing.")
+            logging.info("ItchConfigWidget: Cannot save, config object missing.")
             raise InvalidConfigurationError("Itch configuration object not found during save.")
 
-        print("ItchConfigWidget: Preparing settings for save...")
+        logging.info("ItchConfigWidget: Preparing settings for save...")
         try:
             # Update config object from UI fields
             new_username = self.username_input.text().strip()
@@ -176,7 +176,7 @@ class ItchConfigWidget(QWidget):
             self._initial_butler_path = new_butler_path
 
         except ValueError as e:
-            print(f"ItchConfigWidget: Error preparing settings for save: {e}")
+            logging.info(f"ItchConfigWidget: Error preparing settings for save: {e}")
             raise  # Re-raise the exception to be caught by SettingsDialog
 
     def store_api_key(self):
@@ -185,7 +185,7 @@ class ItchConfigWidget(QWidget):
 
         entered_api_key = self.api_key_input.text()  # Don't strip API keys
         if entered_api_key:
-            print(
+            logging.info(
                 "ItchConfigWidget: API Key field entered, attempting to store in keyring."
             )
             if not new_username:
@@ -218,22 +218,22 @@ class ItchConfigWidget(QWidget):
         api_key_to_use = None
 
         if entered_api_key:
-            print("ItchConfigWidget: Testing with key entered in the field.")
+            logging.info("ItchConfigWidget: Testing with key entered in the field.")
             api_key_to_use = entered_api_key
 
         elif self.itch_config:
             # Field is empty, try retrieving the saved key from keyring via the model
-            print("ItchConfigWidget: Input field empty, attempting to use saved key from keyring.")
+            logging.info("ItchConfigWidget: Input field empty, attempting to use saved key from keyring.")
             try:
                 saved_key = self.itch_config.api_key
                 if saved_key:
                     api_key_to_use = saved_key
-                    print("ItchConfigWidget: Using saved key for test.")
+                    logging.info("ItchConfigWidget: Using saved key for test.")
                 else:
-                    print("ItchConfigWidget: No saved key found in keyring.")
+                    logging.info("ItchConfigWidget: No saved key found in keyring.")
             except Exception as e:
                 # Handle potential errors from keyring access if necessary
-                print(f"ItchConfigWidget: Error retrieving saved API key: {e}")
+                logging.info(f"ItchConfigWidget: Error retrieving saved API key: {e}")
                 self._update_status_label(False, f"Error accessing saved key: {e}", QColor("red"))
                 return
 
@@ -253,13 +253,13 @@ class ItchConfigWidget(QWidget):
             QMessageBox.warning(self, "Username missing", msg)
             return
 
-        print(
+        logging.info(
             "ItchConfigWidget: Initiating connection test via api: \n\n"
             + "ENDPOINT: https://itch.io/api/1/{api_key}/credentials/info"
         )
         result = requests.get(f"https://itch.io/api/1/{api_key_to_use}/credentials/info")
         if result.ok:
-            print("ItchConfigWidget: Connection successful.")
+            logging.info("ItchConfigWidget: Connection successful.")
 
             self._update_status_label(True, message="Connection successful")
         else:

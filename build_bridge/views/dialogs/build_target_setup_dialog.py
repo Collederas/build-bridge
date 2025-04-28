@@ -1,4 +1,4 @@
-import os
+import os, logging
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -44,7 +44,7 @@ class BuildTargetSetupDialog(QDialog):
         super().__init__()
         self.setWindowTitle("Build Target Setup")
         self.setMinimumSize(800, 500)
-        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         # Create session FIRST to query projects
@@ -89,12 +89,12 @@ class BuildTargetSetupDialog(QDialog):
             self.projects_exist_initially = self.session.query(
                 exists().where(Project.id != None)
             ).scalar()
-            print(
+            logging.info(
                 f"Initial project check: {'Projects exist' if self.projects_exist_initially else 'No projects found'}"
             )
         except Exception as e:
             # Handle potential DB connection errors during the check
-            print(f"Error during initial project check: {e}")
+            logging.info(f"Error during initial project check: {e}")
             QMessageBox.critical(
                 self, "Database Error", f"Could not check for existing projects:\n{e}"
             )
@@ -112,7 +112,7 @@ class BuildTargetSetupDialog(QDialog):
                 # Only create a default *in memory* if none exist db-wide
                 # The user should ideally add one via settings if none exist.
                 # Don't add this default to the session automatically here.
-                print("No project found in DB or associated with build target.")
+                logging.info("No project found in DB or associated with build target.")
                 # We will rely on the "Add Project" button flow if none exist.
                 # Returning None here signifies no project is currently selected/available.
                 return None 
@@ -121,7 +121,7 @@ class BuildTargetSetupDialog(QDialog):
             # Ensure the found/merged project is in the session
             if session_project not in session:
                 session.add(session_project)
-            print(
+            logging.info(
                 f"Using project '{session_project.name}' - ID: {session_project.id} in the session."
             )
         return session_project
@@ -176,28 +176,28 @@ class BuildTargetSetupDialog(QDialog):
 
     def _open_settings_to_add_project(self):
         """Opens the SettingsDialog focused on adding a project."""
-        print("Opening Settings Dialog to add project...")
+        logging.info("Opening Settings Dialog to add project...")
         settings_dialog = SettingsDialog(parent=self)
         try:
             # Navigate to the relevant page (index 1 as requested)
             # Adapt this call if your SettingsDialog uses a different method
             settings_dialog.setCurrentIndex(1)
         except AttributeError:
-            print(
+            logging.info(
                 "Warning: SettingsDialog does not have setCurrentIndex method. Cannot navigate."
             )
         except Exception as e:
-            print(f"Warning: Could not navigate SettingsDialog: {e}")
+            logging.info(f"Warning: Could not navigate SettingsDialog: {e}")
         result = settings_dialog.exec()
 
-        print(f"Settings Dialog closed with result: {result}")
+        logging.info(f"Settings Dialog closed with result: {result}")
         # Refresh the project list in this dialog in case a project was added
         self._refresh_project_list()
 
     # --- Add/Refactor this method ---
     def _refresh_project_list(self):
         """Queries DB for projects, updates combo box, and sets visibility."""
-        print("Refreshing project list...")
+        logging.info("Refreshing project list...")
         try:
             projects = self.session.query(Project).order_by(Project.name).all()
         except Exception as e:
@@ -243,7 +243,7 @@ class BuildTargetSetupDialog(QDialog):
             # Show project form, hide 'Add' button
             self.project_form_widget.show()
             self.add_project_button.hide()
-            print(f"Loaded {len(projects)} projects into combo box.")
+            logging.info(f"Loaded {len(projects)} projects into combo box.")
 
         else:
             self.project_combo.setEnabled(False)
@@ -252,7 +252,7 @@ class BuildTargetSetupDialog(QDialog):
             self.project_form_widget.hide()
             self.add_project_button.show()
             self.session_project = None
-            print("No projects found. Showing 'Add Project' button.")
+            logging.info("No projects found. Showing 'Add Project' button.")
 
     def create_perforce_config_widget(self):
         widget = QWidget()
@@ -476,7 +476,7 @@ class BuildTargetSetupDialog(QDialog):
             self.build_target.optimize_for_steam = self.optimize_checkbox.isChecked()
 
             self.session.commit()
-            print(
+            logging.info(
                 f"BuildTarget {self.build_target.id} - Project '{self.session_project.name}' - {self.build_target.target_platform.value} saved."
             )
             self.build_target_created.emit(self.build_target.id)
@@ -484,12 +484,12 @@ class BuildTargetSetupDialog(QDialog):
 
         except Exception as e:
             self.session.rollback()
-            print(f"Save failed: {str(e)}")  # Log detailed error
+            logging.info(f"Save failed: {str(e)}")  # Log detailed error
             QMessageBox.critical(self, "Error", f"Failed to save:\n{str(e)}")
             # Don't reject automatically, let the user fix the issue or cancel
 
     def reject(self):
-        print("Rolling back session and closing dialog.")
+        logging.info("Rolling back session and closing dialog.")
         self.session.rollback()
         self.session.close()
         if self.vcs_client:

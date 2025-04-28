@@ -1,3 +1,5 @@
+import logging
+
 from pathlib import Path
 from typing import Callable, List, Dict, Optional
 
@@ -45,7 +47,7 @@ class GenericUploadDialog(QDialog):
         self._log_buffer: str = ""  # Accumulate log content
 
         self.setWindowTitle(title)
-        icon_path = str(get_resource_path("icons/buildbridge.ico"))
+        icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         self.setup_ui()
@@ -217,9 +219,9 @@ class GenericUploadDialog(QDialog):
         self.upload_successful = False
 
     def cleanup(self):
-        print(f"{self.__class__.__name__}: Running cleanup...")
+        logging.info(f"{self.__class__.__name__}: Running cleanup...")
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
-            print(f"{self.__class__.__name__}: Terminating running process...")
+            logging.info(f"{self.__class__.__name__}: Terminating running process...")
             # Disconnect signals first
             try:
                 self.process.readyReadStandardOutput.disconnect()

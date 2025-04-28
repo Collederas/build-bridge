@@ -1,3 +1,5 @@
+import logging
+
 from contextlib import contextmanager
 import os
 import platform
@@ -36,12 +38,12 @@ SessionFactory = sessionmaker(bind=engine)
 
 def initialize_database():
     if db_path.exists():
-        print(f"Database '{db_path}' already exists.")
+        logging.info(f"Database '{db_path}' already exists.")
         return
     
     app_data_location.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
-    print(f"Database '{db_path}' created successfully.")
+    logging.info(f"Database '{db_path}' created successfully.")
 
 def run_migrations():
     initialize_database()
@@ -49,7 +51,7 @@ def run_migrations():
     alembic_ini_path = get_resource_path("alembic.ini")
 
     if not os.path.exists(migrations_dir) or not os.path.exists(alembic_ini_path):
-        print(f"Migration folders don't exist: {migrations_dir}")
+        logging.info(f"Migration folders don't exist: {migrations_dir}")
         sys.exit(1)
 
     alembic_cfg = Config(alembic_ini_path)
@@ -58,7 +60,7 @@ def run_migrations():
 
     needs_stamp = False
     if not os.path.exists(db_path):
-        print("Database does not exist. Creating and stamping initial schema.")
+        logging.info("Database does not exist. Creating and stamping initial schema.")
         engine = create_engine(DATABASE_URL)
         engine.connect().close()
         needs_stamp = True
@@ -69,23 +71,23 @@ def run_migrations():
             with engine.connect() as connection:
                inspector = inspect(engine)
                if not inspector.has_table("alembic_version"):
-                   print("Existing DB found, but no alembic version table. Stamping current.")
+                   logging.info("Existing DB found, but no alembic version table. Stamping current.")
                    needs_stamp = True
         except Exception as e:
-            print(f"Error inspecting existing database: {e}. Handle corruption/backup.")
+            logging.info(f"Error inspecting existing database: {e}. Handle corruption/backup.")
             sys.exit(1)
 
     try:
-        print("Running Alembic upgrades...")
+        logging.info("Running Alembic upgrades...")
         command.upgrade(alembic_cfg, "head")
-        print("Alembic upgrades completed.")
+        logging.info("Alembic upgrades completed.")
 
         if needs_stamp:
-             print("Stamping database to current head revision...")
+             logging.info("Stamping database to current head revision...")
              command.stamp(alembic_cfg, "head")
-             print("Database stamped.")
+             logging.info("Database stamped.")
     except Exception as e:
-        print(e)
+        logging.info(e)
         sys.exit(1)
 
 
@@ -107,10 +109,6 @@ def session_scope(commit_on_success=True): # Added flag
             try:
                 session.commit()
             except Exception:
-                # print("Commit failed, rolling back.") # Optional debug
                 session.rollback()
-                raise # Re-raise the exception during commit
-        # If 'success' is False, rollback already happened in the 'except' block.
-        # If 'commit_on_success' is False, we intentionally skip commit.
-        # print("Closing session.") # Optional debug
+                raise
         session.close()

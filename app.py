@@ -12,7 +12,7 @@ from PyQt6.QtGui import QIcon
 
 from build_bridge.utils.paths import get_resource_path
 
-from build_bridge.database import SessionFactory, initialize_database
+from build_bridge.database import SessionFactory, initialize_database, run_migrations
 from build_bridge.models import BuildTarget, Project
 from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
 from build_bridge.views.widgets.publish_profile_read_widgets import (
@@ -137,8 +137,6 @@ class BuildBridgeWindow(QMainWindow):
 
 
 def main():
-    initialize_database()
-
     app = QApplication(sys.argv)
     window = BuildBridgeWindow()
     window.show()
@@ -146,4 +144,5 @@ def main():
 
 
 if __name__ == "__main__":
+    run_migrations()
     main()

@@ -1,10 +1,15 @@
 from contextlib import contextmanager
 import os
 import platform
-from sqlalchemy import create_engine
+import sys
+from alembic.config import Config
+from alembic import command
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
+
+from build_bridge.utils.paths import get_resource_path
 
 
 Base = declarative_base()
@@ -31,13 +36,57 @@ SessionFactory = sessionmaker(bind=engine)
 
 def initialize_database():
     if db_path.exists():
-        # os.remove(db_path)
         print(f"Database '{db_path}' already exists.")
         return
     
     app_data_location.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
     print(f"Database '{db_path}' created successfully.")
+
+def run_migrations():
+    initialize_database()
+    migrations_dir = get_resource_path("alembic")
+    alembic_ini_path = get_resource_path("alembic.ini")
+
+    if not os.path.exists(migrations_dir) or not os.path.exists(alembic_ini_path):
+        print(f"Migration folders don't exist: {migrations_dir}")
+        sys.exit(1)
+
+    alembic_cfg = Config(alembic_ini_path)
+    alembic_cfg.set_main_option("script_location", str(migrations_dir))
+    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+    needs_stamp = False
+    if not os.path.exists(db_path):
+        print("Database does not exist. Creating and stamping initial schema.")
+        engine = create_engine(DATABASE_URL)
+        engine.connect().close()
+        needs_stamp = True
+
+    else:
+        try:
+            engine = create_engine(DATABASE_URL)
+            with engine.connect() as connection:
+               inspector = inspect(engine)
+               if not inspector.has_table("alembic_version"):
+                   print("Existing DB found, but no alembic version table. Stamping current.")
+                   needs_stamp = True
+        except Exception as e:
+            print(f"Error inspecting existing database: {e}. Handle corruption/backup.")
+            sys.exit(1)
+
+    try:
+        print("Running Alembic upgrades...")
+        command.upgrade(alembic_cfg, "head")
+        print("Alembic upgrades completed.")
+
+        if needs_stamp:
+             print("Stamping database to current head revision...")
+             command.stamp(alembic_cfg, "head")
+             print("Database stamped.")
+    except Exception as e:
+        print(e)
+        sys.exit(1)
 
 
 @contextmanager

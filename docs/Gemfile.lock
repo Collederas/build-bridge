@@ -3,6 +3,8 @@ GEM
   specs:
     addressable (2.8.7)
       public_suffix (>= 2.0.2, < 7.0)
+    base64 (0.1.2)
+    bigdecimal (3.1.9)
     colorator (1.1.0)
     concurrent-ruby (1.3.5)
     csv (3.3.3)
@@ -105,6 +107,8 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  base64 (~> 0.1.0)
+  bigdecimal
   jekyll (~> 3.9)
   jekyll-include-cache
   jekyll-remote-theme

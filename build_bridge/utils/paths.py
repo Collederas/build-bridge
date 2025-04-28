@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-from build_bridge.conf import APP_ROOT
+from conf import APP_ROOT
 
 def unc_join_path(base_path, unc_path):
     """

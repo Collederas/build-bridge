@@ -159,9 +159,7 @@ class SteamPublishProfileWidget(QWidget):
             if self.publish_profile.project:
                 existing_profile = self.session.query(SteamPublishProfile).filter(
                     SteamPublishProfile.project == self.publish_profile.project,
-                    SteamPublishProfile.build_id == self.publish_profile.build_id
                     ).order_by(SteamPublishProfile.build_id.desc()).first()
-
 
             # Regular App ID (Use existing profile's App ID or default)
             app_id = self.publish_profile.app_id or \
@@ -176,7 +174,7 @@ class SteamPublishProfileWidget(QWidget):
                 if existing_desc := existing_profile.description:
                     description = existing_desc
                 else:
-                    description = f"v{existing_profile.build_id}"
+                    description = f"v{self.publish_profile.build_id}"
             
                 
             self.description_input.setText(description)

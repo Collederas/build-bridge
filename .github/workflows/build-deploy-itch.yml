@@ -41,6 +41,7 @@ jobs:
             --icon=build_bridge\icons\buildbridge.ico `
             --add-data "build_bridge\icons\buildbridge.ico;build_bridge\icons/" `
             --add-data "build_bridge/core/publisher/steam/app_build_template.vdf;build_bridge/core/publisher/steam/" `
+            --add-data "alembic:alembic" `
             --paths .venv\Lib\site-packages `
             --name BuildBridge `
             app.py

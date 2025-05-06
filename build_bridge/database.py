@@ -42,53 +42,51 @@ def initialize_database():
         return
     
     app_data_location.mkdir(parents=True, exist_ok=True)
-    Base.metadata.create_all(engine)
     logging.info(f"Database '{db_path}' created successfully.")
 
 def run_migrations():
-    initialize_database()
+    db_exists = db_path.exists()
+    
+    # Verify Alembic paths
     migrations_dir = get_resource_path("alembic")
     alembic_ini_path = get_resource_path("alembic.ini")
 
     if not os.path.exists(migrations_dir) or not os.path.exists(alembic_ini_path):
-        logging.info(f"Migration folders don't exist: {migrations_dir}")
-        sys.exit(1)
+        logging.critical(f"Alembic config or migration folder missing. Expected dir:{migrations_dir}; Expected " \
+                         "alembic ini path: {alembic_ini_path}")
+        raise FileNotFoundError("Alembic migration resources not found.")
 
+    # Set up Alembic config
     alembic_cfg = Config(alembic_ini_path)
     alembic_cfg.set_main_option("script_location", str(migrations_dir))
     alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-    needs_stamp = False
-    if not os.path.exists(db_path):
-        logging.info("Database does not exist. Creating and stamping initial schema.")
-        engine = create_engine(DATABASE_URL)
-        engine.connect().close()
-        needs_stamp = True
-
-    else:
-        try:
-            engine = create_engine(DATABASE_URL)
-            with engine.connect() as connection:
-               inspector = inspect(engine)
-               if not inspector.has_table("alembic_version"):
-                   logging.info("Existing DB found, but no alembic version table. Stamping current.")
-                   needs_stamp = True
-        except Exception as e:
-            logging.info(f"Error inspecting existing database: {e}. Handle corruption/backup.")
-            sys.exit(1)
-
     try:
-        logging.info("Running Alembic upgrades...")
-        command.upgrade(alembic_cfg, "head")
-        logging.info("Alembic upgrades completed.")
+        needs_stamp = False
+        if not db_exists:
+            # Ensure parent directory exists
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            logging.info(f"New database will be created at {db_path}")
+            needs_stamp = True
+        else:
+            with engine.connect() as connection:
+                inspector = inspect(connection)
+                if not inspector.has_table("alembic_version"):
+                    logging.info("DB exists but not versioned. Will stamp.")
+                    needs_stamp = True
 
         if needs_stamp:
-             logging.info("Stamping database to current head revision...")
-             command.stamp(alembic_cfg, "head")
-             logging.info("Database stamped.")
+            logging.info("Stamping database to current head revision...")
+            command.stamp(alembic_cfg, "head")
+        else:
+            logging.info("Upgrading database to latest schema...")
+            command.upgrade(alembic_cfg, "head")
+
+        logging.info("Database migration completed successfully.")
+    
     except Exception as e:
-        logging.info(e)
-        sys.exit(1)
+        logging.exception("Error during Alembic migration")
+        raise
 
 
 @contextmanager

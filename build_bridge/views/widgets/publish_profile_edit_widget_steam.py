@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from turtle import pd
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -160,29 +162,24 @@ class SteamPublishProfileWidget(QWidget):
                 existing_profile = self.session.query(SteamPublishProfile).filter(
                     SteamPublishProfile.project == self.publish_profile.project,
                     ).order_by(SteamPublishProfile.build_id.desc()).first()
-
+                
             # Regular App ID (Use existing profile's App ID or default)
             app_id = self.publish_profile.app_id or \
                      (existing_profile and existing_profile.app_id) or \
                      480 # Default to Spacewar
             self.app_id_input.setValue(app_id)
             
-            description = ""
-
-            # Regular Description
-            if existing_profile:
-                if existing_desc := existing_profile.description:
-                    description = existing_desc
-                else:
-                    description = f"v{self.publish_profile.build_id}"
-            
-                
+            description = "" if not self.publish_profile else f"v{self.publish_profile.build_id}"      
             self.description_input.setText(description)
 
             # Regular Depots
             depots = self.publish_profile.depots or \
                      (existing_profile and existing_profile.depots) or \
                      {}
+            
+            # Set depot path to match the build
+            depot_id = next(iter(depots))
+            depots[depot_id] = str(self.publish_profile.project.builds_path / Path(self.build_id_input.text()))
             self._load_depots_table(self.depots_table, depots)
 
 

@@ -47,7 +47,7 @@ class Project(Base):
 
     @property
     def builds_path(self):
-        return Path(self.archive_directory) / self.name
+        return Path(str(self.archive_directory)) / self.name
 
 
 class BuildTarget(Base):
@@ -62,6 +62,9 @@ class BuildTarget(Base):
 
     vcs_config = relationship("VCSConfig", uselist=False, back_populates="build_target")
     target_branch = Column(String, nullable=False, default="")
+
+    target: Mapped[str | None] = mapped_column(String, nullable=True, default="MyTarget.Target.cs")
+    maps = Column(JSON, nullable=True, default=dict)
 
     build_type = Column(Enum(BuildTypeEnum), nullable=False, default=BuildTypeEnum.prod)
     target_platform = Column(

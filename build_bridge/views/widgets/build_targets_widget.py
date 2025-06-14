@@ -96,10 +96,6 @@ class BuildTargetListWidget(QWidget):
         self.content_layout.addWidget(self.edit_button)
         self.content_layout.addWidget(self.build_button)
 
-        # Add the "Add" button - it will be managed by visibility
-        # It needs its own layout logic or careful spacer management if we want it centered
-        # For now, let's add it directly, visibility will handle it.
-        # We'll add spacers specifically when *only* the add button is shown.
         self.content_layout.addWidget(self.add_button)
 
         # Spacers for centering the 'Add' button when it's alone
@@ -275,6 +271,16 @@ class BuildTargetListWidget(QWidget):
                     return # Stop the build process
                 logging.info(f"Using Unreal Engine Path from Build Target config: {engine_base_path}")
 
+                target = current_build_target.target
+                print(f"Building conf {target}")
+
+                if not target:
+                    QMessageBox.warning(self, "Configuration Error",
+                                        "No config specified (eg. DefaultGame.ini).\n\n"
+                                        "Please use the 'Edit' button to configure it.")
+                    return # Stop the build process
+                logging.info(f"Using Game Config: {target}")
+
                 project_build_dir_root = Path(builds_root) / project_name / release_name
 
                 # Check for existing build and overwrite confirmation
@@ -307,6 +313,13 @@ class BuildTargetListWidget(QWidget):
                             f"Failed to delete existing build directory:\n{str(e)}",
                         )
                         return
+                    
+                maps = []
+
+                for incl_map in current_build_target.maps.keys():
+                    maps.append(self.convert_umap_path(incl_map, current_build_target.project.source_dir))
+                
+                print(f"MAPS is {maps}")
 
                 # Prepare builder arguments
                 try:
@@ -330,6 +343,8 @@ class BuildTargetListWidget(QWidget):
                         engine_path=engine_base_path,
                         target_platform=target_platform_val,
                         target_config=build_type_val,
+                        target=target,
+                        maps=maps,
                         output_dir=project_build_dir_root,
                         clean=False,  # Confirm if 'clean' should be an option
                         valve_package_pad=optimize_steam,
@@ -386,3 +401,38 @@ class BuildTargetListWidget(QWidget):
                 "Error",
                 f"An unexpected error occurred during the build process: {e}",
             )
+
+    def convert_umap_path(self, full_path: str, project_source_dir: str) -> str:
+        # Normalize paths for consistency
+        full_path = os.path.normpath(full_path)
+        project_source_dir = os.path.normpath(project_source_dir)
+
+        if not full_path.startswith(project_source_dir):
+            raise ValueError("Path is not within the project source directory")
+
+        # Get relative path from source dir, use forward slashes
+        relative_path = os.path.relpath(full_path, project_source_dir).replace("\\", "/")
+        parts = relative_path.split("/")
+
+        if parts[0] == "Plugins":
+            # Plugins/GameFeatures/DungeonCrawler/Content/Maps/Villa/Villa.umap
+            try:
+                plugin_name = parts[2]  # DungeonCrawler
+                content_index = parts.index("Content")
+                map_subpath = parts[content_index + 1:-1]
+                map_name = os.path.splitext(parts[-1])[0]
+                return f"/{plugin_name}/{'/'.join(map_subpath)}/{map_name}"
+            except (IndexError, ValueError):
+                raise ValueError("Invalid plugin map path structure")
+        else:
+            # Content/Maps/CoverPicMap.umap
+            try:
+                if parts[0] != "Content":
+                    raise ValueError("Expected path to start with 'Content'")
+                map_subpath = parts[1:-1]
+                map_name = os.path.splitext(parts[-1])[0]
+                return f"/Game/{'/'.join(map_subpath)}/{map_name}"
+            except IndexError:
+                raise ValueError("Invalid base content path structure")
+
+

@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from typing import Optional
+from typing import List, Optional
 
 from build_bridge.models import BuildTargetPlatformEnum, BuildTypeEnum
 
@@ -49,6 +49,8 @@ class UnrealBuilder:
         engine_path: str,
         target_platform: BuildTargetPlatformEnum,
         target_config: BuildTypeEnum,
+        target: str,
+        maps: List[str],
         output_dir: str,
         clean: bool = False,
         valve_package_pad: bool = False
@@ -58,6 +60,8 @@ class UnrealBuilder:
         self.engine_path = engine_path
         self.target_platform = target_platform
         self.target_config = target_config
+        self.target = target
+        self.maps = maps
         self.clean = clean
         self.valve_package_pad = valve_package_pad
 
@@ -145,9 +149,7 @@ class UnrealBuilder:
         Raises:
             UnrealEngineNotInstalledError: If the engine is not installed (optional handling).
         """
-        ue_version_path = os.path.join(
-            self.engine_path, f"UE_{self.target_ue_version}"
-        )
+        ue_version_path = self.engine_path
         if os.path.exists(ue_version_path):
             return True
         else:
@@ -157,9 +159,8 @@ class UnrealBuilder:
 
     def get_build_command(self):
         """Returns the UAT command as a list for QProcess using config settings."""
-        ue_version_path = os.path.join(self.engine_path, f"UE_{self.target_ue_version}")
         uat_script = os.path.join(
-            ue_version_path,
+            self.engine_path,
             "Engine/Build/BatchFiles/RunUAT.bat" if sys.platform == "win32" else "Engine/Build/BatchFiles/RunUAT.sh"
         )
 
@@ -179,6 +180,15 @@ class UnrealBuilder:
 
         # Add configuration from config
         command.append(f"-clientconfig={self.target_config}")
+
+        # Add target
+        target_with_suffix = os.path.split(self.target)[1]
+        target_name = target_with_suffix.split('.')[0]
+        command.append(f'-target={target_name}')
+
+        # Add maps
+        for incl_map in self.maps:
+            command.append(f"-map={incl_map}")       
 
         # Add standard build options
         command.extend(["-build", "-cook", "-stage", "-pak", "-prereqs"])

@@ -1,5 +1,6 @@
 import logging
-from pathlib import Path
+import os
+from pathlib import Path, PosixPath, WindowsPath
 from turtle import pd
 
 from PyQt6.QtWidgets import (
@@ -177,9 +178,9 @@ class SteamPublishProfileWidget(QWidget):
                      (existing_profile and existing_profile.depots) or \
                      {}
             
-            # Set depot path to match the build
+            # Set depot path to match the build (For the SteamConfigurator to work, we want POSIX style path here.)
             depot_id = next(iter(depots))
-            depots[depot_id] = str(self.publish_profile.project.builds_path / Path(self.build_id_input.text()))
+            depots[depot_id] = f"{self.publish_profile.project.builds_path}/{self.build_id_input.text()}".replace(os.sep, '/')
             self._load_depots_table(self.depots_table, depots)
 
 
@@ -287,7 +288,7 @@ class SteamPublishProfileWidget(QWidget):
         add_button.clicked.connect(lambda: self._add_depot_row(target_table))
         remove_button = QPushButton("Remove Selected Depot")
         # Pass the target table to the slot
-        remove_button.clicked.connect(lambda: self._remove_depot_row(target_table))
+        remove_button.clicked.connect(lambda: self._remove_depot_row())
         layout.addWidget(add_button)
         layout.addWidget(remove_button)
         layout.addStretch()

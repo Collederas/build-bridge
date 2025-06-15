@@ -319,6 +319,7 @@ class BuildTargetSetupDialog(QDialog):
         # Add the label on the next row, spanning both columns by providing an empty string for the label part
         form.addRow("", ue_path_explanation)
 
+
         # TARGET CONFIG
         target_layout = QHBoxLayout()
         target_label = QLabel("Target")
@@ -341,13 +342,18 @@ class BuildTargetSetupDialog(QDialog):
         self.maps_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.maps_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
 
-        layout.addWidget(self.maps_table)
-        layout.addLayout(self._create_maps_buttons(self.maps_table))
         # ---
 
         form.addRow(optimize_layout)
+        target_label = QLabel("Target and Maps")
+        target_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        form.addRow(target_label)     
         form.addRow(target_layout)
         layout.addLayout(form)
+
+
+        layout.addWidget(self.maps_table)
+        layout.addLayout(self._create_maps_buttons(self.maps_table))
         layout.addStretch()
 
         return widget
@@ -459,7 +465,6 @@ class BuildTargetSetupDialog(QDialog):
             logging.info(f"Warning: Maps data is not a dictionary: {maps_dict}")
             return
         for map_path in maps_dict.keys():
-            print(f"MAPS are: {map_path}")
             self._insert_map_row(table_widget, map_path)
 
     def _browse_map_path(self, table_widget: QTableWidget, row):

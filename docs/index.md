@@ -68,6 +68,10 @@ For **Itch**:
     ![Add a Build Target]({{ 'assets/images/build_target_build.png' | relative_url }})
 * Save the build target.
 
+From version 0.6.0 the Maps and Target section was added. This allows you to specify a target and specific maps to be included using the `"-map"` argument.
+        ![Maps and Target]({{ 'assets/images/build_target_maps_target.png' | relative_url }})
+{: .notice--info }
+
 3.  **Build**
 * The build target is now active in the main window.
         ![Build Target Created]({{ 'assets/images/mainui_build_target_filled.png' | relative_url }})

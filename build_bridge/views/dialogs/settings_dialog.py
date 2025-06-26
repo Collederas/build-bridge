@@ -301,7 +301,6 @@ class SettingsDialog(QDialog):
             #     self.session.add(self.perforce_config)
             #
 
-
             # Validate Steam, store password
             try:
            

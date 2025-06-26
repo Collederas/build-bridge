@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from build_bridge.core.publisher.base_publisher import BasePublisher

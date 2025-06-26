@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
 )
-from PyQt6.QtCore import QProcess, QProcessEnvironment
+from PyQt6.QtCore import QProcess
 from PyQt6.QtGui import QColor
 
 import keyring

@@ -13,7 +13,7 @@ from PyQt6.QtGui import QIcon
 from build_bridge.log import setup_logging
 from build_bridge.utils.paths import get_resource_path
 
-from build_bridge.database import SessionFactory, initialize_database, run_migrations
+from build_bridge.database import SessionFactory, create_or_update_db
 from build_bridge.models import BuildTarget, Project
 from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
 from build_bridge.views.widgets.publish_profile_read_widgets import (
@@ -145,5 +145,5 @@ def main():
 
 if __name__ == "__main__":
     setup_logging()
-    run_migrations()
+    create_or_update_db()
     main()

@@ -114,7 +114,11 @@ class PublishProfileListWidget(QWidget):
         Clears previous entries and shows/hides the 'No builds' message.
         """
         logging.info(f"=====NEW DIR: {new_dir}=====")
-        
+        if not new_dir:
+            project = self.session.query(Project).first()
+            if project:
+                self.monitored_directory = project.builds_path
+
         # Update monitored_directory only if a new valid directory is provided
         if new_dir is not None and os.path.isdir(new_dir):
             logging.info(f"  - Updating monitored directory to: {new_dir}")

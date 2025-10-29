@@ -61,7 +61,7 @@ class SettingsDialog(QDialog):
                 self.project.source_dir = ""
                 self.project.archive_directory = ""
                 self.session.add(self.project)
-                self.session.commit()  # Save immediately to ensure it has an ID
+                self.session.commit()
             else:
                 logging.info(f"Settings: Found existing project: '{self.project.name}'")
                 # Ensure project is attached to our session
@@ -260,7 +260,7 @@ class SettingsDialog(QDialog):
 
     def switch_page(self, index):
         self.stack.setCurrentIndex(index)
-
+        
     def apply_settings(self):
         errors_occurred = []
 
@@ -276,7 +276,7 @@ class SettingsDialog(QDialog):
             self.project.source_dir = self.source_dir_input.text().strip()
             self.project.archive_directory = self.archive_dir_input.text().strip()
 
-            if self.project not in self.session:
+            if self.project.is_valid():
                 self.session.add(self.project)
 
             # TODO: PERFORCE SETTINGS

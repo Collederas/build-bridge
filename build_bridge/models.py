@@ -46,6 +46,9 @@ class Project(Base):
         "PublishProfile", back_populates="project", cascade="all, delete-orphan"
     )
 
+    def is_valid(self):
+        return self.name is not "" and self.source_dir is not "" and self.archive_directory is not ""
+
     @property
     def builds_path(self):
         return Path(str(self.archive_directory)) / self.name

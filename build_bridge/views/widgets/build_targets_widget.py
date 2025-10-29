@@ -43,7 +43,7 @@ class BuildTargetListWidget(QWidget):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(10, 10, 10, 10)  # Keep outer margins
 
-        heading_label = QLabel("Build Target")
+        heading_label = QLabel("Build Configuration")
         heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         outer_layout.addWidget(heading_label)
 
@@ -184,12 +184,8 @@ class BuildTargetListWidget(QWidget):
             self._set_widgets_visibility(False)  # Show only Add button centered
 
     def open_edit_dialog(self):
-        # This function now serves both "Edit" and "Add" clicks
         dialog = BuildTargetSetupDialog(build_target_id=self._build_target_id)
-        # Ensure signal connection is robust
         try:
-            # Check if already connected (less critical here, but good practice)
-            # dialog.build_target_created.disconnect(self.on_new_build_target)
             pass  # Disconnect if needed
         except TypeError:
             pass  # Signal not connected

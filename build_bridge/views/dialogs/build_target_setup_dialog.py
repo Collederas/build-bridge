@@ -210,11 +210,11 @@ class BuildTargetSetupDialog(QDialog):
             QMessageBox.critical(
                 self, "Database Error", f"Failed to load projects:\n{e}"
             )
-            projects = []  # Proceed with empty list on error
+            return
 
         self.project_combo.clear()
 
-        if projects:
+        if projects and projects[0].is_valid():
             self.project_combo.addItems([p.name for p in projects])
 
             # Try to re-select the current session project if it exists
@@ -309,9 +309,8 @@ class BuildTargetSetupDialog(QDialog):
         form.addRow("Unreal Engine Path:", ue_path_layout)
 
         ue_path_explanation = QLabel(
-            "Provide the root directory containing engine versions (e.g., 'Epic Games'). "
-            "The specific version (e.g., UE_5.3) will be detected from the .uproject file. "
-            "Relies on standard engine folder names (UE_x.y)."
+            "Provide directory of the engine version you want to use to build this: (e.g., UE_5.3). "
+            "Relies on standard distributed binaries engine folder names (UE_x.y)."
         )
         ue_path_explanation.setStyleSheet("color: gray; font-size: 9pt;") # Style as hint text
         ue_path_explanation.setWordWrap(True) # Allow text to wrap
@@ -325,7 +324,10 @@ class BuildTargetSetupDialog(QDialog):
         target_label = QLabel("Target")
         browse_target_button = QPushButton("Browse")
         browse_target_button.clicked.connect(self.browse_target)
-        self.target_value = QLineEdit(f"{self.session_project.source_dir}/MyTaget.Target.cs")
+        if (self.session_project):
+            self.target_value = QLineEdit(f"{self.session_project.source_dir}/MyTaget.Target.cs")
+        else:
+            self.target_value = QLineEdit("")
         target_layout.addWidget(target_label)
         target_layout.addWidget(self.target_value)
         target_layout.addWidget(browse_target_button)
@@ -514,7 +516,7 @@ class BuildTargetSetupDialog(QDialog):
             self.bt_ue_path_edit.setText(directory)
 
     def initialize_form(self):
-        # --- Refresh Project List and set visibility ---
+        # --- Refresh Project List and set visibility ---        
         self._refresh_project_list()
 
         # --- Initialize Page 2 fields ---
@@ -528,15 +530,19 @@ class BuildTargetSetupDialog(QDialog):
         self.target_platform_combo.clear()
         self.target_platform_combo.addItems([p.value for p in BuildTargetPlatformEnum])
         current_platform = BuildTargetPlatformEnum.win_64.value  # Default
+
+        if not self.build_target:
+            return
+        
         if self.build_target and self.build_target.target_platform:
             current_platform = (
                 self.build_target.target_platform.value
             )  # Note: Enum value already stored
         self.target_platform_combo.setCurrentText(current_platform)
 
-        self.bt_ue_path_edit.setText(self.build_target.unreal_engine_base_path)
+        self.bt_ue_path_edit.setText(self.build_target.unreal_engine_base_path if self.build_target else "")
         
-        if not self.build_target.target:
+        if not self.build_target:
             self.target_value.setText(f"{self.session_project.source_dir}/MyTarget.Target.cs")
         else:
             self.target_value.setText(self.build_target.target)
@@ -546,8 +552,9 @@ class BuildTargetSetupDialog(QDialog):
         )
         maps = self.build_target.maps or {}
 
-        map_id = next(iter(maps))
-        maps[map_id] = map_id
+        if maps:
+            map_id = next(iter(maps))
+            maps[map_id] = map_id
 
         self._load_maps_table(self.maps_table, maps)
 

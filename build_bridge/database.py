@@ -17,26 +17,29 @@ from build_bridge.utils.paths import get_resource_path
 Base = declarative_base()
 
 # Check for an environment variable for the database path
-env_db_path = os.getenv('BUILD_BRIDGE_DB_PATH')
+env_db_path = os.getenv("BUILD_BRIDGE_DB_PATH")
 
 if env_db_path:
     db_path = Path(env_db_path)
 else:
     # Determine the application data directory based on the operating system using pathlib
-    if platform.system() == 'Windows':
-        app_data_location = Path(os.getenv('APPDATA')) / 'BuildBridge'
-    elif platform.system() == 'Darwin':  # macOS
-        app_data_location = Path.home() / 'Library' / 'Application Support' / 'BuildBridge'
+    if platform.system() == "Windows":
+        app_data_location = Path(os.getenv("APPDATA")) / "BuildBridge"
+    elif platform.system() == "Darwin":  # macOS
+        app_data_location = (
+            Path.home() / "Library" / "Application Support" / "BuildBridge"
+        )
     else:  # Linux and other Unix-like systems
-        app_data_location = Path.home() / '.local' / 'share' / 'BuildBridge'
+        app_data_location = Path.home() / ".local" / "share" / "BuildBridge"
 
-    db_path = app_data_location / 'build_bridge.db'
+    db_path = app_data_location / "build_bridge.db"
 
 
-DATABASE_URL = f'sqlite:///{db_path}'
+DATABASE_URL = f"sqlite:///{db_path}"
 engine = create_engine(DATABASE_URL)
 
 SessionFactory = sessionmaker(bind=engine)
+
 
 def ensure_database_integrity(engine, alembic_cfg):
     with engine.connect() as conn:
@@ -80,6 +83,7 @@ def init_database(engine, alembic_cfg):
     ensure_database_integrity(engine, alembic_cfg)
     logging.info("Database integrity verified.")
 
+
 def run_pending_migrations(alembic_cfg):
     """Upgrade database if not already at latest revision."""
     from alembic.script import ScriptDirectory
@@ -99,13 +103,16 @@ def run_pending_migrations(alembic_cfg):
         else:
             logging.info("Database already at latest revision.")
 
+
 def create_or_update_db():
     migrations_dir = get_resource_path("alembic")
     alembic_ini_path = get_resource_path("alembic.ini")
 
     if not os.path.exists(migrations_dir) or not os.path.exists(alembic_ini_path):
-        logging.critical(f"Alembic config or migration folder missing. "
-                         f"Expected dir:{migrations_dir}, ini:{alembic_ini_path}")
+        logging.critical(
+            f"Alembic config or migration folder missing. "
+            f"Expected dir:{migrations_dir}, ini:{alembic_ini_path}"
+        )
         raise FileNotFoundError("Alembic migration resources not found.")
 
     alembic_cfg = Config(alembic_ini_path)
@@ -122,15 +129,15 @@ def create_or_update_db():
 
 
 @contextmanager
-def session_scope(commit_on_success=True): # Added flag
+def session_scope(commit_on_success=True):  # Added flag
     """Provide a transactional scope around a series of operations.
-       Commit is optional on successful completion of the block.
+    Commit is optional on successful completion of the block.
     """
     session = SessionFactory()
     success = False
     try:
         yield session
-        success = True # Mark as success only if yield completes without error
+        success = True  # Mark as success only if yield completes without error
     except Exception:
         session.rollback()
         raise

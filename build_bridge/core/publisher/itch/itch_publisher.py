@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 from build_bridge.core.publisher.base_publisher import BasePublisher
@@ -6,6 +7,9 @@ from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.models import PublishProfile
 from build_bridge.views.dialogs.publish_dialog import GenericUploadDialog
 from PyQt6.QtWidgets import QDialog
+
+ITCH_TARGET_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
+ITCH_CHANNEL_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def check_itch_success(exit_code: int, log_content: str) -> bool:
@@ -32,6 +36,37 @@ def check_itch_success(exit_code: int, log_content: str) -> bool:
     return is_success
 
 
+def validate_itch_target(target: str, expected_username: str | None = None):
+    target = (target or "").strip()
+    if not target:
+        raise InvalidConfigurationError("Itch.io User/Game ID is not configured.")
+
+    if not ITCH_TARGET_PATTERN.match(target):
+        raise InvalidConfigurationError(
+            "Itch.io User/Game ID must use the format 'username/game-slug' and only "
+            "letters, numbers, dots, dashes, or underscores."
+        )
+
+    target_username = target.split("/", 1)[0]
+    if expected_username and target_username.lower() != expected_username.lower():
+        raise InvalidConfigurationError(
+            "Itch.io User/Game ID username must match the selected Itch.io auth "
+            f"profile. Expected '{expected_username}/...', got '{target}'."
+        )
+
+
+def validate_itch_channel(channel: str):
+    channel = (channel or "").strip()
+    if not channel:
+        raise InvalidConfigurationError("Itch.io channel name is not configured.")
+
+    if not ITCH_CHANNEL_PATTERN.match(channel):
+        raise InvalidConfigurationError(
+            "Itch.io channel name can only contain letters, numbers, dots, dashes, "
+            "or underscores."
+        )
+
+
 class ItchPublisher(BasePublisher):
     def __init__(self, publish_profile: PublishProfile):
         self.publish_profile = publish_profile
@@ -41,11 +76,19 @@ class ItchPublisher(BasePublisher):
         if not self.publish_profile:
             raise InvalidConfigurationError(f"Itch.io Publish Profile not found.")
 
-        if not self.publish_profile.itch_user_game_id:
-            raise InvalidConfigurationError("Itch.io User/Game ID is not configured.")
-
         if not self.publish_profile:
             raise InvalidConfigurationError("Itch.io publish profile not loaded.")
+
+        if not self.publish_profile.itch_config:
+            raise InvalidConfigurationError(
+                "Itch.io auth profile is not configured."
+            )
+
+        validate_itch_target(
+            self.publish_profile.itch_user_game_id,
+            self.publish_profile.itch_config.username,
+        )
+        validate_itch_channel(self.publish_profile.itch_channel_name)
 
         if not self.publish_profile.itch_config.api_key:
             raise InvalidConfigurationError(

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QDialog,
     QLabel,
     QMenu,
@@ -20,6 +21,7 @@ from build_bridge.views.widgets.publish_profile_read_widgets import (
     PublishProfileListWidget,
 )
 from build_bridge.views.dialogs.settings_dialog import SettingsDialog
+from build_bridge.style.app_style import MAIN_WINDOW_STYLE
 
 
 class BuildBridgeWindow(QMainWindow):
@@ -27,7 +29,8 @@ class BuildBridgeWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Build Bridge")
         self.setWindowIcon(QIcon(str(get_resource_path("build_bridge/icons/buildbridge.ico"))))
-        self.setGeometry(100, 100, 700, 500)
+        self.setGeometry(100, 100, 860, 620)
+        self.setMinimumSize(760, 520)
 
         self.session = SessionFactory()
 
@@ -54,12 +57,14 @@ class BuildBridgeWindow(QMainWindow):
 
         # Central Widget and Main Layout
         central_widget = QWidget()
+        central_widget.setObjectName("mainContent")
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(24, 20, 24, 24)
+        main_layout.setSpacing(18)
 
 
-        # Build Targt Section
+        # Build Target Section
         build_target_id = self.build_target.id if self.build_target else None
         build_target_widget = BuildTargetListWidget(
             build_target_id=build_target_id, parent=self
@@ -70,9 +75,20 @@ class BuildBridgeWindow(QMainWindow):
         # Builds Section
         builds_widget = QWidget()
         builds_layout = QVBoxLayout(builds_widget)
+        builds_layout.setContentsMargins(0, 0, 0, 0)
+        builds_layout.setSpacing(10)
+
+        heading_row = QWidget()
+        heading_row.setObjectName("sectionHeader")
+        heading_layout = QHBoxLayout(heading_row)
+        heading_layout.setContentsMargins(0, 0, 0, 0)
+        heading_layout.setSpacing(8)
+
         heading_label = QLabel("Available Builds")
-        heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
-        builds_layout.addWidget(heading_label)
+        heading_label.setObjectName("sectionTitle")
+        heading_layout.addWidget(heading_label)
+        heading_layout.addStretch(1)
+        builds_layout.addWidget(heading_row)
 
         self.build_list_widget = PublishProfileListWidget()
 
@@ -87,6 +103,7 @@ class BuildBridgeWindow(QMainWindow):
         builds_layout.addWidget(self.build_list_widget)
 
         main_layout.addWidget(builds_widget)
+        main_layout.setStretchFactor(builds_widget, 1)
 
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
@@ -138,6 +155,7 @@ class BuildBridgeWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setStyleSheet(MAIN_WINDOW_STYLE)
     window = BuildBridgeWindow()
     window.show()
     sys.exit(app.exec())

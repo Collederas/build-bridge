@@ -111,7 +111,9 @@ class PublishProfileDialog(QDialog):
         self.profile_changed_signal.emit()
 
     def save_profile(self):
-        self.widget.save_profile()
+        if self.widget.save_profile():
+            self.publish_profile = self.widget.publish_profile
+            self.accept()
 
     def reject(self):
         self.session.rollback()

@@ -1,134 +1,118 @@
 # styles.py
 
-# Style for PublishProfileEntry widget (card-like appearance, squared)
-ENTRY_STYLE = """
-QWidget {
-    background-color: #f9f9f9;
-    border: 1px solid #d3d3d3;
-    padding: 5px;
+MAIN_WINDOW_STYLE = """
+QMainWindow {
+    background-color: #f4f5f7;
 }
-"""
 
-# Style for the build label
-BUILD_LABEL_STYLE = """
-QLabel {
+QMenuBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d9dde3;
+}
+
+QWidget#mainContent {
+    background-color: #f4f5f7;
+}
+
+QWidget#sectionHeader {
+    margin-top: 4px;
+}
+
+QLabel#sectionTitle {
+    color: #20242a;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#sectionSubtitle {
+    color: #66707c;
     font-size: 12px;
-    font-weight: bold;
-    color: #333333;
 }
-"""
 
-# Style for the "Target Platform" label
-PLATFORM_LABEL_STYLE = """
-QLabel {
+QFrame#mainPanel,
+QWidget#buildCard {
+    background-color: #ffffff;
+    border: 1px solid #d9dde3;
+    border-radius: 6px;
+}
+
+QLabel#primaryText {
+    color: #20242a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#fieldLabel {
+    color: #59636f;
     font-size: 12px;
-    font-weight: bold;
-    color: #555555;
 }
-"""
 
-# Style for the refresh button (unstyled, default Windows look with emoji)
-REFRESH_BUTTON_STYLE = """
-QPushButton {
-    /* No custom styling, let Windows default take over */
+QLabel#emptyState {
+    color: #66707c;
+    font-size: 13px;
+    padding: 28px;
 }
-"""
 
-# Style for the browse button (light blue tint, Windows-like)
-BROWSE_BUTTON_STYLE = """
-QPushButton {
-    background-color: #e0e8f0;
-    color: #333333;
-    border: 1px solid #adadad;
-    padding: 5px 10px;
-}
-QPushButton:hover {
-    background-color: #d0d8e0;
-}
-QPushButton:pressed {
-    background-color: #c0c8d0;
-}
-QPushButton:focus {
-    border: 1px solid #666666;
-}
-"""
-
-# Style for the edit/profile button (light orange tint, Windows-like)
-EDIT_BUTTON_STYLE = """
-QPushButton {
-    background-color: #f0e8e0;
-    color: #333333;
-    border: 1px solid #adadad;
-    padding: 5px 10px;
-}
-QPushButton:hover {
-    background-color: #e0d8d0;
-}
-QPushButton:pressed {
-    background-color: #d0c8c0;
-}
-QPushButton:focus {
-    border: 1px solid #666666;
-}
-"""
-
-# Style for the publish button (light red tint, Windows-like)
-PUBLISH_BUTTON_STYLE = """
-QPushButton {
-    background-color: #f0e0e0;
-    color: #333333;
-    border: 1px solid #adadad;
-    padding: 5px 10px;
-}
-QPushButton:hover {
-    background-color: #e0d0d0;
-}
-QPushButton:pressed {
-    background-color: #d0c0c0;
-}
-QPushButton:disabled {
-    background-color: #cccccc;
-    color: #666666;
-}
-QPushButton:focus {
-    border: 1px solid #666666;
-}
-"""
-
-# Style for the platform selector dropdown (squared, with visible arrow)
-PLATFORM_COMBO_STYLE = """
+QLineEdit,
 QComboBox {
-    border: 1px solid #cccccc;
-    padding: 5px;
-    background-color: white;
-    color: #333333;
+    background-color: #ffffff;
+    border: 1px solid #c7cdd6;
+    border-radius: 4px;
+    color: #20242a;
+    min-height: 26px;
+    padding: 2px 8px;
 }
-QComboBox:hover {
-    border: 1px solid #aaaaaa;
-}
+
+QLineEdit:focus,
 QComboBox:focus {
-    border: 1px solid #666666;
+    border-color: #3a6ea5;
 }
-QComboBox::drop-down {
-    width: 20px;
-    border-left: 1px solid #cccccc;
-    background-color: #f0f0f0;
+
+QPushButton {
+    background-color: #ffffff;
+    border: 1px solid #b8c0ca;
+    border-radius: 4px;
+    color: #20242a;
+    min-height: 28px;
+    padding: 4px 12px;
 }
-QComboBox QAbstractItemView {
-    border: 1px solid #cccccc;
-    background-color: white;
-    selection-background-color: #e0e0e0;
+
+QPushButton:hover {
+    background-color: #f0f3f7;
+    border-color: #9da8b5;
 }
-"""
 
+QPushButton:pressed {
+    background-color: #e3e8ef;
+}
 
+QPushButton:disabled {
+    background-color: #eef0f3;
+    border-color: #d3d8df;
+    color: #8a939e;
+}
 
-# Style for the "No builds available" message
-EMPTY_MESSAGE_STYLE = """
-QLabel {
-    font-size: 14px;
-    font-style: italic;
-    color: #888888;
-    padding: 20px;
+QPushButton#primaryButton {
+    background-color: #236192;
+    border-color: #236192;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #1d527d;
+}
+
+QPushButton#ghostButton {
+    background-color: transparent;
+}
+
+QScrollArea {
+    background-color: transparent;
+    border: 0;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
 }
 """

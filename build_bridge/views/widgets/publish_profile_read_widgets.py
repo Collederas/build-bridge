@@ -10,33 +10,25 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QSizePolicy,
     QComboBox,
-    QWidget,
-    QLabel,
-    QScrollArea,
-    QVBoxLayout,
-    QCheckBox,
+    QDialog,
+    QStyle,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from build_bridge.models import ItchPublishProfile, SteamPublishProfile, StoreEnum
+from build_bridge.models import (
+    Project,
+    PublishProfile,
+    StoreEnum,
+)
 from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
+from build_bridge.core.preflight import validate_publish_preflight
 from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.core.publisher.steam.steam_publisher import SteamPublisher
-from build_bridge.models import Project, PublishProfile, StoreEnum
-from build_bridge.views.dialogs.publish_profile_dialog import PublishProfileDialog
-
-# Import the styles
-from build_bridge.style.app_style import (
-    ENTRY_STYLE,
-    BUILD_LABEL_STYLE,
-    PLATFORM_LABEL_STYLE,
-    REFRESH_BUTTON_STYLE,
-    BROWSE_BUTTON_STYLE,
-    EDIT_BUTTON_STYLE,
-    PUBLISH_BUTTON_STYLE,
-    EMPTY_MESSAGE_STYLE
+from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
+from build_bridge.views.dialogs.publish_profile_manager_dialog import (
+    PublishProfileManagerDialog,
 )
 
 class PublishProfileListWidget(QWidget):
@@ -57,11 +49,19 @@ class PublishProfileListWidget(QWidget):
         self.setMinimumSize(500, 300)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
 
         # --- Refresh Button ---
-        self.refresh_button = QPushButton("🔄 Refresh")
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+        toolbar_layout.addStretch(1)
+
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.setObjectName("ghostButton")
+        self.refresh_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
+        )
         self.refresh_button.setToolTip(
             "Rescan the currently monitored build directory for changes"
         )
@@ -69,8 +69,8 @@ class PublishProfileListWidget(QWidget):
         self.refresh_button.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
-        self.refresh_button.setFixedWidth(100)  # Fixed width to prevent stretching
-        main_layout.addWidget(self.refresh_button)
+        toolbar_layout.addWidget(self.refresh_button)
+        main_layout.addLayout(toolbar_layout)
         # --- End Refresh Button ---
 
         self.scroll_area = QScrollArea()
@@ -80,7 +80,7 @@ class PublishProfileListWidget(QWidget):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         self.scroll_area.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.scroll_area.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -89,14 +89,14 @@ class PublishProfileListWidget(QWidget):
 
         self.scroll_content = QWidget()
         self.vbox = QVBoxLayout(self.scroll_content)
-        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.vbox.setContentsMargins(0, 0, 0, 0)
-        self.vbox.setSpacing(5)
+        self.vbox.setSpacing(8)
         self.scroll_area.setWidget(self.scroll_content)
 
         self.empty_message_label = QLabel("No builds available.")
+        self.empty_message_label.setObjectName("emptyState")
         self.empty_message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_message_label.setContentsMargins(10, 20, 10, 20)
         self.empty_message_label.setVisible(True)
         self.empty_message_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -200,7 +200,7 @@ class PublishProfileEntry(QWidget):
     def __init__(self, build_root, session):
         super().__init__()
         self.build_root = build_root
-        self.publish_profile = None
+        self.publish_profile: PublishProfile | None = None
         self.session = session
 
         if build_root and os.path.exists(build_root):
@@ -213,13 +213,14 @@ class PublishProfileEntry(QWidget):
 
 
         # Use a responsive layout with QVBoxLayout and QHBoxLayout
+        self.setObjectName("buildCard")
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(15, 8, 15, 8)
-        self.main_layout.setSpacing(10)
+        self.main_layout.setContentsMargins(14, 12, 14, 12)
+        self.main_layout.setSpacing(9)
 
         # First row: Label and Platform Selector with Checkbox
         self.top_row = QHBoxLayout()
-        self.top_row.setSpacing(25)
+        self.top_row.setSpacing(14)
 
         # Build Label
         project_name_str = "Unknown Project"
@@ -233,18 +234,20 @@ class PublishProfileEntry(QWidget):
         display_name_font = QFont()
         display_name_font.setBold(True)
         self.display_name_label = QLabel(f"{project_name_str} - {self.build_id}")
+        self.display_name_label.setObjectName("primaryText")
         self.display_name_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.display_name_label.setWordWrap(True)
         self.display_name_label.setFont(display_name_font)
         self.top_row.addWidget(self.display_name_label)
 
-        # Platform Selector with Checkbox
+        # Platform Selector
         self.platform_widget = QWidget()
         self.platform_layout = QHBoxLayout(self.platform_widget)
         self.platform_layout.setContentsMargins(0, 0, 0, 0)
         self.platform_layout.setSpacing(5)
 
-        self.store_type_label = QLabel("Target Platform:")
+        self.store_type_label = QLabel("Store")
+        self.store_type_label.setObjectName("fieldLabel")
         self.store_type_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.platform_layout.addWidget(self.store_type_label)
 
@@ -256,14 +259,6 @@ class PublishProfileEntry(QWidget):
         self.store_type_combo.setToolTip("Select the target platform for publishing this build")
         self.platform_layout.addWidget(self.store_type_combo)
 
-        # Add the checkbox directly after the dropdown
-        self.playtest_checkbox = QCheckBox("Publish Playtest")
-        self.playtest_checkbox.setToolTip("Publish to Steam Playtest branch instead of the main app")
-        self.playtest_checkbox.setVisible(False)
-        self.playtest_checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.platform_layout.addWidget(self.playtest_checkbox)
-        self.playtest_checkbox.stateChanged.connect(self.update_publish_button_enabled)
-
         # Prevent the platform layout from stretching unnecessarily
         self.platform_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.top_row.addWidget(self.platform_widget)
@@ -273,22 +268,25 @@ class PublishProfileEntry(QWidget):
 
         self.main_layout.addLayout(self.top_row)
 
-        # Second row: Build Profile selector
+        # Second row: Selected publish profile
         self.profile_row = QHBoxLayout()
         self.profile_row.setSpacing(8)
-        self.profile_row.addWidget(QLabel("Build Profile:"))
-        self.build_profile_combo = QComboBox()
-        self.build_profile_combo.setMinimumWidth(180)
-        self.build_profile_combo.currentIndexChanged.connect(
-            self._on_build_profile_selected
+        profile_label = QLabel("Publish profile")
+        profile_label.setObjectName("fieldLabel")
+        self.profile_row.addWidget(profile_label)
+
+        self.profile_value_label = QLabel("No profile selected")
+        self.profile_value_label.setObjectName("primaryText")
+        self.profile_value_label.setWordWrap(True)
+        self.profile_row.addWidget(self.profile_value_label, 1)
+
+        self.manage_profiles_button = QPushButton("Change...")
+        self.manage_profiles_button.setObjectName("ghostButton")
+        self.manage_profiles_button.setToolTip(
+            "Create, select, rename, edit, or delete publish profiles"
         )
-        self.profile_row.addWidget(self.build_profile_combo)
-        self.new_profile_button = QPushButton("New")
-        self.new_profile_button.setFixedHeight(28)
-        self.new_profile_button.setFixedWidth(60)
-        self.new_profile_button.clicked.connect(self._create_new_build_profile)
-        self.profile_row.addWidget(self.new_profile_button)
-        self.profile_row.addStretch(1)
+        self.manage_profiles_button.clicked.connect(self.manage_publish_profiles)
+        self.profile_row.addWidget(self.manage_profiles_button)
         self.main_layout.addLayout(self.profile_row)
 
         # Third row: Buttons
@@ -299,22 +297,15 @@ class PublishProfileEntry(QWidget):
 
         # Buttons
         browse_archive_button = QPushButton("Browse")
+        browse_archive_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+        )
         browse_archive_button.setToolTip(f"Open build folder:\n{self.build_root}")
-        browse_archive_button.setFixedHeight(28)
-        browse_archive_button.setFixedWidth(70)
         browse_archive_button.clicked.connect(self.browse_archive_directory)
         self.bottom_row.addWidget(browse_archive_button)
 
-        self.edit_button = QPushButton("Profile")
-        self.edit_button.setToolTip("Edit publish profile for the selected target platform")
-        self.edit_button.setFixedHeight(28)
-        self.edit_button.setFixedWidth(70)
-        self.edit_button.clicked.connect(self.edit_publish_profile)
-        self.bottom_row.addWidget(self.edit_button)
-
         self.publish_button = QPushButton("Publish")
-        self.publish_button.setFixedHeight(28)
-        self.publish_button.setFixedWidth(70)
+        self.publish_button.setObjectName("primaryButton")
         self.publish_button.clicked.connect(self.handle_publish)
         self.publish_button.setToolTip("")
         self.bottom_row.addWidget(self.publish_button)
@@ -329,23 +320,17 @@ class PublishProfileEntry(QWidget):
         self.on_store_changed()
 
     def update_publish_button_enabled(self):
-        self.publish_button.setEnabled(self.can_publish())
+        self.publish_button.setEnabled(self.store_type_combo.currentData() is not None)
+        self._refresh_publish_tooltip()
 
     def on_store_changed(self):
-        selected_store_enum_value = self.store_type_combo.currentData()
-        is_steam = (selected_store_enum_value == StoreEnum.steam)
-
-        if is_steam:
-            self.playtest_checkbox.setVisible(True)
-        else:
-            self.playtest_checkbox.setVisible(False)
-            self.playtest_checkbox.setChecked(False)
-
-        self._reload_build_profiles()
+        self._load_default_publish_profile()
         self.update_publish_button_enabled()
 
     def on_publish_profile_added_or_updated(self):
-        self._reload_build_profiles(selected_profile_id=getattr(self.publish_profile, "id", None))
+        self._load_default_publish_profile(
+            selected_profile_id=getattr(self.publish_profile, "id", None)
+        )
         self.update_publish_button_enabled()
 
     def _get_profile_label(self, profile: PublishProfile):
@@ -353,22 +338,11 @@ class PublishProfileEntry(QWidget):
             return profile.description.strip()
         return f"Profile #{profile.id}"
 
-    def _make_profile_instance(self, selected_store_enum):
-        project = self.session.query(Project).one_or_none()
-        store_model_map = {
-            StoreEnum.itch: ItchPublishProfile,
-            StoreEnum.steam: SteamPublishProfile
-        }
-        return store_model_map[selected_store_enum](
-            project_id=project.id if project else None,
-            build_id=self.build_id,
-            store_type=selected_store_enum,
-            description="New Profile",
-        )
-
-    def _reload_build_profiles(self, selected_profile_id=None):
+    def _load_default_publish_profile(self, selected_profile_id=None):
         selected_store_enum = self.store_type_combo.currentData()
         if selected_store_enum is None:
+            self.publish_profile = None
+            self._refresh_profile_summary()
             return
 
         profiles = (
@@ -378,56 +352,77 @@ class PublishProfileEntry(QWidget):
             .all()
         )
 
-        self.build_profile_combo.blockSignals(True)
-        self.build_profile_combo.clear()
-
+        self.publish_profile = None
         if profiles:
-            for profile in profiles:
-                self.build_profile_combo.addItem(self._get_profile_label(profile), profile.id)
-
             if selected_profile_id is not None:
-                idx = self.build_profile_combo.findData(selected_profile_id)
-                self.build_profile_combo.setCurrentIndex(idx if idx >= 0 else 0)
-            else:
-                self.build_profile_combo.setCurrentIndex(0)
+                self.publish_profile = next(
+                    (profile for profile in profiles if profile.id == selected_profile_id),
+                    None,
+                )
+            if self.publish_profile is None:
+                self.publish_profile = profiles[0]
 
-            self.publish_profile = self.session.get(
-                PublishProfile, self.build_profile_combo.currentData()
-            )
+        self._refresh_profile_summary()
+
+    def _refresh_profile_summary(self):
+        if self.publish_profile is None:
+            selected_store_enum = self.store_type_combo.currentData()
+            store_label = selected_store_enum.value if selected_store_enum else "store"
+            self.profile_value_label.setText(f"No {store_label} profile selected")
+            self.profile_value_label.setToolTip("Use Manage Profiles to create or select one.")
         else:
-            self.build_profile_combo.addItem("New Profile (unsaved)", "__new__")
-            self.build_profile_combo.setCurrentIndex(0)
-            self.publish_profile = self._make_profile_instance(selected_store_enum)
+            profile_label = self._get_profile_label(self.publish_profile)
+            self.profile_value_label.setText(profile_label)
+            self.profile_value_label.setToolTip(
+                f"Selected publish profile: {profile_label}"
+            )
 
-        self.build_profile_combo.blockSignals(False)
-
-    def _on_build_profile_selected(self, *_):
-        selected_profile_id = self.build_profile_combo.currentData()
-        if selected_profile_id == "__new__":
-            self.publish_profile = self._make_profile_instance(self.store_type_combo.currentData())
-            return
-        if selected_profile_id is None:
-            return
-        self.publish_profile = self.session.get(PublishProfile, selected_profile_id)
+    def _on_profile_selected_from_manager(self, profile):
+        if profile is None:
+            self.publish_profile = None
+        else:
+            self.publish_profile = self.session.merge(profile)
+        self._refresh_profile_summary()
         self.update_publish_button_enabled()
 
-    def _create_new_build_profile(self):
-        selected_store_enum = self.store_type_combo.currentData()
-        if selected_store_enum is None:
-            return
-        self.publish_profile = self._make_profile_instance(selected_store_enum)
-        self.build_profile_combo.blockSignals(True)
-        self.build_profile_combo.addItem("New Profile (unsaved)", "__new__")
-        self.build_profile_combo.setCurrentIndex(self.build_profile_combo.count() - 1)
-        self.build_profile_combo.blockSignals(False)
-        self.update_publish_button_enabled()
-
-    def can_publish(self) -> bool:
+    def manage_publish_profiles(self):
         selected_platform_enum = self.store_type_combo.currentData()
+        if selected_platform_enum is None:
+            QMessageBox.information(
+                self,
+                "Select Store",
+                "Please select a store before managing publish profiles.",
+            )
+            return
+
+        manager = PublishProfileManagerDialog(
+            session=self.session,
+            build_id=self.build_id,
+            store_type=selected_platform_enum,
+            selected_profile_id=getattr(self.publish_profile, "id", None),
+            parent=self,
+        )
+        manager.profile_selected_signal.connect(self._on_profile_selected_from_manager)
+        manager.profiles_changed_signal.connect(self.on_publish_profile_added_or_updated)
+        manager.exec()
+
+        if self.publish_profile is None:
+            self._load_default_publish_profile()
+        else:
+            self.publish_profile = self.session.get(PublishProfile, self.publish_profile.id)
+            self._refresh_profile_summary()
+        self.update_publish_button_enabled()
+
+    def _refresh_publish_tooltip(self):
+        selected_platform_enum = self.store_type_combo.currentData()
+        if self.publish_profile is None:
+            store_label = selected_platform_enum.value if selected_platform_enum else "store"
+            self.publish_button.setToolTip(
+                f"Create or select a {store_label} publish profile first."
+            )
+            return
 
         try:
-            self.validate_build_content()
-
             publisher_class = self.store_publishers.get(selected_platform_enum)
             if not publisher_class:
                 raise InvalidConfigurationError(
@@ -436,10 +431,8 @@ class PublishProfileEntry(QWidget):
             
             publisher_instance = None
             if selected_platform_enum == StoreEnum.steam:
-                publish_playtest_value = self.playtest_checkbox.isChecked()
                 publisher_instance = publisher_class(
-                    publish_profile=self.publish_profile,
-                    publish_playtest=publish_playtest_value
+                    publish_profile=self.publish_profile
                 )
             else:
                 publisher_instance = publisher_class(
@@ -451,23 +444,14 @@ class PublishProfileEntry(QWidget):
             self.publish_button.setToolTip(
                 f"Publish build '{self.build_id}' to {selected_platform_enum.value}"
             )
-            return True
 
         except InvalidConfigurationError as e:
             self.publish_button.setToolTip(f"Cannot publish: {e}")
-            return False
         except Exception as e:
             self.publish_button.setToolTip(f"Unexpected validation error: {e}")
             logging.info(f"Unexpected validation error: {e}")
-            return False
 
     def validate_build_content(self):
-        if not self.build_root or not os.path.isdir(self.build_root):
-            self.publish_button.setToolTip(
-                f"Build directory is invalid or not found:\n{self.build_root}"
-            )
-            return False
-
         if not self.build_root or not os.path.isdir(self.build_root):
             raise InvalidConfigurationError("Build directory path is invalid.")
 
@@ -525,30 +509,18 @@ class PublishProfileEntry(QWidget):
                 f"Build directory not found or invalid:\n{self.build_root}",
             )
 
-    def edit_publish_profile(self):
-        selected_platform_enum = self.store_type_combo.currentData()
-        if selected_platform_enum is None:
-            QMessageBox.information(
-                self,
-                "Select Platform",
-                "Please select a target platform before editing its profile.",
-            )
-            return
-
-        edit_dialog = PublishProfileDialog(
-            session=self.session, publish_profile=self.publish_profile
-        )
-        try:
-            pass
-        except TypeError:
-            pass
-        edit_dialog.profile_changed_signal.connect(self.on_publish_profile_added_or_updated)
-        edit_dialog.exec()
-
     def handle_publish(self):
         selected_store_enum = self.store_type_combo.currentData()
         if selected_store_enum is None:
             QMessageBox.warning(self, "Error", "No target platform selected.")
+            return
+        if self.publish_profile is None:
+            QMessageBox.information(
+                self,
+                "Select Profile",
+                "Create or select a publish profile before publishing.",
+            )
+            self.manage_publish_profiles()
             return
 
         publisher_class = self.store_publishers.get(selected_store_enum)
@@ -558,18 +530,28 @@ class PublishProfileEntry(QWidget):
             )
             return
 
-        publisher_instance = None
         try:
+            self.validate_build_content()
+
             if selected_store_enum == StoreEnum.steam:
-                publish_playtest_value = self.playtest_checkbox.isChecked()
                 publisher_instance = publisher_class(
-                    self.publish_profile,
-                    publish_playtest=publish_playtest_value
+                    self.publish_profile
                 )
-                logging.info(f"Attempting to publish build '{self.build_id}' to Steam (Playtest: {publish_playtest_value})...")
+                logging.info(f"Attempting to publish build '{self.build_id}' to Steam...")
             else:
                 publisher_instance = publisher_class(self.publish_profile)
                 logging.info(f"Attempting to publish build '{self.build_id}' to {selected_store_enum}...")
+
+            publisher_instance.validate_publish_profile()
+
+            preflight_result = validate_publish_preflight(
+                build_root=self.build_root,
+                publish_profile=self.publish_profile,
+                selected_store=selected_store_enum,
+            )
+            preflight_dialog = PreflightDialog(preflight_result, parent=self)
+            if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
+                return
 
             publisher_instance.publish(content_dir=self.build_root)
 

@@ -317,14 +317,42 @@ class ItchConfigWidget(QWidget):
             QMessageBox.warning(self, "Username missing", msg)
             return
 
+        expected_username = self.username_input.text().strip()
         logging.info(
             "ItchConfigWidget: Initiating connection test via api: \n\n"
             + "ENDPOINT: https://itch.io/api/1/{api_key}/credentials/info"
         )
-        result = requests.get(f"https://itch.io/api/1/{api_key_to_use}/credentials/info")
+        try:
+            result = requests.get(
+                f"https://itch.io/api/1/{api_key_to_use}/credentials/info",
+                timeout=15,
+            )
+        except requests.RequestException as e:
+            self._update_status_label(False, message=f"Connection failed: {e}")
+            return
+
         if result.ok:
+            try:
+                credentials = result.json()
+            except ValueError:
+                credentials = {}
+
+            actual_username = (credentials.get("username") or "").strip()
+            if actual_username and actual_username.lower() != expected_username.lower():
+                msg = (
+                    "API key is valid, but it belongs to "
+                    f"'{actual_username}', not '{expected_username}'."
+                )
+                logging.info(f"ItchConfigWidget: {msg}")
+                self._update_status_label(False, message=msg, color=QColor("orange"))
+                QMessageBox.warning(self, "Username Mismatch", msg)
+                return
+
             logging.info("ItchConfigWidget: Connection successful.")
 
             self._update_status_label(True, message="Connection successful")
         else:
-            self._update_status_label(False, message="Connection failed")
+            self._update_status_label(
+                False,
+                message=f"Connection failed ({result.status_code})",
+            )

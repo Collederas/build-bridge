@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSpacerItem,
     QMessageBox,
+    QDialog,
 )
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
@@ -23,9 +24,11 @@ from build_bridge.core.builder.unreal_builder import (
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
+from build_bridge.core.preflight import validate_build_preflight
 from build_bridge.database import session_scope
 from build_bridge.models import BuildTarget
 from build_bridge.views.dialogs.build_dialog import BuildWindowDialog
+from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
 from build_bridge.views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 
 
@@ -41,51 +44,45 @@ class BuildTargetListWidget(QWidget):
         self._build_target_id = build_target_id  # Store the ID
 
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(10, 10, 10, 10)  # Keep outer margins
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(10)
 
         heading_label = QLabel("Build Configuration")
-        heading_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
+        heading_label.setObjectName("sectionTitle")
         outer_layout.addWidget(heading_label)
 
         self.contrast_frame = QFrame()
-        self.contrast_frame.setObjectName("contrastFrame")
+        self.contrast_frame.setObjectName("mainPanel")
         self.contrast_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        # Slightly reduced padding inside the frame for tighter look
-        self.contrast_frame.setStyleSheet(
-            """
-            QFrame#contrastFrame {
-                background-color: #f9f9f9; /* Lighter gray */
-                border: 1px solid #d0d0d0; /* Slightly softer border */
-                border-radius: 5px;       /* Slightly smaller radius */
-                padding: 8px;
-            }
-            """
-        )
 
         self.content_layout = QHBoxLayout(self.contrast_frame)
-        self.content_layout.setContentsMargins(5, 5, 5, 5)
-        self.content_layout.setSpacing(8)  # Slightly reduced spacing
+        self.content_layout.setContentsMargins(14, 12, 14, 12)
+        self.content_layout.setSpacing(10)
 
         display_name_font = QFont()
         display_name_font.setBold(True)
         self.target_label = QLabel()
+        self.target_label.setObjectName("primaryText")
         self.target_label.setFont(display_name_font)
         self.target_label.setSizePolicy(
             QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred
         )
 
-        self.build_version_label = QLabel("Build Version:")
+        self.build_version_label = QLabel("Version")
+        self.build_version_label.setObjectName("fieldLabel")
         self.build_version_input = QLineEdit("0.1")
-        self.build_version_input.setMaximumWidth(80)
+        self.build_version_input.setFixedWidth(92)
         self.build_version_input.setToolTip(
             "Enter the desired version string for this build (e.g., 1.0, 0.2-beta)"
         )
 
         self.edit_button = QPushButton("Edit")
         self.build_button = QPushButton("Build")
+        self.build_button.setObjectName("primaryButton")
 
         # Widget for the "No Build Target" state ---
-        self.add_button = QPushButton("+ Add new Build Target")
+        self.add_button = QPushButton("Add Build Target")
+        self.add_button.setObjectName("primaryButton")
 
         self.content_layout.addWidget(self.target_label)
 
@@ -257,6 +254,13 @@ class BuildTargetListWidget(QWidget):
                         "Configuration Error",
                         "Project archive directory, source directory, or name is missing.",
                     )
+                    return
+
+                preflight_result = validate_build_preflight(
+                    current_build_target, release_name
+                )
+                preflight_dialog = PreflightDialog(preflight_result, parent=self)
+                if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
                     return
                 
                 engine_base_path = current_build_target.unreal_engine_base_path

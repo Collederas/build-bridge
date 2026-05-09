@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QApplication,
     QFileDialog,
+    QComboBox,
 )
 from PyQt6.QtCore import QProcess
 from PyQt6.QtGui import QColor
@@ -44,6 +45,11 @@ class ItchConfigWidget(QWidget):
         self._accumulated_output = ""
 
         # --- UI Elements ---
+        self.profile_combo = QComboBox()
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_selected)
+        self.new_profile_button = QPushButton("New Profile")
+        self.new_profile_button.clicked.connect(self._create_new_profile)
+
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("username")
 
@@ -77,6 +83,11 @@ class ItchConfigWidget(QWidget):
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(self.profile_combo)
+        profile_row.addWidget(self.new_profile_button)
+        form_layout.addRow("Auth Profiles:", profile_row)
 
         form_layout.addRow("Username", self.username_input)
         form_layout.addRow("API Key:", self.api_key_input)
@@ -120,25 +131,22 @@ class ItchConfigWidget(QWidget):
         """Loads Itch.io configuration into the input fields."""
         logging.info("ItchConfigWidget: Loading settings...")
         try:
-            # Query or create the single config entry
-            self.itch_config = self.session.query(ItchConfig).first()
-            if not self.itch_config:
-                logging.info("ItchConfigWidget: No config found, creating new one in session.")
-                self.itch_config = ItchConfig()
-                self._initial_username = ""
-                self._initial_butler_path = ""
-            else:
-                # Ensure loaded object is in session
-                if self.itch_config not in self.session:
-                    self.session.add(self.itch_config)
-                # Store initial values
-                self._initial_username = self.itch_config.username or ""
-                self._initial_butler_path = self.itch_config.butler_path or ""
+            configs = self.session.query(ItchConfig).order_by(ItchConfig.username.asc()).all()
+            self.profile_combo.blockSignals(True)
+            self.profile_combo.clear()
 
-            # Populate UI fields
-            self.username_input.setText(self._initial_username)
-            self.butler_path_input.setText(self._initial_butler_path)
-            self.api_key_input.clear()  # Always clear API key field on load
+            if not configs:
+                self.itch_config = ItchConfig()
+                self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+                self.profile_combo.setCurrentIndex(0)
+            else:
+                for cfg in configs:
+                    self.profile_combo.addItem(cfg.username, cfg.id)
+                self.profile_combo.setCurrentIndex(0)
+                self.itch_config = configs[0]
+
+            self.profile_combo.blockSignals(False)
+            self._load_config_into_fields()
 
             logging.info(
                 f"ItchConfigWidget: Loaded config. User/Game: {self._initial_username}"
@@ -153,6 +161,58 @@ class ItchConfigWidget(QWidget):
             self.test_button.setEnabled(False)
             # Disable inputs?
 
+    def _load_config_into_fields(self):
+        if not self.itch_config:
+            self._initial_username = ""
+            self._initial_butler_path = ""
+        else:
+            self._initial_username = self.itch_config.username or ""
+            self._initial_butler_path = self.itch_config.butler_path or ""
+
+        self.username_input.setText(self._initial_username)
+        self.butler_path_input.setText(self._initial_butler_path)
+        self.api_key_input.clear()
+
+    def _on_profile_selected(self, *_):
+        selected_id = self.profile_combo.currentData()
+        if selected_id == "__new__":
+            self.itch_config = ItchConfig()
+            self._load_config_into_fields()
+            return
+
+        if selected_id is None:
+            return
+
+        self.itch_config = self.session.get(ItchConfig, selected_id)
+        self._load_config_into_fields()
+        self._reset_status_label()
+
+    def _create_new_profile(self):
+        self.itch_config = ItchConfig()
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+        self.profile_combo.setCurrentIndex(self.profile_combo.count() - 1)
+        self.profile_combo.blockSignals(False)
+        self._load_config_into_fields()
+        self.username_input.setFocus()
+        self._reset_status_label()
+
+    def _refresh_profile_combo(self, selected_id=None):
+        configs = self.session.query(ItchConfig).order_by(ItchConfig.username.asc()).all()
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        for cfg in configs:
+            self.profile_combo.addItem(cfg.username, cfg.id)
+        if not configs:
+            self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+            self.profile_combo.setCurrentIndex(0)
+        elif selected_id is not None:
+            idx = self.profile_combo.findData(selected_id)
+            self.profile_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        else:
+            self.profile_combo.setCurrentIndex(0)
+        self.profile_combo.blockSignals(False)
+
     def validate(self):
         logging.info("ItchConfigWidget: Validating Itch settings...")
 
@@ -165,15 +225,19 @@ class ItchConfigWidget(QWidget):
             # Update config object from UI fields
             new_username = self.username_input.text().strip()
             new_butler_path = self.butler_path_input.text().strip()
+            if not new_username:
+                raise InvalidConfigurationError("Itch username is required.")
+            if self.itch_config not in self.session:
+                self.session.add(self.itch_config)
 
             self.itch_config.username = new_username
-            self.itch_config.butler_path = (
-                new_butler_path if new_butler_path else None
-            )
+            self.itch_config.butler_path = new_butler_path if new_butler_path else None
 
             # Update initial values
             self._initial_username = new_username
             self._initial_butler_path = new_butler_path
+            self.session.flush()
+            self._refresh_profile_combo(selected_id=self.itch_config.id)
 
         except ValueError as e:
             logging.info(f"ItchConfigWidget: Error preparing settings for save: {e}")

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from build_bridge.models import SteamPublishProfile
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.core.publisher.base_publisher import BasePublisher
@@ -51,7 +53,7 @@ class SteamPublisher(BasePublisher):
         steam_config = self.publish_profile.steam_config
 
         if self.publish_playtest:
-            if any([self.publish_profile.playtest_app_id == 0, not self.publish_profile.playtest_depots]):
+            if not self.publish_profile.playtest_app_id or not self.publish_profile.playtest_depots:
                 raise InvalidConfigurationError("Playtest configuration is incomplete.")
 
         if not steam_config:
@@ -73,6 +75,8 @@ class SteamPublisher(BasePublisher):
 
         # Generate or update the VDF file.
         executable = self.publish_profile.steam_config.steamcmd_path
+        steamcmd_dir = Path(executable).parent
+        builder_log_dir = Path(self.publish_profile.builder_path) / "BuildLogs"
         arguments = [
             "+login",
             self.publish_profile.steam_config.username,
@@ -83,9 +87,14 @@ class SteamPublisher(BasePublisher):
         ]
 
         # --- Prepare Display Info & Title ---
+        target_app_id = (
+            self.publish_profile.playtest_app_id
+            if self.publish_playtest
+            else self.publish_profile.app_id
+        )
         display_info = {
             "Build ID": self.publish_profile.build_id,
-            "App ID": str(self.publish_profile.app_id),
+            "App ID": str(target_app_id),
             "Target": f"Steam ({self.publish_profile.steam_config.username})",
         }
         title = f"Steam Upload: {self.publish_profile.project.name} - {self.publish_profile.build_id}"
@@ -97,6 +106,12 @@ class SteamPublisher(BasePublisher):
             display_info=display_info,
             title=title,
             success_checker=check_steam_success,
+            log_files=[
+                str(steamcmd_dir / "logs" / "content_log.txt"),
+                str(steamcmd_dir / "logs" / "stderr.txt"),
+            ],
+            log_directories=[str(builder_log_dir)],
+            working_directory=str(steamcmd_dir),
         )
         dialog.exec()
 

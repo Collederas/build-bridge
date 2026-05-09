@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 from pathlib import Path, PosixPath, WindowsPath
@@ -7,6 +8,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QLabel,
     QFormLayout,
     QLineEdit,
     QPushButton,
@@ -68,6 +70,18 @@ class SteamPublishProfileWidget(QWidget):
 
         main_layout.addLayout(common_form_layout)  # Add common fields first
 
+        # Profile management (inline)
+        profiles_row = QHBoxLayout()
+        self.build_profile_combo = QComboBox()
+        self.build_profile_combo.currentIndexChanged.connect(
+            self._on_build_profile_changed
+        )
+        self.new_profile_button = QPushButton("New Profile")
+        self.new_profile_button.clicked.connect(self._create_new_profile)
+        profiles_row.addWidget(self.build_profile_combo)
+        profiles_row.addWidget(self.new_profile_button)
+        common_form_layout.addRow("Build Profile:", profiles_row)
+
         # Tab Widget
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
@@ -83,9 +97,9 @@ class SteamPublishProfileWidget(QWidget):
 
         self.description_input = QLineEdit()
         self.description_input.setPlaceholderText(
-            "Optional: Live branch name, build notes, etc."
+            "Main, Demo, QA, ..."
         )
-        regular_tab_layout.addRow("Description:", self.description_input)
+        regular_tab_layout.addRow("Profile Name:", self.description_input)
 
         # Depots Table (Regular)
         self.depots_table = self._create_depots_table()
@@ -116,15 +130,10 @@ class SteamPublishProfileWidget(QWidget):
         playtest_tab_layout.addRow(
             "Playtest Description:", self.playtest_description_input
         )
-
-        # Depots Table (Playtest)
-        self.playtest_depots_table = self._create_depots_table()
-        playtest_tab_layout.addRow("Playtest Depots:", self.playtest_depots_table)
-        # Depot Buttons (Playtest)
-        playtest_depot_button_layout = self._create_depot_buttons(
-            self.playtest_depots_table
+        playtest_tab_layout.addRow(
+            "Playtest Content Path:",
+            QLabel("Uses Regular App depots automatically."),
         )
-        playtest_tab_layout.addRow(playtest_depot_button_layout)
 
         self.tab_widget.addTab(playtest_tab_widget, "Playtest App")
 
@@ -147,6 +156,7 @@ class SteamPublishProfileWidget(QWidget):
         with self.session.no_autoflush:
             self._load_projects()
             self._refresh_auth_options()
+            self._refresh_build_profile_options()
 
             # Populate common fields
             if self.publish_profile.project:
@@ -177,72 +187,42 @@ class SteamPublishProfileWidget(QWidget):
                 self._on_project_changed()  # Update builder path even if no project is selected initially
 
             # REGULAR TAB
-            existing_profile = None
-            if self.publish_profile.project:
-                existing_profile = (
-                    self.session.query(SteamPublishProfile)
-                    .filter(
-                        SteamPublishProfile.project == self.publish_profile.project,
-                    )
-                    .order_by(SteamPublishProfile.build_id.desc())
-                    .first()
-                )
-
-            # Regular App ID (Use existing profile's App ID or default)
-            app_id = (
-                self.publish_profile.app_id
-                or (existing_profile and existing_profile.app_id)
-                or 480
-            )  # Default to Spacewar
+            # Only use current profile values to avoid cross-profile data bleed.
+            app_id = self.publish_profile.app_id or 480  # Default to Spacewar
             self.app_id_input.setValue(app_id)
 
-            description = (
-                "" if not self.publish_profile else f"v{self.publish_profile.build_id}"
+            profile_name = (
+                self.publish_profile.description
+                or "Main"
             )
-            self.description_input.setText(description)
+            self.description_input.setText(profile_name)
 
             # Regular Depots
-            depots = (
-                self.publish_profile.depots
-                or (existing_profile and existing_profile.depots)
-                or {}
-            )
-
-            if not depots:
-                # Decide what “no depots” means in your UI
-                self._load_depots_table(self.depots_table, {})
-                return  # or just skip the path logic
-
-            depot_id = next(iter(depots))
-            depots[depot_id] = (
-                f"{self.publish_profile.project.builds_path}/"
-                f"{self.build_id_input.text()}"
-            ).replace(os.sep, "/")
+            depots = copy.deepcopy(self.publish_profile.depots or {})
+            if depots and self.publish_profile.project:
+                depot_id = next(iter(depots))
+                depots[depot_id] = (
+                    f"{self.publish_profile.project.builds_path}/"
+                    f"{self.build_id_input.text()}"
+                ).replace(os.sep, "/")
 
             self._load_depots_table(self.depots_table, depots)
 
             # PLAYTEST TAB
             playtest_app_id = (
                 getattr(self.publish_profile, "playtest_app_id", None)
-                or (
-                    existing_profile
-                    and getattr(existing_profile, "playtest_app_id", None)
-                )
                 or 0
             )
             self.playtest_app_id_input.setValue(playtest_app_id)
 
-            self.playtest_description_input.setText(description)
-
-            playtest_depots = (
-                getattr(self.publish_profile, "playtest_depots", None)
-                or (
-                    existing_profile
-                    and getattr(existing_profile, "playtest_depots", None)
-                )
-                or {}
+            playtest_description = (
+                getattr(self.publish_profile, "playtest_description", None)
+                or ""
             )
-            self._load_depots_table(self.playtest_depots_table, playtest_depots)
+            self.playtest_description_input.setText(playtest_description)
+
+            # Playtest depots are intentionally not editable in UI.
+            # They reuse regular depots to avoid duplicated path management.
 
     def _load_projects(self):
         """Load all projects into the project dropdown."""
@@ -272,27 +252,87 @@ class SteamPublishProfileWidget(QWidget):
             self.project_combo.setEnabled(False)
 
     def _refresh_auth_options(self):
-        """Refresh the Steam Auth dropdown and try to re-select current SteamConfig.
-        This is a bit pointless now because in settings -for now- only
-        1 config can be added.
-        """
+        """Refresh the Steam Auth dropdown and re-select current SteamConfig when possible."""
         self.auth_combo.clear()
-        steam_config = self.session.query(SteamConfig).first()
+        current_steam_config_id = getattr(self.publish_profile, "steam_config_id", None)
+        steam_configs = (
+            self.session.query(SteamConfig).order_by(SteamConfig.username.asc()).all()
+        )
 
         try:
-            if not steam_config:
+            if not steam_configs:
                 self.auth_combo.setEnabled(False)
             else:
                 self.auth_combo.setEnabled(True)
-                self.auth_combo.addItem(steam_config.username, steam_config.id)
+                self.auth_combo.addItem("Select Auth Profile...", None)
+                for steam_config in steam_configs:
+                    self.auth_combo.addItem(steam_config.username, steam_config.id)
 
-            self.auth_combo.setCurrentIndex(0)
+            if current_steam_config_id is not None:
+                selected_index = self.auth_combo.findData(current_steam_config_id)
+                self.auth_combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+            else:
+                self.auth_combo.setCurrentIndex(0)
 
         except Exception as e:
             QMessageBox.critical(
                 self, "Database Error", f"Failed to load Steam Config: {e}"
             )
             self.auth_combo.setEnabled(False)
+
+    def _refresh_build_profile_options(self):
+        self.build_profile_combo.blockSignals(True)
+        self.build_profile_combo.clear()
+
+        existing_profiles = (
+            self.session.query(SteamPublishProfile)
+            .filter(SteamPublishProfile.build_id == self.publish_profile.build_id)
+            .order_by(SteamPublishProfile.id.asc())
+            .all()
+        )
+        for profile in existing_profiles:
+            profile_name = (profile.description or "").strip() or f"Profile #{profile.id}"
+            self.build_profile_combo.addItem(profile_name, profile.id)
+
+        if self.publish_profile.id:
+            idx = self.build_profile_combo.findData(self.publish_profile.id)
+            if idx >= 0:
+                self.build_profile_combo.setCurrentIndex(idx)
+            elif self.build_profile_combo.count() > 0:
+                self.build_profile_combo.setCurrentIndex(0)
+        elif self.build_profile_combo.count() > 0:
+            self.build_profile_combo.setCurrentIndex(0)
+
+        self.build_profile_combo.blockSignals(False)
+
+    def _on_build_profile_changed(self, *_):
+        selected_profile_id = self.build_profile_combo.currentData()
+        if selected_profile_id is None:
+            return
+        selected_profile = self.session.get(SteamPublishProfile, selected_profile_id)
+        if not selected_profile:
+            return
+        self.publish_profile = selected_profile
+        self._populate_fields()
+
+    def _create_new_profile(self):
+        selected_project_id = self.project_combo.currentData()
+        project = (
+            self.session.get(Project, selected_project_id)
+            if selected_project_id is not None
+            else self.publish_profile.project
+        )
+
+        self.publish_profile = SteamPublishProfile(
+            project=project,
+            build_id=self.build_id_input.text().strip(),
+            store_type=StoreEnum.steam,
+            description="New Profile",
+        )
+        self._populate_fields()
+        self.tab_widget.setCurrentIndex(0)
+        self.description_input.selectAll()
+        self.description_input.setFocus()
 
     def _on_project_changed(self):
         """Update the read-only builder path based on selected project and update profile project."""
@@ -487,6 +527,16 @@ class SteamPublishProfileWidget(QWidget):
             self.auth_combo.setFocus()
             return
 
+        profile_name = self.description_input.text().strip()
+        if not profile_name:
+            QMessageBox.warning(
+                self,
+                "Validation Error",
+                "Please enter a Profile Name.",
+            )
+            self.description_input.setFocus()
+            return
+
         # Regular Tab Validation
         app_id = self.app_id_input.value()
         if app_id <= 0:
@@ -508,21 +558,7 @@ class SteamPublishProfileWidget(QWidget):
         # Playtest Tab Validation
         playtest_app_id = self.playtest_app_id_input.value()
 
-        playtest_depots = self._collect_and_validate_depots(self.playtest_depots_table)
-        if playtest_depots is None:
-            self.tab_widget.setCurrentIndex(1)
-            return
-
-        # If playtest depots are defined, playtest App ID must be > 0
-        if playtest_depots and playtest_app_id <= 0:
-            self.tab_widget.setCurrentIndex(1)  # Switch to the relevant tab
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "[Playtest App] If Playtest Depots are defined, a valid Playtest App ID (> 0) must also be provided.",
-            )
-            self.playtest_app_id_input.setFocus()
-            return
+        playtest_depots = regular_depots if playtest_app_id > 0 else {}
 
         # Update Profile Object
         try:
@@ -535,7 +571,7 @@ class SteamPublishProfileWidget(QWidget):
 
             # Assign Regular Tab values
             self.publish_profile.app_id = app_id
-            self.publish_profile.description = self.description_input.text().strip()
+            self.publish_profile.description = profile_name
             self.publish_profile.depots = regular_depots
 
             # Assign Playtest Tab values

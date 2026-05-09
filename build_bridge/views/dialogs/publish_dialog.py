@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QWidget,
 )
-from PyQt6.QtCore import QProcess, QProcessEnvironment
+from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer
 from PyQt6.QtGui import QIcon
 
 from build_bridge.utils.paths import get_resource_path
@@ -33,18 +33,31 @@ class GenericUploadDialog(QDialog):
         # This is the one thing that changes between stores.
         success_checker: Callable[[int, str], bool],
         environment: Optional[Dict[str, str]] = None,
+        log_files: Optional[List[str]] = None,
+        log_directories: Optional[List[str]] = None,
+        log_file_patterns: Optional[List[str]] = None,
+        working_directory: Optional[str] = None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
+        self.log_files = [Path(path) for path in log_files or []]
+        self.log_directories = [Path(path) for path in log_directories or []]
+        self.log_file_patterns = log_file_patterns or ["*.log"]
+        self.working_directory = working_directory
         self.display_info = display_info
         self.success_checker = success_checker  # Function to check success
 
         self.process: Optional[QProcess] = None
         self.upload_successful: bool = False  # Determined by success_checker
         self._log_buffer: str = ""  # Accumulate log content
+        self._tailed_log_positions: Dict[Path, int] = {}
+        self._announced_log_files: set[Path] = set()
+        self._log_tail_timer = QTimer(self)
+        self._log_tail_timer.setInterval(500)
+        self._log_tail_timer.timeout.connect(self.poll_tailed_logs)
 
         self.setWindowTitle(title)
         icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
@@ -118,13 +131,18 @@ class GenericUploadDialog(QDialog):
             self.cancel_button.clicked.connect(self.reject)
             return
 
-        self.append_log(f"Starting process via cmd /c...")
+        self.initialize_tailed_logs()
+
+        self.append_log("Starting process...")
         self.append_log(f"Executable: {self.executable}")
+        if self.log_files or self.log_directories:
+            self.append_log("Streaming tool output and matching log files...")
         self.append_log("-" * 20)
 
-        # Run steamcmd through cmd /c
-        cmd_arguments = ["/c", str(self.executable)] + self.arguments
-        self.process.start("cmd", cmd_arguments)
+        if self.working_directory:
+            self.process.setWorkingDirectory(self.working_directory)
+
+        self.process.start(str(self.executable), self.arguments)
 
         if not self.process.waitForStarted(5000):
             self.append_log(
@@ -132,6 +150,10 @@ class GenericUploadDialog(QDialog):
             )
             # Simulate finish with failure status
             self.handle_process_finished(-1, QProcess.ExitStatus.CrashExit)
+            return
+
+        if self.log_files or self.log_directories:
+            self._log_tail_timer.start()
 
     def read_realtime_output(self):
         if not self.process:
@@ -157,6 +179,66 @@ class GenericUploadDialog(QDialog):
         scrollbar = self.log_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
+    def initialize_tailed_logs(self):
+        """Start existing logs at EOF so the dialog only shows this run's updates."""
+        for path in self._iter_log_paths():
+            if path.exists() and path.is_file():
+                self._tailed_log_positions[path] = path.stat().st_size
+
+    def _iter_log_paths(self):
+        seen: set[Path] = set()
+
+        for path in self.log_files:
+            resolved = path.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                yield resolved
+
+        for directory in self.log_directories:
+            if not directory.exists() or not directory.is_dir():
+                continue
+
+            for pattern in self.log_file_patterns:
+                for path in directory.glob(pattern):
+                    if path.is_file():
+                        resolved = path.resolve()
+                        if resolved not in seen:
+                            seen.add(resolved)
+                            yield resolved
+
+    def poll_tailed_logs(self):
+        for path in self._iter_log_paths():
+            try:
+                current_size = path.stat().st_size
+                previous_position = self._tailed_log_positions.get(path, 0)
+
+                if current_size < previous_position:
+                    previous_position = 0
+
+                if current_size <= previous_position:
+                    self._tailed_log_positions[path] = previous_position
+                    continue
+
+                with path.open("rb") as log_file:
+                    log_file.seek(previous_position)
+                    data = log_file.read()
+
+                self._tailed_log_positions[path] = current_size
+                output = data.decode("utf-8", errors="replace")
+
+                if not output:
+                    continue
+
+                if path not in self._announced_log_files:
+                    self.append_log(f"[Log file] {path}")
+                    self._announced_log_files.add(path)
+
+                self._log_buffer += output
+                self.append_log(output.rstrip())
+
+            except OSError as e:
+                logging.info(f"Could not tail log file '{path}': {e}")
+
     def cancel_process(self):
         if self.process and self.process.state() == QProcess.ProcessState.Running:
             self.append_log("-" * 20)
@@ -175,6 +257,9 @@ class GenericUploadDialog(QDialog):
     def handle_process_finished(self, exit_code: int, exit_status: QProcess.ExitStatus):
         if self.process is None:
             return
+
+        self._log_tail_timer.stop()
+        self.poll_tailed_logs()
 
         status_str = (
             "Normal Exit"
@@ -220,6 +305,7 @@ class GenericUploadDialog(QDialog):
 
     def cleanup(self):
         logging.info(f"{self.__class__.__name__}: Running cleanup...")
+        self._log_tail_timer.stop()
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
             logging.info(f"{self.__class__.__name__}: Terminating running process...")
             # Disconnect signals first

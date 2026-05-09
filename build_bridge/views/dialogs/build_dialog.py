@@ -27,6 +27,7 @@ class BuildWindowDialog(QDialog):
         self.builder = builder
         self.build_in_progress = False
         self.process = None
+        self._current_pid = None
         self.setup_ui()
         self.start_build()
 
@@ -87,6 +88,7 @@ class BuildWindowDialog(QDialog):
                 self.append_output("A build is already in progress.")
                 return
 
+            self._cleanup_process_state()
             self.build_in_progress = True
             self.process = QProcess(self)
             self.process.readyReadStandardOutput.connect(self.handle_output)
@@ -102,13 +104,13 @@ class BuildWindowDialog(QDialog):
             logging.info(f"Starting build: {program} {' '.join(arguments)}")
 
             self.process.start(program, arguments)
+            self._set_action_button("Cancel Build", self.cancel_build)
 
-            self.action_button.setText("Cancel Build")
-            self.action_button.clicked.connect(self.cancel_build)
             if not self.process.waitForStarted(5000):
                 raise Exception(
                     f"ERROR: Failed to start process: {self.process.errorString()}"
                 )
+            self._current_pid = self.process.processId()
         except Exception as e:
             self.append_output(f"ERROR: Failed to start build: {str(e)}")
             logging.info(f"Build start failed: {str(e)}", exc_info=True)
@@ -135,31 +137,9 @@ class BuildWindowDialog(QDialog):
             self.append_output("\nWARNING: Cancelling build (forcing termination)...")
             logging.info("Attempting to force-cancel build")
 
-            pid = self.process.processId()
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    f"taskkill /F /T /PID {pid}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode == 0:
-                    self.append_output("SUCCESS: Build process and children terminated.")
-                    logging.info(f"Process {pid} and children terminated via taskkill.")
-                else:
-                    self.append_output(f"WARNING: Termination failed: {result.stderr}")
-                    logging.info(f"taskkill failed: {result.stderr}")
-            else:
-                # On Unix-like systems, kill the process group
-                os.killpg(os.getpgid(pid), 9)  # SIGKILL
-                self.append_output("SUCCESS: Build process and children terminated.")
-                logging.info(f"Process group {os.getpgid(pid)} terminated via SIGKILL.")
-
-            # Wait briefly to confirm termination
-            self.process.waitForFinished(2000)
-            if self.process.state() != QProcess.ProcessState.NotRunning:
-                self.append_output("WARNING: Process may still be running!")
-                logging.info(f"Process {pid} may not have terminated.")
+            pid = self.process.processId() if self.process else self._current_pid
+            self._terminate_process_tree(pid)
+            self._wait_for_process_exit()
 
         except Exception as e:
             self.append_output(f"ERROR: Cancel failed: {str(e)}")
@@ -169,45 +149,116 @@ class BuildWindowDialog(QDialog):
 
     def reset_after_cancel(self):
         self.build_in_progress = False
-        if self.process:
-            self.process.readyReadStandardOutput.disconnect()
-        self.action_button.setText("Retry Build")
-        self.action_button.clicked.disconnect()
-        self.action_button.clicked.connect(self.start_build)
+        self._cleanup_process_state()
+        self._set_action_button("Retry Build", self.start_build)
         self.action_button.setEnabled(True)
 
     def closeEvent(self, event):
         if self.build_in_progress:
             self.cancel_build()
-        if self.process:
-            if self.process.state() != QProcess.ProcessState.NotRunning:
-                self.cancel_build()
-            self.process.disconnect()
-            self.process = None
+        else:
+            self._cleanup_process_state()
         event.accept()
 
     def handle_error(self):
         """Handle QProcess errors."""
-        self.append_output(f"ERROR: Process error: {self.process.errorString()}\n")
-        logging.info(f"Process error: {self.process.errorString()}")
+        if not self.process:
+            return
+
+        error_string = self.process.errorString()
+        self.append_output(f"ERROR: Process error: {error_string}\n")
+        logging.info(f"Process error: {error_string}")
+
+        # Build process can fail while children keep running; force-clean up.
+        if self.build_in_progress:
+            pid = self.process.processId() if self.process else self._current_pid
+            self._terminate_process_tree(pid)
+            self._wait_for_process_exit()
 
     def build_finished(self, exit_code, exit_status):
         """Handle build completion."""
+        self.build_in_progress = False
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code != 0:
+            pid = self.process.processId() if self.process else self._current_pid
+            self._terminate_process_tree(pid)
+
         if exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0:
             self.append_output("\nSUCCESS: BUILD COMPLETED SUCCESSFULLY")
             logging.info("Build completed successfully")
-            self.action_button.setText("Close")
             self.build_ready_signal.emit()
-            self.action_button.clicked.connect(self.accept)
+            self._set_action_button("Close", self.accept)
         else:
             self.append_output(f"\nERROR: BUILD FAILED (Exit code: {exit_code})")
             logging.info(f"Build failed with exit code {exit_code}")
-            self.action_button.setText("Close")
+            self._set_action_button("Close", self.close)
 
-            self.action_button.clicked.disconnect()
-            self.action_button.clicked.connect(self.close)
-
+        self._cleanup_process_state()
         self.action_button.setEnabled(True)
+
+    def _set_action_button(self, text, slot):
+        self.action_button.setText(text)
+        try:
+            self.action_button.clicked.disconnect()
+        except TypeError:
+            pass
+        self.action_button.clicked.connect(slot)
+
+    def _cleanup_process_state(self):
+        if not self.process:
+            self._current_pid = None
+            return
+        try:
+            self.process.readyReadStandardOutput.disconnect(self.handle_output)
+        except TypeError:
+            pass
+        try:
+            self.process.finished.disconnect(self.build_finished)
+        except TypeError:
+            pass
+        try:
+            self.process.errorOccurred.disconnect(self.handle_error)
+        except TypeError:
+            pass
+        self.process = None
+        self._current_pid = None
+
+    def _wait_for_process_exit(self):
+        if not self.process:
+            return
+        self.process.waitForFinished(2000)
+        if self.process.state() != QProcess.ProcessState.NotRunning:
+            self.append_output("WARNING: Process may still be running!")
+            logging.info("Process may not have terminated after forced cancellation.")
+
+    def _terminate_process_tree(self, pid):
+        if not pid:
+            return
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                self.append_output("SUCCESS: Build process and children terminated.")
+                logging.info(f"Process {pid} and children terminated via taskkill.")
+            else:
+                self.append_output(
+                    f"WARNING: Termination failed for PID {pid}: {result.stderr.strip()}"
+                )
+                logging.info(f"taskkill failed for PID {pid}: {result.stderr}")
+        else:
+            try:
+                os.killpg(os.getpgid(pid), 9)  # SIGKILL
+                self.append_output("SUCCESS: Build process and children terminated.")
+                logging.info(
+                    f"Process group {os.getpgid(pid)} terminated via SIGKILL."
+                )
+            except Exception as e:
+                self.append_output(
+                    f"WARNING: Termination failed for PID {pid}: {str(e)}"
+                )
+                logging.info(f"SIGKILL failed for PID {pid}: {e}")
 
     def append_output(self, text: str):
         try:

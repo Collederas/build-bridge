@@ -193,6 +193,10 @@ class UnrealBuilder:
         # Add standard build options
         command.extend(["-build", "-cook", "-stage", "-pak", "-prereqs"])
 
+        # Make packaged builds resilient when editor Live Coding is enabled.
+        # These flags are consumed by underlying UBT invocations.
+        command.extend(["-NoLiveCoding", "-NoHotReload"])
+
         # Add clean build if specified
         if self.clean:
             command.append("-clean")

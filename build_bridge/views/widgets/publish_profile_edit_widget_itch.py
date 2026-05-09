@@ -15,7 +15,7 @@ from PyQt6.QtCore import pyqtSignal
 from sqlalchemy.orm import object_session
 
 from build_bridge.database import session_scope
-from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile
+from build_bridge.models import BuildTarget, Project, ItchConfig, ItchPublishProfile, StoreEnum
 from build_bridge.views.dialogs import settings_dialog
 
 
@@ -48,6 +48,19 @@ class ItchPublishProfileWidget(QWidget):
         self.build_id_input = QLineEdit(self.publish_profile.build_id)
         self.build_id_input.setReadOnly(True)
         form_layout.addRow("Build ID:", self.build_id_input)
+
+        profile_mgmt_row = QHBoxLayout()
+        self.build_profile_combo = QComboBox()
+        self.build_profile_combo.currentIndexChanged.connect(self._on_build_profile_changed)
+        self.new_profile_button = QPushButton("New Profile")
+        self.new_profile_button.clicked.connect(self._create_new_profile)
+        profile_mgmt_row.addWidget(self.build_profile_combo)
+        profile_mgmt_row.addWidget(self.new_profile_button)
+        form_layout.addRow("Build Profile:", profile_mgmt_row)
+
+        self.profile_name_input = QLineEdit()
+        self.profile_name_input.setPlaceholderText("Main, Demo, QA, ...")
+        form_layout.addRow("Profile Name:", self.profile_name_input)
 
         # --- Itch.io User/Game ID ---
         self.user_game_id_input = QLineEdit()
@@ -93,6 +106,7 @@ class ItchPublishProfileWidget(QWidget):
 
             # Load Auth options into ComboBox
             self._refresh_auth_options()
+            self._refresh_build_profile_options()
 
             # --- Populate based on loaded/new profile ---
             if (
@@ -112,6 +126,10 @@ class ItchPublishProfileWidget(QWidget):
                             "Warning",
                             f"Saved project '{self.publish_profile.project.name}' not found. Please select a project.",
                         )
+
+            self.profile_name_input.setText(
+                (self.publish_profile.description or "").strip() or "Main"
+            )
 
             existing_channel = self.publish_profile.itch_channel_name
             channel_name = ""
@@ -201,20 +219,30 @@ class ItchPublishProfileWidget(QWidget):
     def _refresh_auth_options(self):
         """Refresh the Itch.io Auth dropdown. This is to detect if there is a configured ItchConfig in the db."""
         self.auth_combo.clear()
+        current_itch_config_id = getattr(self.publish_profile, "itch_config_id", None)
 
         with session_scope() as session:
-            itch_config = session.query(ItchConfig).one_or_none()
+            itch_configs = (
+                session.query(ItchConfig).order_by(ItchConfig.username.asc()).all()
+            )
 
             try:
-                if not itch_config:
+                if not itch_configs:
                     self.auth_combo.addItem("No Itch.io accounts configured", None)
                     self.auth_combo.setEnabled(False)
                 else:
                     self.auth_combo.setEnabled(True)
                     self.auth_combo.addItem("Select Auth Profile...", None)
-                    self.auth_combo.addItem(itch_config.username, itch_config.id)
+                    for itch_config in itch_configs:
+                        self.auth_combo.addItem(itch_config.username, itch_config.id)
 
-                self.auth_combo.setCurrentIndex(1)
+                if current_itch_config_id is not None:
+                    selected_index = self.auth_combo.findData(current_itch_config_id)
+                    self.auth_combo.setCurrentIndex(
+                        selected_index if selected_index >= 0 else 0
+                    )
+                else:
+                    self.auth_combo.setCurrentIndex(1 if len(itch_configs) == 1 else 0)
 
             except Exception as e:
                 QMessageBox.critical(
@@ -223,6 +251,56 @@ class ItchPublishProfileWidget(QWidget):
                     f"Failed to load Itch.io authentications: {e}",
                 )
                 self.auth_combo.setEnabled(False)
+
+    def _refresh_build_profile_options(self):
+        self.build_profile_combo.blockSignals(True)
+        self.build_profile_combo.clear()
+        existing_profiles = (
+            self.session.query(ItchPublishProfile)
+            .filter(ItchPublishProfile.build_id == self.publish_profile.build_id)
+            .order_by(ItchPublishProfile.id.asc())
+            .all()
+        )
+        for profile in existing_profiles:
+            profile_name = (profile.description or "").strip() or f"Profile #{profile.id}"
+            self.build_profile_combo.addItem(profile_name, profile.id)
+
+        if self.publish_profile.id:
+            idx = self.build_profile_combo.findData(self.publish_profile.id)
+            if idx >= 0:
+                self.build_profile_combo.setCurrentIndex(idx)
+            elif self.build_profile_combo.count() > 0:
+                self.build_profile_combo.setCurrentIndex(0)
+        elif self.build_profile_combo.count() > 0:
+            self.build_profile_combo.setCurrentIndex(0)
+        self.build_profile_combo.blockSignals(False)
+
+    def _on_build_profile_changed(self, *_):
+        selected_profile_id = self.build_profile_combo.currentData()
+        if selected_profile_id is None:
+            return
+        selected_profile = self.session.get(ItchPublishProfile, selected_profile_id)
+        if not selected_profile:
+            return
+        self.publish_profile = selected_profile
+        self._populate_fields()
+
+    def _create_new_profile(self):
+        selected_project_id = self.project_combo.currentData()
+        project = (
+            self.session.get(Project, selected_project_id)
+            if selected_project_id is not None
+            else self.publish_profile.project
+        )
+        self.publish_profile = ItchPublishProfile(
+            project=project,
+            build_id=self.build_id_input.text().strip(),
+            store_type=StoreEnum.itch,
+            description="New Profile",
+        )
+        self._populate_fields()
+        self.profile_name_input.selectAll()
+        self.profile_name_input.setFocus()
 
     def save_profile(self):
         """Validate inputs and save the current profile's details."""
@@ -265,6 +343,14 @@ class ItchPublishProfileWidget(QWidget):
             self.auth_combo.setFocus()
             return
 
+        profile_name = self.profile_name_input.text().strip()
+        if not profile_name:
+            QMessageBox.warning(
+                self, "Validation Error", "Please enter a Profile Name."
+            )
+            self.profile_name_input.setFocus()
+            return
+
         try:
 
             # Add profile to session if it don't exist (it was created by the outer widget (PublishProfileEntry))
@@ -273,6 +359,7 @@ class ItchPublishProfileWidget(QWidget):
 
             # Assign validated values (including the required project)
             self.publish_profile.project_id = selected_project_id
+            self.publish_profile.description = profile_name
             self.publish_profile.itch_user_game_id = user_game_id
             self.publish_profile.itch_channel_name = channel_name
             self.publish_profile.itch_config_id = selected_auth_id

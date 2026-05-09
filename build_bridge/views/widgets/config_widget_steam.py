@@ -1,7 +1,7 @@
 import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QFormLayout, QMessageBox, QApplication, QFileDialog
+    QFormLayout, QMessageBox, QApplication, QFileDialog, QComboBox
 )
 from PyQt6.QtCore import QProcess
 
@@ -11,7 +11,7 @@ from build_bridge.models import SteamConfig
 
 class SteamConfigWidget(QWidget):
     """
-    Manages the single Steam configuration (paths, username, password).
+    Manages Steam configurations (paths, username, password).
     Provides a button to test the connection using steamcmd.
 
     !! The login method passes passwords on the command line, which
@@ -36,6 +36,11 @@ class SteamConfigWidget(QWidget):
         self._accumulated_output = ""
 
         # --- UI Elements ---
+        self.profile_combo = QComboBox()
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_selected)
+        self.new_profile_button = QPushButton("New Profile")
+        self.new_profile_button.clicked.connect(self._create_new_profile)
+
         # Configuration Inputs
         self.username_input = QLineEdit()
         self.password_input = QLineEdit()
@@ -64,6 +69,11 @@ class SteamConfigWidget(QWidget):
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
         form_layout.setSpacing(10)
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(self.profile_combo)
+        profile_row.addWidget(self.new_profile_button)
+        form_layout.addRow("Auth Profiles:", profile_row)
 
         form_layout.addRow("Username:", self.username_input)
         form_layout.addRow("Password:", self.password_input)
@@ -106,24 +116,22 @@ class SteamConfigWidget(QWidget):
         """Loads configuration into the input fields."""
         logging.info("SteamConfigWidget: Loading settings...")
         try:
-            # Query for the single config entry, create if doesn't exist
-            self.steam_config = self.session.query(SteamConfig).first()
-            if not self.steam_config:
-                logging.info("SteamConfigWidget: No config found, creating new one in session.")
-                self.steam_config = SteamConfig()
-                self._initial_username = ""
-                self._initial_steamcmd_path = ""
-            else:
-                 if self.steam_config not in self.session:
-                     self.session.add(self.steam_config)
-                 # Store initial values from loaded config
-                 self._initial_username = self.steam_config.username or ""
-                 self._initial_steamcmd_path = self.steam_config.steamcmd_path or ""
+            configs = self.session.query(SteamConfig).order_by(SteamConfig.username.asc()).all()
+            self.profile_combo.blockSignals(True)
+            self.profile_combo.clear()
 
-            # Populate UI fields from initial values (or defaults if new)
-            self.username_input.setText(self._initial_username)
-            self.steamcmd_path_input.setText(self._initial_steamcmd_path)
-            self.password_input.clear() # Always clear password field on load
+            if not configs:
+                self.steam_config = SteamConfig()
+                self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+                self.profile_combo.setCurrentIndex(0)
+            else:
+                for cfg in configs:
+                    self.profile_combo.addItem(cfg.username, cfg.id)
+                self.profile_combo.setCurrentIndex(0)
+                self.steam_config = configs[0]
+
+            self.profile_combo.blockSignals(False)
+            self._load_config_into_fields()
 
             logging.info(f"SteamConfigWidget: Loaded config. User: {self._initial_username}")
             self._reset_status_label()
@@ -136,6 +144,58 @@ class SteamConfigWidget(QWidget):
             self.test_button.setEnabled(False)
             self.username_input.setEnabled(False)
             # ... disable others
+
+    def _load_config_into_fields(self):
+        if not self.steam_config:
+            self._initial_username = ""
+            self._initial_steamcmd_path = ""
+        else:
+            self._initial_username = self.steam_config.username or ""
+            self._initial_steamcmd_path = self.steam_config.steamcmd_path or ""
+
+        self.username_input.setText(self._initial_username)
+        self.steamcmd_path_input.setText(self._initial_steamcmd_path)
+        self.password_input.clear()
+
+    def _on_profile_selected(self, *_):
+        selected_id = self.profile_combo.currentData()
+        if selected_id == "__new__":
+            self.steam_config = SteamConfig()
+            self._load_config_into_fields()
+            return
+
+        if selected_id is None:
+            return
+
+        self.steam_config = self.session.get(SteamConfig, selected_id)
+        self._load_config_into_fields()
+        self._reset_status_label()
+
+    def _create_new_profile(self):
+        self.steam_config = SteamConfig()
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+        self.profile_combo.setCurrentIndex(self.profile_combo.count() - 1)
+        self.profile_combo.blockSignals(False)
+        self._load_config_into_fields()
+        self.username_input.setFocus()
+        self._reset_status_label()
+
+    def _refresh_profile_combo(self, selected_id=None):
+        configs = self.session.query(SteamConfig).order_by(SteamConfig.username.asc()).all()
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        for cfg in configs:
+            self.profile_combo.addItem(cfg.username, cfg.id)
+        if not configs:
+            self.profile_combo.addItem("New Profile (unsaved)", "__new__")
+            self.profile_combo.setCurrentIndex(0)
+        elif selected_id is not None:
+            idx = self.profile_combo.findData(selected_id)
+            self.profile_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        else:
+            self.profile_combo.setCurrentIndex(0)
+        self.profile_combo.blockSignals(False)
 
     def validate(self):
         logging.info("SteamConfigWidget: Validating Itch settings...")
@@ -151,6 +211,10 @@ class SteamConfigWidget(QWidget):
             # --- Update config object from UI fields ---
             new_username = self.username_input.text().strip()
             new_steamcmd_path = self.steamcmd_path_input.text().strip()
+            if not new_username:
+                raise InvalidConfigurationError("Steam username is required.")
+            if self.steam_config not in self.session:
+                self.session.add(self.steam_config)
 
             self.steam_config.username = new_username
             self.steam_config.steamcmd_path = new_steamcmd_path
@@ -158,6 +222,8 @@ class SteamConfigWidget(QWidget):
             # Update initial values to reflect saved state
             self._initial_username = new_username
             self._initial_steamcmd_path = new_steamcmd_path
+            self.session.flush()
+            self._refresh_profile_combo(selected_id=self.steam_config.id)
 
         except ValueError as e:
             logging.info(f"SteamConfigWidget: Error preparing settings for save: {e}")

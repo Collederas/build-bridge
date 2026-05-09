@@ -109,7 +109,6 @@ class PublishProfileDialog(QDialog):
 
     def new_profile_created(self):
         self.profile_changed_signal.emit()
-        self.close()
 
     def save_profile(self):
         self.widget.save_profile()

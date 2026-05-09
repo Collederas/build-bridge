@@ -273,7 +273,25 @@ class PublishProfileEntry(QWidget):
 
         self.main_layout.addLayout(self.top_row)
 
-        # Second row: Buttons
+        # Second row: Build Profile selector
+        self.profile_row = QHBoxLayout()
+        self.profile_row.setSpacing(8)
+        self.profile_row.addWidget(QLabel("Build Profile:"))
+        self.build_profile_combo = QComboBox()
+        self.build_profile_combo.setMinimumWidth(180)
+        self.build_profile_combo.currentIndexChanged.connect(
+            self._on_build_profile_selected
+        )
+        self.profile_row.addWidget(self.build_profile_combo)
+        self.new_profile_button = QPushButton("New")
+        self.new_profile_button.setFixedHeight(28)
+        self.new_profile_button.setFixedWidth(60)
+        self.new_profile_button.clicked.connect(self._create_new_build_profile)
+        self.profile_row.addWidget(self.new_profile_button)
+        self.profile_row.addStretch(1)
+        self.main_layout.addLayout(self.profile_row)
+
+        # Third row: Buttons
         self.bottom_row = QHBoxLayout()
         self.bottom_row.setSpacing(10)
 
@@ -323,39 +341,86 @@ class PublishProfileEntry(QWidget):
             self.playtest_checkbox.setVisible(False)
             self.playtest_checkbox.setChecked(False)
 
-        self.update_publish_profile()
+        self._reload_build_profiles()
         self.update_publish_button_enabled()
 
     def on_publish_profile_added_or_updated(self):
-        self.update_publish_profile()
+        self._reload_build_profiles(selected_profile_id=getattr(self.publish_profile, "id", None))
         self.update_publish_button_enabled()
 
-    def update_publish_profile(self):
-        selected_store_enum = self.store_type_combo.currentData()
+    def _get_profile_label(self, profile: PublishProfile):
+        if profile.description and profile.description.strip():
+            return profile.description.strip()
+        return f"Profile #{profile.id}"
 
+    def _make_profile_instance(self, selected_store_enum):
+        project = self.session.query(Project).one_or_none()
+        store_model_map = {
+            StoreEnum.itch: ItchPublishProfile,
+            StoreEnum.steam: SteamPublishProfile
+        }
+        return store_model_map[selected_store_enum](
+            project_id=project.id if project else None,
+            build_id=self.build_id,
+            store_type=selected_store_enum,
+            description="New Profile",
+        )
+
+    def _reload_build_profiles(self, selected_profile_id=None):
+        selected_store_enum = self.store_type_combo.currentData()
         if selected_store_enum is None:
             return
 
-        existing_publish_profile = (
+        profiles = (
             self.session.query(PublishProfile)
-            .filter_by(store_type=selected_store_enum.value, build_id=self.build_id)
-            .first()
+            .filter_by(store_type=selected_store_enum, build_id=self.build_id)
+            .order_by(PublishProfile.id.asc())
+            .all()
         )
-        
-        if existing_publish_profile:
-            self.publish_profile = existing_publish_profile
 
-        if not existing_publish_profile:
-            project = self.session.query(Project).one_or_none()
-            store_model_map = {
-                StoreEnum.itch: ItchPublishProfile,
-                StoreEnum.steam: SteamPublishProfile
-            }
-            self.publish_profile = store_model_map[selected_store_enum](
-                project_id=project.id,
-                build_id=self.build_id,
-                store_type=selected_store_enum,
+        self.build_profile_combo.blockSignals(True)
+        self.build_profile_combo.clear()
+
+        if profiles:
+            for profile in profiles:
+                self.build_profile_combo.addItem(self._get_profile_label(profile), profile.id)
+
+            if selected_profile_id is not None:
+                idx = self.build_profile_combo.findData(selected_profile_id)
+                self.build_profile_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            else:
+                self.build_profile_combo.setCurrentIndex(0)
+
+            self.publish_profile = self.session.get(
+                PublishProfile, self.build_profile_combo.currentData()
             )
+        else:
+            self.build_profile_combo.addItem("New Profile (unsaved)", "__new__")
+            self.build_profile_combo.setCurrentIndex(0)
+            self.publish_profile = self._make_profile_instance(selected_store_enum)
+
+        self.build_profile_combo.blockSignals(False)
+
+    def _on_build_profile_selected(self, *_):
+        selected_profile_id = self.build_profile_combo.currentData()
+        if selected_profile_id == "__new__":
+            self.publish_profile = self._make_profile_instance(self.store_type_combo.currentData())
+            return
+        if selected_profile_id is None:
+            return
+        self.publish_profile = self.session.get(PublishProfile, selected_profile_id)
+        self.update_publish_button_enabled()
+
+    def _create_new_build_profile(self):
+        selected_store_enum = self.store_type_combo.currentData()
+        if selected_store_enum is None:
+            return
+        self.publish_profile = self._make_profile_instance(selected_store_enum)
+        self.build_profile_combo.blockSignals(True)
+        self.build_profile_combo.addItem("New Profile (unsaved)", "__new__")
+        self.build_profile_combo.setCurrentIndex(self.build_profile_combo.count() - 1)
+        self.build_profile_combo.blockSignals(False)
+        self.update_publish_button_enabled()
 
     def can_publish(self) -> bool:
         selected_platform_enum = self.store_type_combo.currentData()

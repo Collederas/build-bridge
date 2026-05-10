@@ -249,11 +249,10 @@ class BuildWindowDialog(QDialog):
                 logging.info(f"taskkill failed for PID {pid}: {result.stderr}")
         else:
             try:
-                os.killpg(os.getpgid(pid), 9)  # SIGKILL
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, 9)  # SIGKILL
                 self.append_output("SUCCESS: Build process and children terminated.")
-                logging.info(
-                    f"Process group {os.getpgid(pid)} terminated via SIGKILL."
-                )
+                logging.info(f"Process group {pgid} terminated via SIGKILL.")
             except Exception as e:
                 self.append_output(
                     f"WARNING: Termination failed for PID {pid}: {str(e)}"

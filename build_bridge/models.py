@@ -47,7 +47,7 @@ class Project(Base):
     )
 
     def is_valid(self):
-        return self.name is not "" and self.source_dir is not "" and self.archive_directory is not ""
+        return bool(self.name) and bool(self.source_dir) and bool(self.archive_directory)
 
     @property
     def builds_path(self):
@@ -143,7 +143,7 @@ class SteamConfig(Base):
     __tablename__ = "steam_config"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, nullable=False, default="itch-username")
+    username = Column(String, nullable=False, default="")
     _password = None  # Internal cache for password
 
     steamcmd_path = Column(String, nullable=True)
@@ -172,15 +172,9 @@ class SteamConfig(Base):
         except keyring.errors.KeyringError as e:
             raise RuntimeError(f"Failed to store Steam password: {e}") from e
 
-    @validates("builder_path")
-    def validate_builder_path(self, key, builder_path):
-        if not os.path.exists(builder_path):
-            raise ValueError("Builder path is not valid or does not exist.")
-        return builder_path
-
     @validates("steamcmd_path")
     def validate_steamcmd_path(self, key, steamcmd_path):
-        if not os.path.exists(steamcmd_path):
+        if steamcmd_path and not os.path.exists(steamcmd_path):
             raise ValueError("SteamCMD path is not valid or does not exist.")
         return steamcmd_path
 

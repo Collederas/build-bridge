@@ -493,8 +493,8 @@ class PublishProfileEntry(QWidget):
                 if os.name == "nt":
                     os.startfile(self.build_root)
                 else:
-                    QMessageBox.warning(self, "Unsupported OS", "Unsupported OS")
-                    return
+                    import subprocess
+                    subprocess.Popen(["open", self.build_root])
             except Exception as e:
                 logging.info(f"Error opening directory {self.build_root}: {e}")
                 QMessageBox.warning(

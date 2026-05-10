@@ -1,6 +1,5 @@
 from genericpath import isdir
 import os, logging
-from turtle import pd
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -325,7 +324,7 @@ class BuildTargetSetupDialog(QDialog):
         browse_target_button = QPushButton("Browse")
         browse_target_button.clicked.connect(self.browse_target)
         if (self.session_project):
-            self.target_value = QLineEdit(f"{self.session_project.source_dir}/MyTaget.Target.cs")
+            self.target_value = QLineEdit(f"{self.session_project.source_dir}/MyTarget.Target.cs")
         else:
             self.target_value = QLineEdit("")
         target_layout.addWidget(target_label)
@@ -551,11 +550,6 @@ class BuildTargetSetupDialog(QDialog):
             bool(self.build_target.optimize_for_steam) if self.build_target else True
         )
         maps = self.build_target.maps or {}
-
-        if maps:
-            map_id = next(iter(maps))
-            maps[map_id] = map_id
-
         self._load_maps_table(self.maps_table, maps)
 
     def _collect_and_validate_maps(self, table_widget: QTableWidget):

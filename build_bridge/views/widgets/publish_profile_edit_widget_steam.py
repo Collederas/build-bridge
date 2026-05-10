@@ -2,7 +2,6 @@ import copy
 import logging
 import os
 from pathlib import Path, PosixPath, WindowsPath
-from turtle import pd
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -127,7 +126,7 @@ class SteamPublishProfileWidget(QWidget):
 
             # REGULAR TAB
             # Only use current profile values to avoid cross-profile data bleed.
-            app_id = self.publish_profile.app_id or 480  # Default to Spacewar
+            app_id = self.publish_profile.app_id or 0
             self.app_id_input.setValue(app_id)
 
             profile_name = (
@@ -359,6 +358,16 @@ class SteamPublishProfileWidget(QWidget):
                 return None
 
             depot_path = path_item.text().strip()
+
+            if not os.path.exists(depot_path):
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    f"Depot path in row {row+1} does not exist:\n{depot_path}",
+                )
+                table_widget.selectRow(row)
+                table_widget.setFocus()
+                return None
 
             if depot_id in depots_to_save:
                 QMessageBox.warning(

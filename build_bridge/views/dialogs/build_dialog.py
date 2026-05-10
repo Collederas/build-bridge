@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QPushButton,
     QHBoxLayout,
+    QMessageBox,
     QWidget,
     QCheckBox,
     QLineEdit,
@@ -74,6 +75,10 @@ class BuildWindowDialog(QDialog):
         self.button_layout = QHBoxLayout()
         self.action_button = QPushButton("Cancel Build")
         self.action_button.clicked.connect(self.cancel_build)
+        self.search_toggle_button = QPushButton("Search (Ctrl+F)")
+        self.search_toggle_button.setCheckable(True)
+        self.search_toggle_button.clicked.connect(self._toggle_search)
+        self.button_layout.addWidget(self.search_toggle_button)
         self.button_layout.addStretch()
         self.button_layout.addWidget(self.action_button)
 
@@ -155,6 +160,16 @@ class BuildWindowDialog(QDialog):
 
     def closeEvent(self, event):
         if self.build_in_progress:
+            reply = QMessageBox.question(
+                self,
+                "Build in progress",
+                "A build is currently running. Cancel it and close?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
             self.cancel_build()
         else:
             self._cleanup_process_state()
@@ -289,15 +304,20 @@ class BuildWindowDialog(QDialog):
         except Exception as e:
             logging.info(f"Error updating GUI: {str(e)}", exc_info=True)
 
+    def _toggle_search(self, visible=None):
+        if visible is None:
+            visible = not self.search_layout_widget.isVisible()
+        self.search_layout_widget.setVisible(visible)
+        self.search_toggle_button.setChecked(visible)
+        if visible:
+            self.search_input.setFocus()
+            self.search_input.selectAll()
+        else:
+            self.output_text.setFocus()
+
     def keyPressEvent(self, event):
-        """Handle Ctrl+F to toggle search bar."""
         if event.key() == Qt.Key.Key_F and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self.search_layout_widget.setVisible(not self.search_layout_widget.isVisible())
-            if self.search_layout_widget.isVisible():
-                self.search_input.setFocus()
-                self.search_input.selectAll()
-            else:
-                self.output_text.setFocus()
+            self._toggle_search()
         else:
             super().keyPressEvent(event)
 

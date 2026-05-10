@@ -64,7 +64,7 @@ class PublishProfileManagerDialog(QDialog):
         content_layout.setSpacing(12)
 
         self.profile_list = QListWidget()
-        self.profile_list.itemDoubleClicked.connect(lambda *_: self._edit_selected_profile())
+        self.profile_list.itemDoubleClicked.connect(lambda *_: self._use_selected_profile())
         self.profile_list.currentItemChanged.connect(lambda *_: self._sync_button_state())
         content_layout.addWidget(self.profile_list, 1)
 
@@ -93,6 +93,9 @@ class PublishProfileManagerDialog(QDialog):
         main_layout.addLayout(content_layout, 1)
 
         footer_layout = QHBoxLayout()
+        hint = QLabel("Double-click or press 'Use Selected' to activate a profile.")
+        hint.setStyleSheet("color: gray; font-style: italic;")
+        footer_layout.addWidget(hint)
         footer_layout.addStretch(1)
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)

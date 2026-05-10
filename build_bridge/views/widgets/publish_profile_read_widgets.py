@@ -320,7 +320,8 @@ class PublishProfileEntry(QWidget):
         self.on_store_changed()
 
     def update_publish_button_enabled(self):
-        self.publish_button.setEnabled(self.store_type_combo.currentData() is not None)
+        ready = self.store_type_combo.currentData() is not None and self.publish_profile is not None
+        self.publish_button.setEnabled(ready)
         self._refresh_publish_tooltip()
 
     def on_store_changed(self):

@@ -105,6 +105,12 @@ class BuildBridgeWindow(QMainWindow):
         main_layout.addWidget(builds_widget)
         main_layout.setStretchFactor(builds_widget, 1)
 
+        if not self.project or not self.project.is_valid():
+            self.statusBar().showMessage(
+                "Welcome! Go to File > Settings to configure your project before adding a build target.",
+                0,
+            )
+
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
         # Connect signal BEFORE exec()

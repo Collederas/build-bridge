@@ -370,6 +370,9 @@ class BuildTargetSetupDialog(QDialog):
         self.page2_label = QLabel("2")
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
         self.page2_label.mousePressEvent = self.page2_clicked
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(lambda: self.page1_clicked(None))
+        self.back_button.hide()
         self.next_button = QPushButton("Next")
         self.next_button.clicked.connect(self.next_page)
         self.save_button = QPushButton("Save")
@@ -379,6 +382,7 @@ class BuildTargetSetupDialog(QDialog):
         footer_layout.addWidget(self.page1_label)
         footer_layout.addWidget(self.page2_label)
         footer_layout.addSpacing(20)
+        footer_layout.addWidget(self.back_button)
         footer_layout.addWidget(self.next_button)
         footer_layout.addWidget(self.save_button)
         return footer_layout
@@ -389,6 +393,7 @@ class BuildTargetSetupDialog(QDialog):
             "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
         )
         self.page2_label.setStyleSheet("color: gray; margin-left: 8px;")
+        self.back_button.hide()
         self.next_button.show()
         self.save_button.hide()
 
@@ -398,6 +403,7 @@ class BuildTargetSetupDialog(QDialog):
         self.page2_label.setStyleSheet(
             "background-color: black; color: white; padding: 4px 10px; border-radius: 10px;"
         )
+        self.back_button.show()
         self.next_button.hide()
         self.save_button.show()
 
@@ -601,9 +607,21 @@ class BuildTargetSetupDialog(QDialog):
                 return
 
             # --- Update project details ---
-            selected_project.source_dir = self.source_edit.text().strip()
-            # Add the project to session if it wasn't already (merge does this implicitly)
-            # Or make sure self.session_project points to the *correct* selected one
+            new_source_dir = self.source_edit.text().strip()
+            if new_source_dir != (selected_project.source_dir or ""):
+                reply = QMessageBox.question(
+                    self,
+                    "Update project source directory?",
+                    f"The source directory will be changed for the entire project "
+                    f"'{selected_project.name}', affecting all its build targets.\n\n"
+                    f"New path: {new_source_dir}\n\nContinue?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    self.stack.setCurrentIndex(0)
+                    return
+            selected_project.source_dir = new_source_dir
             self.session_project = self.session.merge(selected_project)
 
             # --- Create or update BuildTarget ---

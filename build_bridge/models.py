@@ -103,7 +103,7 @@ class SteamPublishProfile(PublishProfile):
     __tablename__ = "steam_publish_profile"
 
     id = Column(Integer, ForeignKey("publish_profile.id"), primary_key=True)
-    app_id = Column(Integer, nullable=False, default=480)
+    app_id = Column(Integer, nullable=False, default=0)
 
     depots = Column(JSON, nullable=False, default=dict)
 

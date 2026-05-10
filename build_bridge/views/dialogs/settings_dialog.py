@@ -1,5 +1,4 @@
 import os, logging
-from tkinter import N
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
@@ -13,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QFileDialog,
+    QMessageBox,
     QTextEdit,
 )
 from PyQt6.QtGui import QColor, QIcon
@@ -92,7 +92,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.stack, 3)
 
         button_layout = QHBoxLayout()
-        apply_btn = QPushButton("Apply")
+        apply_btn = QPushButton("Save")
         apply_btn.clicked.connect(self.apply_settings)
         button_layout.addWidget(apply_btn)
         cancel_btn = QPushButton("Cancel")
@@ -351,26 +351,29 @@ class SettingsDialog(QDialog):
             )
 
             if errors_occurred:
-                # Inform user about non-critical failures AFTER successful commit of essentials
-                logging.info(
-                    "Settings: Errors occurred saving some settings:\n\n"
-                    + "\n".join(errors_occurred)
+                logging.info("Settings: Errors occurred saving some settings:\n\n" + "\n".join(errors_occurred))
+                QMessageBox.warning(
+                    self,
+                    "Some settings were not saved",
+                    "Project settings were saved, but the following errors occurred:\n\n"
+                    + "\n\n".join(errors_occurred),
                 )
             else:
-                logging.info(
-                    "Settings: All settings saved successfully. User can publish to all platforms!"
-                )
+                logging.info("Settings: All settings saved successfully.")
 
             self.accept()
         except Exception as e:
-            # CRITICAL FAILURE -> causes settings roll back
-            # This catches errors during essential data preparation or the final commit itself.
             logging.info(f"CRITICAL Error saving settings: {str(e)}")
             try:
                 self.session.rollback()
                 logging.info("Session rolled back due to critical error.")
             except Exception as rb_e:
                 logging.info(f"Error during rollback: {rb_e}")
+            QMessageBox.critical(
+                self,
+                "Save failed",
+                f"Settings could not be saved:\n\n{str(e)}",
+            )
 
     def accept(self):
         """User clicked Apply - close dialog but keep session open"""

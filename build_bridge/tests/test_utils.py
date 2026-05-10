@@ -1,4 +1,4 @@
-from utils.paths import unc_join_path
+from build_bridge.utils.paths import unc_join_path
 
 
 def test_unc_path_join():

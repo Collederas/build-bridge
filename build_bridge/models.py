@@ -1,8 +1,8 @@
 import logging
 import enum
 import os
-
-from anyio import Path
+from pathlib import Path
+from typing import Optional
 from sqlalchemy import JSON, Boolean, Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
 import keyring
@@ -62,12 +62,12 @@ class BuildTarget(Base):
     project_id = Column(Integer, ForeignKey("project.id"), nullable=False)
     project = relationship("Project", back_populates="build_targets")
 
-    unreal_engine_base_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    unreal_engine_base_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     vcs_config = relationship("VCSConfig", uselist=False, back_populates="build_target")
     target_branch = Column(String, nullable=False, default="")
 
-    target: Mapped[str | None] = mapped_column(String, nullable=True, default="MyTarget.Target.cs")
+    target: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="MyTarget.Target.cs")
     maps = Column(JSON, nullable=True, default=dict)
 
     build_type = Column(Enum(BuildTypeEnum), nullable=False, default=BuildTypeEnum.prod)

@@ -1,7 +1,7 @@
 import keyring
 import pytest
 import json
-from vcs.p4client import P4Client
+from build_bridge.core.vcs.p4client import P4Client
 
 
 @pytest.fixture(scope="module")

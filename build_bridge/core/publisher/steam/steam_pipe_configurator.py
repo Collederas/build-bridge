@@ -25,7 +25,7 @@ class SteamPipeConfigurator:
         builder_path = self.publish_profile.builder_path
 
         app_id = self.publish_profile.app_id
-        description = self.publish_profile.description
+        description = self.publish_profile.description or "Build Bridge upload"
         depot_mappings = self.publish_profile.depots
 
         # Create necessary directories and files if don't exist

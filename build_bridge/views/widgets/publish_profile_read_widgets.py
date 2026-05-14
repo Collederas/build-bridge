@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QWidget,
     QLabel,
     QHBoxLayout,
@@ -29,6 +30,7 @@ from build_bridge.models import (
     SteamPublishProfile,
     StoreEnum,
 )
+from build_bridge.core.builds import BuildDeletionError, delete_build
 from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
 from build_bridge.core.preflight import validate_publish_preflight
 from build_bridge.database import SessionFactory
@@ -156,6 +158,7 @@ class PublishProfileListWidget(QWidget):
                 build_target=build_target,
                 builds=builds,
                 session=self.session,
+                on_build_removed=self.refresh_builds,
             )
             self.vbox.addWidget(group_widget)
 
@@ -224,7 +227,7 @@ class PublishProfileListWidget(QWidget):
 
 
 class BuildTargetBuildGroup(QWidget):
-    def __init__(self, build_target: BuildTarget, builds: list[Build], session):
+    def __init__(self, build_target: BuildTarget, builds: list[Build], session, on_build_removed=None):
         super().__init__()
         self.setObjectName("buildTargetGroup")
 
@@ -257,7 +260,14 @@ class BuildTargetBuildGroup(QWidget):
         builds_layout.setSpacing(0)
 
         for build in builds:
-            builds_layout.addWidget(PublishProfileEntry(build=build, session=session, show_target_name=False))
+            builds_layout.addWidget(
+                PublishProfileEntry(
+                    build=build,
+                    session=session,
+                    show_target_name=False,
+                    on_build_removed=on_build_removed,
+                )
+            )
 
         layout.addWidget(builds_body)
 
@@ -269,13 +279,14 @@ class PublishProfileEntry(QWidget):
         StoreEnum.steam: SteamPublishProfile,
     }
 
-    def __init__(self, build: Build, session, show_target_name: bool = True):
+    def __init__(self, build: Build, session, show_target_name: bool = True, on_build_removed=None):
         super().__init__()
         self.build = build
         self.build_root = build.output_path
         self.build_id = build.version  # kept for compatibility with existing label references
         self.publish_profile: PublishProfile | None = None
         self.session = session
+        self.on_build_removed = on_build_removed
 
         self.setObjectName("buildRow")
         self.main_layout = QHBoxLayout(self)
@@ -310,7 +321,7 @@ class PublishProfileEntry(QWidget):
         self.display_name_label.setToolTip(f"Build folder:\n{self.build_root}")
         build_info_layout.addWidget(self.display_name_label)
 
-        self.profile_value_label = QLabel("No profile selected")
+        self.profile_value_label = QLabel("Publishing not configured")
         self.profile_value_label.setObjectName("secondaryText")
         self.profile_value_label.setWordWrap(True)
         build_info_layout.addWidget(self.profile_value_label)
@@ -338,6 +349,14 @@ class PublishProfileEntry(QWidget):
         browse_archive_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.main_layout.addWidget(browse_archive_button)
 
+        remove_button = QPushButton("Remove")
+        remove_button.setObjectName("dangerButton")
+        remove_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        remove_button.setToolTip("Remove this build from the list")
+        remove_button.clicked.connect(self.handle_remove)
+        remove_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.main_layout.addWidget(remove_button)
+
         self.publish_button = QPushButton("Publish")
         self.publish_button.setObjectName("primaryButton")
         self.publish_button.clicked.connect(self.handle_publish)
@@ -361,9 +380,8 @@ class PublishProfileEntry(QWidget):
         self.update_publish_button_enabled()
 
     def _get_profile_label(self, profile: PublishProfile):
-        if profile.description and profile.description.strip():
-            return profile.description.strip()
-        return f"Profile #{profile.id}"
+        store_label = getattr(profile.store_type, "value", "Store")
+        return f"{store_label} configured"
 
     def _load_default_publish_profile(self):
         selected_store_enum = self.store_type_combo.currentData()
@@ -399,8 +417,8 @@ class PublishProfileEntry(QWidget):
             self.profile_value_label.setToolTip("Use Configure... to set up publishing for this target.")
         else:
             profile_label = self._get_profile_label(self.publish_profile)
-            self.profile_value_label.setText(f"{status_label} | Publishing: {profile_label}")
-            self.profile_value_label.setToolTip(f"Publishing configuration: {profile_label}")
+            self.profile_value_label.setText(f"{status_label} | {profile_label}")
+            self.profile_value_label.setToolTip("Publishing is configured for this target and store.")
 
     def _get_build_status_label(self):
         status = getattr(self.build.status, "value", self.build.status) or "unknown"
@@ -524,6 +542,68 @@ class PublishProfileEntry(QWidget):
                 QMessageBox.warning(self, "Error", f"Could not open directory:\n{self.build_root}\n\nError: {e}")
         else:
             QMessageBox.warning(self, "Error", f"Build directory not found or invalid:\n{self.build_root}")
+
+    def handle_remove(self):
+        delete_from_disk = self._confirm_remove()
+        if delete_from_disk is None:
+            return
+
+        try:
+            delete_build(
+                session=self.session,
+                build=self.build,
+                delete_from_disk=delete_from_disk,
+            )
+        except BuildDeletionError as e:
+            QMessageBox.critical(
+                self,
+                "Remove Build",
+                f"Build was not removed.\n\n{e}",
+            )
+            return
+        except Exception as e:
+            self.session.rollback()
+            logging.info(f"Error removing build '{self.build_id}': {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Remove Build",
+                f"An unexpected error occurred while removing this build:\n\n{e}",
+            )
+            return
+
+        if self.on_build_removed:
+            self.on_build_removed()
+
+    def _confirm_remove(self) -> bool | None:
+        build_path = Path(self.build_root).expanduser().resolve() if self.build_root else None
+        folder_exists = bool(build_path and build_path.is_dir())
+
+        message_box = QMessageBox(self)
+        message_box.setIcon(QMessageBox.Icon.Warning)
+        message_box.setWindowTitle("Remove Build")
+        message_box.setText(f"Remove build '{self.build_id}' from Build Bridge?")
+        if folder_exists:
+            message_box.setInformativeText(
+                "The build folder will stay on disk unless you choose to delete it."
+            )
+            message_box.setDetailedText(str(build_path))
+            disk_checkbox = QCheckBox("Also delete the build folder from disk")
+            message_box.setCheckBox(disk_checkbox)
+        else:
+            message_box.setInformativeText(
+                "The build folder was not found on disk, so only the list entry will be removed."
+            )
+            disk_checkbox = None
+
+        remove_button = message_box.addButton("Remove", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_button = message_box.addButton(QMessageBox.StandardButton.Cancel)
+        message_box.setDefaultButton(cancel_button)
+        message_box.exec()
+
+        if message_box.clickedButton() != remove_button:
+            return None
+
+        return bool(disk_checkbox and disk_checkbox.isChecked())
 
     def handle_publish(self):
         selected_store_enum = self.store_type_combo.currentData()

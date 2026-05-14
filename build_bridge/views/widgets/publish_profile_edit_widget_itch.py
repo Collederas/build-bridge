@@ -48,10 +48,6 @@ class ItchPublishProfileWidget(QWidget):
         self.target_name_label = QLabel(target_name or "—")
         form_layout.addRow("Build Target:", self.target_name_label)
 
-        self.profile_name_input = QLineEdit()
-        self.profile_name_input.setPlaceholderText("Main, Demo, QA, ...")
-        form_layout.addRow("Profile Name:", self.profile_name_input)
-
         self.user_game_id_input = QLineEdit()
         self.user_game_id_input.setPlaceholderText("username/game-slug")
         self.user_game_id_input.setToolTip("Format: username/game-slug")
@@ -82,10 +78,6 @@ class ItchPublishProfileWidget(QWidget):
                 return
 
             self._refresh_auth_options()
-
-            self.profile_name_input.setText(
-                (self.publish_profile.description or "").strip() or "Main"
-            )
 
             existing_channel = self.publish_profile.itch_channel_name
             channel_name = ""
@@ -173,27 +165,30 @@ class ItchPublishProfileWidget(QWidget):
             self.user_game_id_input.setFocus()
             return False
 
-        profile_name = self.profile_name_input.text().strip()
-        if not profile_name:
-            QMessageBox.warning(self, "Validation Error", "Please enter a Profile Name.")
-            self.profile_name_input.setFocus()
-            return False
-
         try:
             if not object_session(self.publish_profile):
                 self.session.add(self.publish_profile)
 
-            self.publish_profile.description = profile_name
+            self.publish_profile.description = self._default_description()
             self.publish_profile.itch_user_game_id = user_game_id
             self.publish_profile.itch_channel_name = channel_name
             self.publish_profile.itch_config_id = selected_auth_id
 
             self.session.commit()
             self.profile_saved_signal.emit()
-            QMessageBox.information(self, "Success", "Profile saved successfully.")
+            QMessageBox.information(self, "Success", "Itch.io publishing configuration saved.")
             return True
 
         except Exception as e:
             self.session.rollback()
             QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{e}")
             return False
+
+    def _default_description(self):
+        target = self.publish_profile.build_target
+        if target and target.name:
+            return target.name
+        project = self.publish_profile.project
+        if project and project.name:
+            return project.name
+        return "Itch.io"

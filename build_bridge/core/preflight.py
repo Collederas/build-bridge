@@ -254,7 +254,7 @@ def validate_publish_preflight(
     if project:
         result.ok("Project", getattr(project, "name", "Configured"))
     else:
-        result.error("Project", "Publish profile is not linked to a project.")
+        result.error("Project", "Publishing configuration is not linked to a project.")
 
     if selected_store == StoreEnum.itch:
         _validate_itch_publish_preflight(result, publish_profile)

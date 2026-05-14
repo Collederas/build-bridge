@@ -64,10 +64,6 @@ class SteamPublishProfileWidget(QWidget):
         self.app_id_input.setToolTip("The Steam App ID for your main game.")
         common_form_layout.addRow("App ID:", self.app_id_input)
 
-        self.description_input = QLineEdit()
-        self.description_input.setPlaceholderText("Main, Demo, QA, ...")
-        common_form_layout.addRow("Profile Name:", self.description_input)
-
         self.depots_table = self._create_depots_table()
         main_layout.addWidget(self.depots_table)
         main_layout.addLayout(self._create_depot_buttons(self.depots_table))
@@ -91,9 +87,6 @@ class SteamPublishProfileWidget(QWidget):
 
             app_id = self.publish_profile.app_id or 0
             self.app_id_input.setValue(app_id)
-
-            profile_name = self.publish_profile.description or "Main"
-            self.description_input.setText(profile_name)
 
             depots = copy.deepcopy(self.publish_profile.depots or {})
             self._load_depots_table(self.depots_table, depots)
@@ -264,12 +257,6 @@ class SteamPublishProfileWidget(QWidget):
             self.auth_combo.setFocus()
             return False
 
-        profile_name = self.description_input.text().strip()
-        if not profile_name:
-            QMessageBox.warning(self, "Validation Error", "Please enter a Profile Name.")
-            self.description_input.setFocus()
-            return False
-
         app_id = self.app_id_input.value()
         if app_id <= 0:
             QMessageBox.warning(self, "Validation Error", "Please enter a valid App ID (must be > 0).")
@@ -286,12 +273,12 @@ class SteamPublishProfileWidget(QWidget):
 
             self.publish_profile.steam_config_id = selected_auth_id
             self.publish_profile.app_id = app_id
-            self.publish_profile.description = profile_name
+            self.publish_profile.description = self._default_description()
             self.publish_profile.depots = regular_depots
 
             self.session.commit()
             self.profile_saved_signal.emit()
-            QMessageBox.information(self, "Success", "Steam profile saved successfully.")
+            QMessageBox.information(self, "Success", "Steam publishing configuration saved.")
             return True
 
         except AttributeError as e:
@@ -302,3 +289,12 @@ class SteamPublishProfileWidget(QWidget):
             self.session.rollback()
             QMessageBox.critical(self, "Save Error", f"An error occurred while saving:\n{e}")
             return False
+
+    def _default_description(self):
+        target = self.publish_profile.build_target
+        if target and target.name:
+            return target.name
+        project = self.publish_profile.project
+        if project and project.name:
+            return project.name
+        return "Steam"

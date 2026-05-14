@@ -144,6 +144,15 @@ QPushButton#ghostButton {
     background-color: transparent;
 }
 
+QPushButton#dangerButton {
+    color: #9f1d20;
+}
+
+QPushButton#dangerButton:hover {
+    background-color: #fff1f1;
+    border-color: #c84d4f;
+}
+
 QScrollArea {
     background-color: transparent;
     border: 0;

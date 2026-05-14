@@ -1,5 +1,3 @@
-import logging
-
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -21,7 +19,6 @@ from build_bridge.views.widgets.publish_profile_edit_widget_itch import (
 )
 from PyQt6.QtGui import QIcon
 
-from PyQt6.QtCore import QStandardPaths
 
 class PublishProfileDialog(QDialog):
     """
@@ -45,7 +42,8 @@ class PublishProfileDialog(QDialog):
         target_name = ""
         if getattr(self.publish_profile, "build_target", None):
             target_name = self.publish_profile.build_target.name or ""
-        self.setWindowTitle(f"{store_label} Profile — {target_name}")
+        suffix = f" - {target_name}" if target_name else ""
+        self.setWindowTitle(f"{store_label} Publishing Configuration{suffix}")
 
         self.setMinimumWidth(650)
         self.setMinimumHeight(500)

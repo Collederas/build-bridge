@@ -1,4 +1,6 @@
 import os, logging
+from datetime import datetime
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -18,6 +20,7 @@ from PyQt6.QtGui import QFont
 
 from build_bridge.models import (
     Build,
+    BuildStatusEnum,
     BuildTarget,
     Project,
     PublishProfile,
@@ -50,6 +53,16 @@ class PublishProfileListWidget(QWidget):
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setContentsMargins(0, 0, 0, 0)
         toolbar_layout.addStretch(1)
+
+        self.import_button = QPushButton("Import from disk")
+        self.import_button.setObjectName("ghostButton")
+        self.import_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+        )
+        self.import_button.setToolTip("Scan archive directory for existing build folders and import them")
+        self.import_button.clicked.connect(self._import_from_disk)
+        self.import_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        toolbar_layout.addWidget(self.import_button)
 
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setObjectName("ghostButton")
@@ -133,6 +146,63 @@ class PublishProfileListWidget(QWidget):
             self.vbox.addWidget(widget)
 
         self.vbox.addStretch(1)
+
+    def _import_from_disk(self):
+        """Scan archive_dir/project_name/ for version folders not yet in the DB."""
+        self.session.expire_all()
+        project = self.session.query(Project).first()
+        if not project or not project.archive_directory:
+            QMessageBox.warning(self, "Import", "No project configured.")
+            return
+
+        targets = (
+            self.session.query(BuildTarget)
+            .filter_by(project_id=project.id)
+            .order_by(BuildTarget.id)
+            .all()
+        )
+        if not targets:
+            QMessageBox.warning(self, "Import", "No build targets found. Add a build target first.")
+            return
+
+        # Scan archive_dir/project_name/ — subdirs that are NOT target names are
+        # old-style version folders (pre-refactor builds).
+        scan_root = Path(project.archive_directory) / project.name
+        if not scan_root.exists():
+            QMessageBox.information(self, "Import", f"Directory not found:\n{scan_root}")
+            return
+
+        target_names = {t.name for t in targets if t.name}
+        existing_paths = {b.output_path for b in self.session.query(Build.output_path).all()}
+
+        imported = 0
+        for entry in sorted(scan_root.iterdir()):
+            if not entry.is_dir() or entry.name in target_names:
+                continue
+            version = entry.name
+            output_path = str(entry)
+            if output_path in existing_paths:
+                continue
+
+            # Assign to the first (or only) build target; ambiguity is rare in
+            # the single-project model this app uses.
+            build = Build(
+                build_target_id=targets[0].id,
+                version=version,
+                output_path=output_path,
+                status=BuildStatusEnum.success,
+                created_at=datetime.fromtimestamp(entry.stat().st_mtime),
+            )
+            self.session.add(build)
+            imported += 1
+
+        self.session.commit()
+
+        if imported:
+            QMessageBox.information(self, "Import", f"Imported {imported} build(s).")
+            self.refresh_builds()
+        else:
+            QMessageBox.information(self, "Import", "No new builds found to import.")
 
     def closeEvent(self, a0):
         self.session.close()

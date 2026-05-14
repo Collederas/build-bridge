@@ -17,13 +17,16 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
+from sqlalchemy.orm import selectinload
 
 from build_bridge.models import (
     Build,
     BuildStatusEnum,
     BuildTarget,
+    ItchPublishProfile,
     Project,
     PublishProfile,
+    SteamPublishProfile,
     StoreEnum,
 )
 from build_bridge.core.publisher.itch.itch_publisher import ItchPublisher
@@ -32,9 +35,7 @@ from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.core.publisher.steam.steam_publisher import SteamPublisher
 from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
-from build_bridge.views.dialogs.publish_profile_manager_dialog import (
-    PublishProfileManagerDialog,
-)
+from build_bridge.views.dialogs.publish_profile_dialog import PublishProfileDialog
 
 
 class PublishProfileListWidget(QWidget):
@@ -87,7 +88,7 @@ class PublishProfileListWidget(QWidget):
         self.vbox = QVBoxLayout(self.scroll_content)
         self.vbox.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.vbox.setContentsMargins(0, 0, 0, 0)
-        self.vbox.setSpacing(8)
+        self.vbox.setSpacing(14)
         self.scroll_area.setWidget(self.scroll_content)
 
         self.empty_message_label = QLabel("No builds available.")
@@ -117,13 +118,22 @@ class PublishProfileListWidget(QWidget):
                 self.scroll_area.setVisible(False)
                 return
 
-            builds = (
-                self.session.query(Build)
-                .join(BuildTarget)
+            build_targets = (
+                self.session.query(BuildTarget)
+                .options(selectinload(BuildTarget.builds))
                 .filter(BuildTarget.project_id == project.id)
-                .order_by(Build.created_at.desc())
+                .order_by(BuildTarget.id.asc())
                 .all()
             )
+            build_groups = []
+            for build_target in build_targets:
+                builds = sorted(
+                    build_target.builds,
+                    key=lambda build: build.created_at,
+                    reverse=True,
+                )
+                if builds:
+                    build_groups.append((build_target, builds))
 
         except Exception as e:
             logging.info(f"Error querying builds: {e}", exc_info=True)
@@ -132,7 +142,7 @@ class PublishProfileListWidget(QWidget):
             self.scroll_area.setVisible(False)
             return
 
-        if not builds:
+        if not build_groups:
             self.empty_message_label.setText("No builds available.")
             self.empty_message_label.setVisible(True)
             self.scroll_area.setVisible(False)
@@ -141,9 +151,13 @@ class PublishProfileListWidget(QWidget):
         self.scroll_area.setVisible(True)
         self.empty_message_label.setVisible(False)
 
-        for build in builds:
-            widget = PublishProfileEntry(build=build, session=self.session)
-            self.vbox.addWidget(widget)
+        for build_target, builds in build_groups:
+            group_widget = BuildTargetBuildGroup(
+                build_target=build_target,
+                builds=builds,
+                session=self.session,
+            )
+            self.vbox.addWidget(group_widget)
 
         self.vbox.addStretch(1)
 
@@ -209,10 +223,53 @@ class PublishProfileListWidget(QWidget):
         return super().closeEvent(a0)
 
 
+class BuildTargetBuildGroup(QWidget):
+    def __init__(self, build_target: BuildTarget, builds: list[Build], session):
+        super().__init__()
+        self.setObjectName("buildTargetGroup")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setObjectName("buildTargetGroupHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(10, 5, 10, 5)
+        header_layout.setSpacing(8)
+
+        target_label = QLabel(f"Build target: {repr(build_target)}")
+        target_label.setObjectName("groupTitle")
+        target_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        target_label.setWordWrap(True)
+        header_layout.addWidget(target_label, 1)
+
+        count_label = QLabel(f"{len(builds)} build{'s' if len(builds) != 1 else ''}")
+        count_label.setObjectName("groupMeta")
+        header_layout.addWidget(count_label)
+
+        layout.addWidget(header)
+
+        builds_body = QWidget()
+        builds_body.setObjectName("buildTargetBuildList")
+        builds_layout = QVBoxLayout(builds_body)
+        builds_layout.setContentsMargins(10, 0, 0, 0)
+        builds_layout.setSpacing(0)
+
+        for build in builds:
+            builds_layout.addWidget(PublishProfileEntry(build=build, session=session, show_target_name=False))
+
+        layout.addWidget(builds_body)
+
+
 class PublishProfileEntry(QWidget):
     store_publishers = {StoreEnum.itch: ItchPublisher, StoreEnum.steam: SteamPublisher}
+    profile_models = {
+        StoreEnum.itch: ItchPublishProfile,
+        StoreEnum.steam: SteamPublishProfile,
+    }
 
-    def __init__(self, build: Build, session):
+    def __init__(self, build: Build, session, show_target_name: bool = True):
         super().__init__()
         self.build = build
         self.build_root = build.output_path
@@ -220,14 +277,16 @@ class PublishProfileEntry(QWidget):
         self.publish_profile: PublishProfile | None = None
         self.session = session
 
-        self.setObjectName("buildCard")
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(14, 12, 14, 12)
-        self.main_layout.setSpacing(9)
+        self.setObjectName("buildRow")
+        self.main_layout = QHBoxLayout(self)
+        self.main_layout.setContentsMargins(10, 7, 10, 7)
+        self.main_layout.setSpacing(10)
 
-        # First row: build name + store selector
-        self.top_row = QHBoxLayout()
-        self.top_row.setSpacing(14)
+        build_info = QWidget()
+        build_info_layout = QVBoxLayout(build_info)
+        build_info_layout.setContentsMargins(0, 0, 0, 0)
+        build_info_layout.setSpacing(2)
+        build_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         display_name_font = QFont()
         display_name_font.setBold(True)
@@ -238,22 +297,24 @@ class PublishProfileEntry(QWidget):
         except Exception:
             pass
 
-        self.display_name_label = QLabel(f"{target_name} — {build.version}")
+        if show_target_name and target_name:
+            display_name = f"{target_name} - {build.version}"
+        else:
+            display_name = build.version
+
+        self.display_name_label = QLabel(display_name)
         self.display_name_label.setObjectName("primaryText")
         self.display_name_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.display_name_label.setWordWrap(True)
         self.display_name_label.setFont(display_name_font)
-        self.top_row.addWidget(self.display_name_label)
+        self.display_name_label.setToolTip(f"Build folder:\n{self.build_root}")
+        build_info_layout.addWidget(self.display_name_label)
 
-        platform_widget = QWidget()
-        platform_layout = QHBoxLayout(platform_widget)
-        platform_layout.setContentsMargins(0, 0, 0, 0)
-        platform_layout.setSpacing(5)
-
-        store_label = QLabel("Store")
-        store_label.setObjectName("fieldLabel")
-        store_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        platform_layout.addWidget(store_label)
+        self.profile_value_label = QLabel("No profile selected")
+        self.profile_value_label.setObjectName("secondaryText")
+        self.profile_value_label.setWordWrap(True)
+        build_info_layout.addWidget(self.profile_value_label)
+        self.main_layout.addWidget(build_info, 1)
 
         self.store_type_combo = QComboBox()
         self.store_type_combo.setMinimumWidth(100)
@@ -261,48 +322,27 @@ class PublishProfileEntry(QWidget):
         for store_enum in self.store_publishers.keys():
             self.store_type_combo.addItem(str(store_enum.value), store_enum)
         self.store_type_combo.setToolTip("Select the target platform for publishing this build")
-        platform_layout.addWidget(self.store_type_combo)
+        self.main_layout.addWidget(self.store_type_combo)
 
-        platform_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.top_row.addWidget(platform_widget)
-        self.top_row.addStretch(1)
-        self.main_layout.addLayout(self.top_row)
-
-        # Second row: selected publish profile
-        self.profile_row = QHBoxLayout()
-        self.profile_row.setSpacing(8)
-        profile_label = QLabel("Publish profile")
-        profile_label.setObjectName("fieldLabel")
-        self.profile_row.addWidget(profile_label)
-
-        self.profile_value_label = QLabel("No profile selected")
-        self.profile_value_label.setObjectName("primaryText")
-        self.profile_value_label.setWordWrap(True)
-        self.profile_row.addWidget(self.profile_value_label, 1)
-
-        self.manage_profiles_button = QPushButton("Change...")
+        self.manage_profiles_button = QPushButton("Configure...")
         self.manage_profiles_button.setObjectName("ghostButton")
-        self.manage_profiles_button.setToolTip("Create, select, rename, edit, or delete publish profiles")
+        self.manage_profiles_button.setToolTip("Configure publishing for this build target and store")
         self.manage_profiles_button.clicked.connect(self.manage_publish_profiles)
-        self.profile_row.addWidget(self.manage_profiles_button)
-        self.main_layout.addLayout(self.profile_row)
-
-        # Third row: action buttons
-        self.bottom_row = QHBoxLayout()
-        self.bottom_row.setSpacing(10)
-        self.bottom_row.addStretch(1)
+        self.manage_profiles_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.main_layout.addWidget(self.manage_profiles_button)
 
         browse_archive_button = QPushButton("Browse")
         browse_archive_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         browse_archive_button.setToolTip(f"Open build folder:\n{self.build_root}")
         browse_archive_button.clicked.connect(self.browse_archive_directory)
-        self.bottom_row.addWidget(browse_archive_button)
+        browse_archive_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.main_layout.addWidget(browse_archive_button)
 
         self.publish_button = QPushButton("Publish")
         self.publish_button.setObjectName("primaryButton")
         self.publish_button.clicked.connect(self.handle_publish)
-        self.bottom_row.addWidget(self.publish_button)
-        self.main_layout.addLayout(self.bottom_row)
+        self.publish_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.main_layout.addWidget(self.publish_button)
 
         self.store_type_combo.currentIndexChanged.connect(self.on_store_changed)
         self.on_store_changed()
@@ -317,9 +357,7 @@ class PublishProfileEntry(QWidget):
         self.update_publish_button_enabled()
 
     def on_publish_profile_added_or_updated(self):
-        self._load_default_publish_profile(
-            selected_profile_id=getattr(self.publish_profile, "id", None)
-        )
+        self._load_default_publish_profile()
         self.update_publish_button_enabled()
 
     def _get_profile_label(self, profile: PublishProfile):
@@ -327,7 +365,7 @@ class PublishProfileEntry(QWidget):
             return profile.description.strip()
         return f"Profile #{profile.id}"
 
-    def _load_default_publish_profile(self, selected_profile_id=None):
+    def _load_default_publish_profile(self):
         selected_store_enum = self.store_type_combo.currentData()
         if selected_store_enum is None:
             self.publish_profile = None
@@ -336,74 +374,85 @@ class PublishProfileEntry(QWidget):
 
         try:
             self.session.refresh(self.build)
-            profiles = [
-                p for p in self.build.build_target.publish_profiles
-                if p.store_type == selected_store_enum
-            ]
-            profiles.sort(key=lambda p: p.id)
-        except Exception as e:
-            logging.info(f"Error loading publish profiles: {e}")
-            profiles = []
-
-        self.publish_profile = None
-        if profiles:
-            if selected_profile_id is not None:
-                self.publish_profile = next(
-                    (p for p in profiles if p.id == selected_profile_id), None
+            profile_model = self.profile_models[selected_store_enum]
+            self.publish_profile = (
+                self.session.query(profile_model)
+                .filter_by(
+                    build_target_id=self.build.build_target_id,
+                    store_type=selected_store_enum,
                 )
-            if self.publish_profile is None:
-                self.publish_profile = profiles[0]
+                .order_by(PublishProfile.id.asc())
+                .first()
+            )
+        except Exception as e:
+            logging.info(f"Error loading publishing configuration: {e}")
+            self.publish_profile = None
 
         self._refresh_profile_summary()
 
     def _refresh_profile_summary(self):
+        status_label = self._get_build_status_label()
         if self.publish_profile is None:
             selected_store_enum = self.store_type_combo.currentData()
             store_label = selected_store_enum.value if selected_store_enum else "store"
-            self.profile_value_label.setText(f"No {store_label} profile selected")
-            self.profile_value_label.setToolTip("Use Change... to create or select one.")
+            self.profile_value_label.setText(f"{status_label} | {store_label} publishing not configured")
+            self.profile_value_label.setToolTip("Use Configure... to set up publishing for this target.")
         else:
             profile_label = self._get_profile_label(self.publish_profile)
-            self.profile_value_label.setText(profile_label)
-            self.profile_value_label.setToolTip(f"Selected publish profile: {profile_label}")
+            self.profile_value_label.setText(f"{status_label} | Publishing: {profile_label}")
+            self.profile_value_label.setToolTip(f"Publishing configuration: {profile_label}")
 
-    def _on_profile_selected_from_manager(self, profile):
-        if profile is None:
-            self.publish_profile = None
-        else:
-            self.publish_profile = self.session.merge(profile)
-        self._refresh_profile_summary()
-        self.update_publish_button_enabled()
+    def _get_build_status_label(self):
+        status = getattr(self.build.status, "value", self.build.status) or "unknown"
+        created_at = getattr(self.build, "created_at", None)
+        if created_at:
+            return f"{status} | {created_at:%Y-%m-%d %H:%M}"
+        return str(status)
 
     def manage_publish_profiles(self):
         selected_platform_enum = self.store_type_combo.currentData()
         if selected_platform_enum is None:
-            QMessageBox.information(self, "Select Store", "Please select a store before managing publish profiles.")
+            QMessageBox.information(self, "Select Store", "Please select a store before configuring publishing.")
             return
 
-        manager = PublishProfileManagerDialog(
+        profile = self._get_or_create_publish_profile(selected_platform_enum)
+        dialog = PublishProfileDialog(
             session=self.session,
-            build_target_id=self.build.build_target_id,
-            store_type=selected_platform_enum,
-            selected_profile_id=getattr(self.publish_profile, "id", None),
+            publish_profile=profile,
             parent=self,
         )
-        manager.profile_selected_signal.connect(self._on_profile_selected_from_manager)
-        manager.profiles_changed_signal.connect(self.on_publish_profile_added_or_updated)
-        manager.exec()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.publish_profile = dialog.publish_profile
 
-        if self.publish_profile is None:
-            self._load_default_publish_profile()
-        else:
-            self.publish_profile = self.session.get(PublishProfile, self.publish_profile.id)
-            self._refresh_profile_summary()
+        self._load_default_publish_profile()
         self.update_publish_button_enabled()
+
+    def _get_or_create_publish_profile(self, store_type: StoreEnum):
+        profile_model = self.profile_models[store_type]
+        profile = (
+            self.session.query(profile_model)
+            .filter_by(build_target_id=self.build.build_target_id, store_type=store_type)
+            .order_by(PublishProfile.id.asc())
+            .first()
+        )
+        if profile is not None:
+            return profile
+
+        target_name = ""
+        if self.build.build_target and self.build.build_target.name:
+            target_name = self.build.build_target.name
+
+        return profile_model(
+            build_target_id=self.build.build_target_id,
+            store_type=store_type,
+            description=target_name or "Default",
+        )
 
     def _refresh_publish_tooltip(self):
         selected_platform_enum = self.store_type_combo.currentData()
         if self.publish_profile is None:
             store_label = selected_platform_enum.value if selected_platform_enum else "store"
-            self.publish_button.setToolTip(f"Create or select a {store_label} publish profile first.")
+            self.publish_button.setToolTip(f"Configure {store_label} publishing for this build target first.")
             return
 
         try:
@@ -482,8 +531,8 @@ class PublishProfileEntry(QWidget):
             QMessageBox.warning(self, "Error", "No target platform selected.")
             return
         if self.publish_profile is None:
-            QMessageBox.information(self, "Select Profile",
-                                     "Create or select a publish profile before publishing.")
+            QMessageBox.information(self, "Configure Publishing",
+                                     "Configure publishing for this build target before publishing.")
             self.manage_publish_profiles()
             return
 

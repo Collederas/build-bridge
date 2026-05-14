@@ -76,7 +76,7 @@ class ItchPublisher(BasePublisher):
     def validate_publish_profile(self):
         """Ensures config is valid alnd allows publishing"""
         if not self.publish_profile:
-            raise InvalidConfigurationError("Itch.io Publish Profile not found.")
+            raise InvalidConfigurationError("Itch.io publishing is not configured.")
 
         if not self.publish_profile.itch_config:
             raise InvalidConfigurationError(

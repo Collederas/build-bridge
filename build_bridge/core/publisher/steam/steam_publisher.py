@@ -47,7 +47,7 @@ class SteamPublisher(BasePublisher):
     def validate_publish_profile(self):
         """Raises InvalidCoinfigurtionError on any fail"""        
         if not self.publish_profile:
-            raise InvalidConfigurationError("No publish profile in db.")
+            raise InvalidConfigurationError("Steam publishing is not configured.")
 
         steam_config = self.publish_profile.steam_config
 

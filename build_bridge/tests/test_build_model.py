@@ -1,6 +1,7 @@
 import os
 import pytest
 from pathlib import Path
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,10 @@ from build_bridge.models import (
     BuildTarget,
     BuildTargetPlatformEnum,
     BuildTypeEnum,
+    ItchConfig,
+    ItchPublishProfile,
     Project,
+    StoreEnum,
 )
 
 
@@ -117,3 +121,30 @@ class TestBuildModel:
         bt = session.query(BuildTarget).first()
         assert "Main" in repr(bt)
         assert "Win64" in repr(bt)
+
+    def test_build_target_has_one_publish_profile_per_store(self, session):
+        bt = session.query(BuildTarget).first()
+        auth = ItchConfig(username="tester")
+        session.add(auth)
+        session.flush()
+
+        first = ItchPublishProfile(
+            build_target_id=bt.id,
+            store_type=StoreEnum.itch,
+            description="Main",
+            itch_user_game_id="tester/game",
+            itch_channel_name="windows",
+            itch_config_id=auth.id,
+        )
+        second = ItchPublishProfile(
+            build_target_id=bt.id,
+            store_type=StoreEnum.itch,
+            description="Duplicate",
+            itch_user_game_id="tester/game",
+            itch_channel_name="windows-beta",
+            itch_config_id=auth.id,
+        )
+        session.add_all([first, second])
+
+        with pytest.raises(IntegrityError):
+            session.commit()

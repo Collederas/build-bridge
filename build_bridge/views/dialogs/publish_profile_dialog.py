@@ -25,7 +25,7 @@ from PyQt6.QtCore import QStandardPaths
 
 class PublishProfileDialog(QDialog):
     """
-    A dialog that shows either Steam or Itch.io publish profile based on the platform argument.
+    A dialog that shows either Steam or Itch.io publishing configuration based on the platform argument.
     """
 
     profile_changed_signal = pyqtSignal()

@@ -239,15 +239,15 @@ def validate_publish_preflight(
         )
 
     if not publish_profile:
-        result.error("Publish profile", "No publish profile is selected.")
+        result.error("Publishing configuration", "Publishing is not configured.")
         return result
 
     if getattr(publish_profile, "id", None):
-        result.ok("Publish profile", f"Profile #{publish_profile.id}")
+        result.ok("Publishing configuration", f"Configuration #{publish_profile.id}")
     else:
         result.error(
-            "Publish profile",
-            "This profile has not been saved yet. Open Profile and save it first.",
+            "Publishing configuration",
+            "This configuration has not been saved yet. Open Configure and save it first.",
         )
 
     project = getattr(publish_profile, "project", None)

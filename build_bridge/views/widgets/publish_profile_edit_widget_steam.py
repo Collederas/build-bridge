@@ -296,7 +296,7 @@ class SteamPublishProfileWidget(QWidget):
 
         except AttributeError as e:
             self.session.rollback()
-            QMessageBox.critical(self, "Save Error", f"Error saving Steam publish profile:\n{e}")
+            QMessageBox.critical(self, "Save Error", f"Error saving Steam publishing configuration:\n{e}")
             return False
         except Exception as e:
             self.session.rollback()

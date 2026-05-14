@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
 import keyring
 
@@ -110,6 +110,9 @@ class Build(Base):
 
 class PublishProfile(Base):
     __tablename__ = "publish_profile"
+    __table_args__ = (
+        UniqueConstraint("build_target_id", "store_type", name="uq_publish_profile_target_store"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     store_type = Column(Enum(StoreEnum), nullable=False)

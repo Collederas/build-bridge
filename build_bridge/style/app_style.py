@@ -29,6 +29,32 @@ QLabel#sectionSubtitle {
     font-size: 12px;
 }
 
+QWidget#buildTargetGroup {
+    background-color: transparent;
+}
+
+QWidget#buildTargetGroupHeader {
+    background-color: #e8edf3;
+    border: 1px solid #cfd6df;
+    border-radius: 6px;
+}
+
+QWidget#buildTargetBuildList {
+    background-color: transparent;
+    border-left: 3px solid #cfd6df;
+}
+
+QLabel#groupTitle {
+    color: #20242a;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QLabel#groupMeta {
+    color: #66707c;
+    font-size: 12px;
+}
+
 QFrame#mainPanel,
 QWidget#buildCard {
     background-color: #ffffff;
@@ -36,10 +62,21 @@ QWidget#buildCard {
     border-radius: 6px;
 }
 
+QWidget#buildRow {
+    background-color: #ffffff;
+    border: 1px solid #cfd6df;
+    border-radius: 0;
+}
+
 QLabel#primaryText {
     color: #20242a;
     font-size: 13px;
     font-weight: 700;
+}
+
+QLabel#secondaryText {
+    color: #59636f;
+    font-size: 12px;
 }
 
 QLabel#fieldLabel {
@@ -59,7 +96,7 @@ QComboBox {
     border: 1px solid #c7cdd6;
     border-radius: 4px;
     color: #20242a;
-    min-height: 26px;
+    min-height: 24px;
     padding: 2px 8px;
 }
 
@@ -73,8 +110,8 @@ QPushButton {
     border: 1px solid #b8c0ca;
     border-radius: 4px;
     color: #20242a;
-    min-height: 28px;
-    padding: 4px 12px;
+    min-height: 24px;
+    padding: 3px 10px;
 }
 
 QPushButton:hover {

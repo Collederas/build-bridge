@@ -83,11 +83,11 @@ From version 0.6.0 the Maps and Target section was added. This allows you to spe
 * Once the build is complete, it will appear in the "Available Builds" list in a folder named _{Project.archive_directory}/{Project.name}/{BuildId}_
         ![Build List]({{ 'assets/images/mainui_build_list_filled.png' | relative_url }})
 * Select the target platform (Steam/Itch.io) from the dropdown.
-* Click "Profile" to configure the publishing profile for that platform and
-    build ID (e.g., Steam App ID, Depots, Itch.io User/Game ID, Channel).
+* Click "Configure" to configure publishing for that build target and platform
+    (e.g., Steam App ID, Depots, Itch.io User/Game ID, Channel).
     You'll need to have configured the related Steam/Itch.io settings first. See [Publishing Details](#publishing-details)
-        ![Configure a Publish Profile]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
-* Once the profile is configured and valid, the "Publish" button will be
+        ![Configure Publishing]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
+* Once publishing is configured and valid, the "Publish" button will be
     available to click. An upload dialog will show the progress.
         ![Publish Dialog]({{ 'assets/images/publish_dialog.png' | relative_url }})
 *SteamCMD buffers its output so you will see logs appearing with delay.*
@@ -120,11 +120,11 @@ Once you have entered the credentials **and the path to your local SteamCMD exec
 If everything goes well, after you accept the access on your Steam app you should see a confirmation message. Else the error will be logged.
         ![Steam Connection Sunny Scenario]({{ 'assets/images/settings_steam_testing_success.png' | relative_url }})
 
-### Publish Profile
-This dialog (Build List entry -> Profile button):
-![Publish Profile Edit Button]({{ 'assets/images/build_list_publish.png' | relative_url }})
+### Publishing Configuration
+This dialog (Build List entry -> Configure button):
+![Publishing Configure Button]({{ 'assets/images/build_list_publish.png' | relative_url }})
 allows you to specify the fields that will end up in the vdf file.
-![Steam Publish Profile]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
+![Steam Publishing Configuration]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
 
 Build Bridge automatically creates the required vdf file, using the single file approach (no separation for depots).
 It will place the build files in an auto-generated Steam folder in your Project's Builds directory.
@@ -138,9 +138,9 @@ Itch Publishing requires only a username and your [API KEY](https://itch.io/user
 You can test a connection without butler (as it is done via simple HTTP API call). But you will need butler to publish anyways so ensure you point to it.
         ![Itch Config Folder]({{ 'assets/images/settings_itch_testing_success.png' | relative_url }})
 
-### Publish Profile
-This dialog (Build List entry -> Profile button) allows you to specify the fields that butler uses to publish the build on your game's page.
-        ![Itch Publish Profile]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
+### Publishing Configuration
+This dialog (Build List entry -> Configure button) allows you to specify the fields that butler uses to publish the build on your game's page.
+        ![Itch Publishing Configuration]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
 
 
 ## Contact

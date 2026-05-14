@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from build_bridge.database import Base
 from build_bridge.models import (
+    AppState,
     Build,
     BuildStatusEnum,
     BuildTarget,
@@ -17,6 +18,7 @@ from build_bridge.models import (
     Project,
     StoreEnum,
 )
+from build_bridge.core.projects import get_active_project, set_active_project
 
 
 @pytest.fixture
@@ -148,3 +150,27 @@ class TestBuildModel:
 
         with pytest.raises(IntegrityError):
             session.commit()
+
+    def test_active_project_defaults_to_first_project(self, engine):
+        with Session(engine) as sess:
+            first = Project(name="First", source_dir="/first", archive_directory="/builds")
+            second = Project(name="Second", source_dir="/second", archive_directory="/builds")
+            sess.add_all([first, second])
+            sess.commit()
+
+            active = get_active_project(sess)
+
+            assert active.id == first.id
+            assert sess.query(AppState).one().active_project_id == first.id
+
+    def test_active_project_can_be_changed(self, engine):
+        with Session(engine) as sess:
+            first = Project(name="First", source_dir="/first", archive_directory="/builds")
+            second = Project(name="Second", source_dir="/second", archive_directory="/builds")
+            sess.add_all([first, second])
+            sess.commit()
+
+            set_active_project(sess, second.id)
+            sess.commit()
+
+            assert get_active_project(sess).id == second.id

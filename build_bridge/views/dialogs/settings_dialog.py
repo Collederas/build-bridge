@@ -22,6 +22,7 @@ from build_bridge.core.vcs.p4client import P4Client
 from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.models import Project, PerforceConfig
+from build_bridge.core.projects import get_active_project, set_active_project
 from build_bridge.utils.paths import get_resource_path
 from build_bridge.views.widgets.config_widget_steam import SteamConfigWidget
 from build_bridge.views.widgets.config_widget_itch import ItchConfigWidget
@@ -30,14 +31,22 @@ from build_bridge.views.widgets.config_widget_itch import ItchConfigWidget
 class SettingsDialog(QDialog):
     monitored_dir_changed_signal = pyqtSignal(str)
 
-    def __init__(self, parent=None, default_page: int = 0):
+    def __init__(
+        self,
+        parent=None,
+        default_page: int = 0,
+        project_id: int | None = None,
+        new_project: bool = False,
+    ):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("New Project" if new_project else "Settings")
         self.setMinimumSize(600, 400)
         icon_path = str(get_resource_path("build_bridge/icons/buildbridge.ico"))
         self.setWindowIcon(QIcon(icon_path))
 
         self.default_page = default_page
+        self.project_id = project_id
+        self.new_project = new_project
 
         # DIALOG MANAGED SESSION: all settings are saved as single transaction
         self.session = SessionFactory()
@@ -50,8 +59,15 @@ class SettingsDialog(QDialog):
     def load_project(self):
         """Ensure project exists and is attached to session"""
         try:
-            # Query for existing project
-            self.project = self.session.query(Project).first()
+            if self.new_project:
+                self.project = Project(name="", source_dir="", archive_directory="")
+                self._initial_archive_dir = ""
+                return
+
+            if self.project_id:
+                self.project = self.session.get(Project, self.project_id)
+            else:
+                self.project = get_active_project(self.session)
 
             # If no project exists, create one
             if not self.project:
@@ -75,7 +91,10 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout()
 
         self.category_list = QListWidget()
-        self.category_list.addItems(["Project", "Steam", "Itch"])
+        if self.new_project:
+            self.category_list.addItems(["Project"])
+        else:
+            self.category_list.addItems(["Project", "Steam", "Itch"])
         layout.addWidget(self.category_list, 1)
 
         self.stack = QStackedWidget()
@@ -84,10 +103,13 @@ class SettingsDialog(QDialog):
         # TODO: VCS
         # self.stack.addWidget(self.create_vcs_page())
 
-        self.steam_config_widget = SteamConfigWidget(self.session)
-        self.itch_config_widget = ItchConfigWidget(self.session)
-        self.stack.addWidget(self.steam_config_widget)
-        self.stack.addWidget(self.itch_config_widget)
+        self.steam_config_widget = None
+        self.itch_config_widget = None
+        if not self.new_project:
+            self.steam_config_widget = SteamConfigWidget(self.session)
+            self.itch_config_widget = ItchConfigWidget(self.session)
+            self.stack.addWidget(self.steam_config_widget)
+            self.stack.addWidget(self.itch_config_widget)
 
         layout.addWidget(self.stack, 3)
 
@@ -243,8 +265,9 @@ class SettingsDialog(QDialog):
             return
 
         try:
-            # Explicitly refresh from build_bridge.database to ensure we have latest data
-            self.session.refresh(self.project)
+            if not self.new_project:
+                # Explicitly refresh from build_bridge.database to ensure we have latest data
+                self.session.refresh(self.project)
 
             # Load data into form fields
             self.project_name_input.setText(self.project.name or "")
@@ -278,6 +301,12 @@ class SettingsDialog(QDialog):
 
             if self.project.is_valid():
                 self.session.add(self.project)
+                self.session.flush()
+                set_active_project(self.session, self.project.id)
+            else:
+                raise InvalidConfigurationError(
+                    "Project name, source directory, and archive directory are required."
+                )
 
             # TODO: PERFORCE SETTINGS
             # This should be moved to self contained widget
@@ -302,44 +331,45 @@ class SettingsDialog(QDialog):
             #
 
             # Validate Steam, store password
-            try:
+            if self.steam_config_widget is not None:
+                try:
            
-                self.steam_config_widget.validate()  # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
+                    self.steam_config_widget.validate()  # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
       
     
-                self.steam_config_widget.store_password()
-                logging.info(
-                    "Settings: Steam settings validated. Keyring saved."
-                )
+                    self.steam_config_widget.store_password()
+                    logging.info(
+                        "Settings: Steam settings validated. Keyring saved."
+                    )
 
-                self.session.add(self.steam_config_widget.steam_config)
+                    self.session.add(self.steam_config_widget.steam_config)
 
-            except (InvalidConfigurationError, ValueError) as e:
-                error_msg = f"Failed to save Steam settings: {str(e)}"
-                logging.info(error_msg)
-                errors_occurred.append(error_msg)
+                except (InvalidConfigurationError, ValueError) as e:
+                    error_msg = f"Failed to save Steam settings: {str(e)}"
+                    logging.info(error_msg)
+                    errors_occurred.append(error_msg)
 
 
             # Validate Itch, store api_key if username provided too
-            try:
+            if self.itch_config_widget is not None:
+                try:
                
-                self.itch_config_widget.validate() # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
+                    self.itch_config_widget.validate() # raises ValueError for model vlaidation and InvalidConfigurationError for widget validated errors
              
-                self.session.add(self.itch_config_widget.itch_config)
+                    self.session.add(self.itch_config_widget.itch_config)
                 
-                self.itch_config_widget.store_api_key()
-                logging.info(
-                    "Settings: Itch settings validated. Keyring saved."
-                )
-            except (InvalidConfigurationError, ValueError) as e:
-                error_msg = f"Failed to save Itch.io settings: {str(e)}"
-                logging.info(error_msg)
-                errors_occurred.append(error_msg)
+                    self.itch_config_widget.store_api_key()
+                    logging.info(
+                        "Settings: Itch settings validated. Keyring saved."
+                    )
+                except (InvalidConfigurationError, ValueError) as e:
+                    error_msg = f"Failed to save Itch.io settings: {str(e)}"
+                    logging.info(error_msg)
+                    errors_occurred.append(error_msg)
 
             # Commit changes to the database and ensure they're flushed
 
             self.session.commit()
-            self.session.flush()
 
             if self._initial_archive_dir != self.project.archive_directory:
                 self.monitored_dir_changed_signal.emit(self.project.archive_directory)
@@ -379,7 +409,8 @@ class SettingsDialog(QDialog):
         """User clicked Apply - close dialog but keep session open"""
         # Close session if we created it
         try:
-            self.steam_config_widget.cleanup()
+            if self.steam_config_widget is not None:
+                self.steam_config_widget.cleanup()
             self.session.close()
         except:
             pass
@@ -387,7 +418,8 @@ class SettingsDialog(QDialog):
 
     def reject(self):
         """User clicked Cancel - rollback any changes"""
-        self.steam_config_widget.cleanup()
+        if self.steam_config_widget is not None:
+            self.steam_config_widget.cleanup()
         try:
             self.session.rollback()
         except:

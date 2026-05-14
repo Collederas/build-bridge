@@ -54,6 +54,14 @@ class Project(Base):
         return bool(self.name) and bool(self.source_dir) and bool(self.archive_directory)
 
 
+class AppState(Base):
+    __tablename__ = "app_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    active_project_id = Column(Integer, ForeignKey("project.id"), nullable=True)
+    active_project = relationship("Project")
+
+
 class BuildTarget(Base):
     __tablename__ = "build_targets"
 

@@ -41,9 +41,10 @@ from build_bridge.views.dialogs.publish_profile_dialog import PublishProfileDial
 
 
 class PublishProfileListWidget(QWidget):
-    def __init__(self):
+    def __init__(self, project_id: int | None = None):
         super().__init__()
         self.session = SessionFactory()
+        self._project_id = project_id
 
         self.setWindowTitle("Available Builds")
         self.setGeometry(100, 100, 600, 400)
@@ -104,6 +105,15 @@ class PublishProfileListWidget(QWidget):
 
         self.refresh_builds()
 
+    def set_project_id(self, project_id: int | None):
+        self._project_id = project_id
+        self.refresh_builds()
+
+    def _get_project(self):
+        if self._project_id is None:
+            return None
+        return self.session.get(Project, self._project_id)
+
     def refresh_builds(self):
         """Re-queries the DB and rebuilds the builds list."""
         while self.vbox.count():
@@ -113,7 +123,7 @@ class PublishProfileListWidget(QWidget):
 
         try:
             self.session.expire_all()
-            project = self.session.query(Project).first()
+            project = self._get_project()
             if not project:
                 self.empty_message_label.setText("No project configured.")
                 self.empty_message_label.setVisible(True)
@@ -167,7 +177,7 @@ class PublishProfileListWidget(QWidget):
     def _import_from_disk(self):
         """Scan archive_dir/project_name/ for version folders not yet in the DB."""
         self.session.expire_all()
-        project = self.session.query(Project).first()
+        project = self._get_project()
         if not project or not project.archive_directory:
             QMessageBox.warning(self, "Import", "No project configured.")
             return

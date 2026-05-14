@@ -84,6 +84,16 @@ QLabel#fieldLabel {
     font-size: 12px;
 }
 
+QLabel#preflightStatus {
+    color: #9aa3ad;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLabel#preflightStatus[ready="true"] {
+    color: #16803c;
+}
+
 QLabel#emptyState {
     color: #66707c;
     font-size: 13px;
@@ -138,6 +148,13 @@ QPushButton#primaryButton {
 
 QPushButton#primaryButton:hover {
     background-color: #1d527d;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #eef0f3;
+    border-color: #d3d8df;
+    color: #8a939e;
+    font-weight: 700;
 }
 
 QPushButton#ghostButton {

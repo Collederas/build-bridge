@@ -29,6 +29,7 @@ from build_bridge.utils.paths import get_resource_path
 from build_bridge.views.dialogs.settings_dialog import SettingsDialog
 
 from build_bridge.core.vcs.p4client import P4Client
+from build_bridge.core.projects import get_active_project
 from build_bridge.models import (
     BuildTarget,
     Project,
@@ -45,7 +46,7 @@ class BuildTargetSetupDialog(QDialog):
     vcs_clients = {VCSTypeEnum.perforce: P4Client}
     build_target_created = pyqtSignal(int)
 
-    def __init__(self, build_target_id: int = None):
+    def __init__(self, build_target_id: int = None, project_id: int | None = None):
         super().__init__()
         self.setWindowTitle("Build Target Setup")
         self.setMinimumSize(800, 500)
@@ -54,6 +55,7 @@ class BuildTargetSetupDialog(QDialog):
 
         # Create session FIRST to query projects
         self.session = SessionFactory()
+        self.project_id = project_id
 
         if build_target_id:
             # Fetch existing target if ID is provided
@@ -110,9 +112,11 @@ class BuildTargetSetupDialog(QDialog):
         if self.build_target and self.build_target.project:
             # If editing a target, use its project (make sure it's session-managed)
             session_project = session.merge(self.build_target.project)
+        elif self.project_id:
+            session_project = session.get(Project, self.project_id)
         else:
-            # If creating new, or target has no project, try finding the first project
-            session_project = session.query(Project).first()
+            # If creating new, or target has no project, use the active project.
+            session_project = get_active_project(session)
             if not session_project:
                 # Only create a default *in memory* if none exist db-wide
                 # The user should ideally add one via settings if none exist.
@@ -186,7 +190,7 @@ class BuildTargetSetupDialog(QDialog):
     def _open_settings_to_add_project(self):
         """Opens the SettingsDialog focused on adding a project."""
         logging.info("Opening Settings Dialog to add project...")
-        settings_dialog = SettingsDialog(parent=self)
+        settings_dialog = SettingsDialog(parent=self, new_project=True)
         try:
             # Navigate to the relevant page (index 1 as requested)
             # Adapt this call if your SettingsDialog uses a different method
@@ -208,7 +212,11 @@ class BuildTargetSetupDialog(QDialog):
         """Queries DB for projects, updates combo box, and sets visibility."""
         logging.info("Refreshing project list...")
         try:
-            projects = self.session.query(Project).order_by(Project.name).all()
+            projects = [
+                project
+                for project in self.session.query(Project).order_by(Project.name, Project.id).all()
+                if project.is_valid()
+            ]
         except Exception as e:
             QMessageBox.critical(
                 self, "Database Error", f"Failed to load projects:\n{e}"
@@ -217,23 +225,21 @@ class BuildTargetSetupDialog(QDialog):
 
         self.project_combo.clear()
 
-        if projects and projects[0].is_valid():
-            self.project_combo.addItems([p.name for p in projects])
+        if projects:
+            self.project_combo.setEnabled(True)
+            self.source_edit.setEnabled(True)
+            for project in projects:
+                self.project_combo.addItem(project.name, project.id)
 
             # Try to re-select the current session project if it exists
-            current_project_name = (
-                self.session_project.name if self.session_project else None
-            )
             index = -1
-            if current_project_name:
-                index = self.project_combo.findText(current_project_name)
+            if self.session_project:
+                index = self.project_combo.findData(self.session_project.id)
 
             if index >= 0:
                 self.project_combo.setCurrentIndex(index)
                 # Update source dir based on selected project
-                selected_project_obj = next(
-                    (p for p in projects if p.name == current_project_name), None
-                )
+                selected_project_obj = next((p for p in projects if p.id == self.session_project.id), None)
                 if selected_project_obj:
                     self.source_edit.setText(selected_project_obj.source_dir or "")
                 else:  # Should not happen if index was found, but defensively clear
@@ -599,10 +605,10 @@ class BuildTargetSetupDialog(QDialog):
                 return  # Do not proceed
 
             # Find the selected project object from the DB using the combo box text
-            selected_project_name = self.project_combo.currentText()
+            selected_project_id = self.project_combo.currentData()
             selected_project = (
                 self.session.query(Project)
-                .filter_by(name=selected_project_name)
+                .filter_by(id=selected_project_id)
                 .first()
             )
 
@@ -611,7 +617,7 @@ class BuildTargetSetupDialog(QDialog):
                 QMessageBox.critical(
                     self,
                     "Error",
-                    f"Selected project '{selected_project_name}' not found in database.",
+                    "Selected project was not found in database.",
                 )
                 return
 

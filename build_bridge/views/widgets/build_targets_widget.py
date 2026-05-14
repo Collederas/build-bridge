@@ -63,10 +63,16 @@ class BuildTargetRow(QWidget):
         self.build_version_input = QLineEdit("0.1")
         self.build_version_input.setFixedWidth(92)
         self.build_version_input.setToolTip("Version string for this build (e.g. 1.0, 0.2-beta)")
+        self.build_version_input.textChanged.connect(self._refresh_build_state)
         row_layout.addWidget(self.build_version_input)
 
         self.edit_button = QPushButton("Edit")
         row_layout.addWidget(self.edit_button)
+
+        self.preflight_status_label = QLabel()
+        self.preflight_status_label.setObjectName("preflightStatus")
+        self.preflight_status_label.setFixedWidth(18)
+        row_layout.addWidget(self.preflight_status_label)
 
         self.build_button = QPushButton("Build")
         self.build_button.setObjectName("primaryButton")
@@ -76,6 +82,7 @@ class BuildTargetRow(QWidget):
         self.build_button.clicked.connect(self.trigger_build)
 
         self._refresh_label()
+        self._refresh_build_state()
 
     def _refresh_label(self):
         try:
@@ -94,6 +101,47 @@ class BuildTargetRow(QWidget):
 
     def _on_target_updated(self, _build_target_id: int):
         self._refresh_label()
+        self._refresh_build_state()
+
+    def _refresh_build_state(self):
+        release_name = self.build_version_input.text().strip()
+
+        try:
+            with session_scope() as session:
+                build_target = session.get(BuildTarget, self._build_target_id)
+                preflight_result = validate_build_preflight(build_target, release_name)
+        except Exception as e:
+            logging.info(f"Error refreshing build preflight status: {e}", exc_info=True)
+            self._set_build_ready(False, "Could not check build prerequisites.")
+            return
+
+        if preflight_result.has_blockers:
+            blockers = [
+                f"{issue.label}: {issue.detail}"
+                for issue in preflight_result.issues
+                if issue.severity == "error"
+            ]
+            tooltip = "Build prerequisites need attention:\n" + "\n".join(blockers)
+            self._set_build_ready(False, tooltip)
+        else:
+            warnings = [
+                f"{issue.label}: {issue.detail}"
+                for issue in preflight_result.issues
+                if issue.severity == "warning"
+            ]
+            tooltip = "Build prerequisites are ready."
+            if warnings:
+                tooltip += "\n\nWarnings:\n" + "\n".join(warnings)
+            self._set_build_ready(True, tooltip)
+
+    def _set_build_ready(self, ready: bool, tooltip: str):
+        self.build_button.setEnabled(ready)
+        self.build_button.setToolTip(tooltip)
+        self.preflight_status_label.setText("●")
+        self.preflight_status_label.setProperty("ready", ready)
+        self.preflight_status_label.setToolTip(tooltip)
+        self.preflight_status_label.style().unpolish(self.preflight_status_label)
+        self.preflight_status_label.style().polish(self.preflight_status_label)
 
     def trigger_build(self):
         release_name = self.build_version_input.text().strip()
@@ -125,9 +173,19 @@ class BuildTargetRow(QWidget):
                     return
 
                 preflight_result = validate_build_preflight(current_build_target, release_name)
-                preflight_dialog = PreflightDialog(preflight_result, parent=self)
-                if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
+                if preflight_result.has_blockers:
+                    self._refresh_build_state()
+                    QMessageBox.warning(
+                        self,
+                        "Build Prerequisites",
+                        "Fix the build prerequisites before starting this build.",
+                    )
                     return
+
+                if preflight_result.has_warnings:
+                    preflight_dialog = PreflightDialog(preflight_result, parent=self)
+                    if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
+                        return
 
                 engine_base_path = current_build_target.unreal_engine_base_path
                 if not engine_base_path or not os.path.isdir(engine_base_path):
@@ -348,8 +406,12 @@ class BuildTargetListWidget(QWidget):
             logging.info(f"Error loading build targets: {e}", exc_info=True)
             self.targets_container.setVisible(False)
 
+    def set_project_id(self, project_id: int | None):
+        self._project_id = project_id
+        self._refresh_targets()
+
     def _open_add_dialog(self):
-        dialog = BuildTargetSetupDialog(build_target_id=None)
+        dialog = BuildTargetSetupDialog(build_target_id=None, project_id=self._project_id)
         dialog.build_target_created.connect(self._on_target_added)
         dialog.exec()
 

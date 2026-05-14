@@ -342,12 +342,12 @@ class SettingsDialog(QDialog):
             self.session.flush()
 
             if self._initial_archive_dir != self.project.archive_directory:
-                self.monitored_dir_changed_signal.emit(str(self.project.builds_path))
+                self.monitored_dir_changed_signal.emit(self.project.archive_directory)
 
             logging.info("Settings: Commit successful")
 
             logging.info(
-                f"Settings: Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Builds will be stored in: '{self.project.builds_path}'"
+                f"Settings: Saving project - Name: '{self.project.name}', Source: '{self.project.source_dir}', Archive dir: '{self.project.archive_directory}'"
             )
 
             if errors_occurred:

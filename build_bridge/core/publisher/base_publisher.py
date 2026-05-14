@@ -14,5 +14,5 @@ class BasePublisher(ABC):
 
 
     @abstractmethod
-    def publish(self, parent=None):
+    def publish(self, content_dir: str, version: str = ""):
         """Execute the publishing process."""

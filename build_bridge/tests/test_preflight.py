@@ -28,6 +28,8 @@ def _make_build_target(tmp_path):
 
     bt = MagicMock()
     bt.project = project
+    bt.name = "Main"
+    bt.builds_path = tmp_path / "Builds" / "MyGame" / "Main"
     bt.unreal_engine_base_path = str(engine_dir)
     bt.target = str(target_file)
     bt.build_type = MagicMock(value="Shipping")
@@ -62,7 +64,7 @@ class TestBuildPreflight:
 
     def test_existing_output_folder_is_warning_not_error(self, tmp_path):
         bt = _make_build_target(tmp_path)
-        existing = tmp_path / "Builds" / "MyGame" / "1.0.0"
+        existing = tmp_path / "Builds" / "MyGame" / "Main" / "1.0.0"
         existing.mkdir(parents=True)
         result = validate_build_preflight(bt, "1.0.0")
         warning_labels = [i.label for i in result.issues if i.severity == "warning"]

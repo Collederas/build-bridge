@@ -156,11 +156,15 @@ def validate_build_preflight(build_target, release_name: str) -> PreflightResult
     else:
         result.error("Build version", "Enter a release/build version.")
 
-    if _truthy(archive_directory) and _truthy(getattr(project, "name", None)) and _truthy(
-        release_name
-    ):
-        output_dir = Path(str(archive_directory)) / str(project.name) / str(release_name)
-        if output_dir.exists():
+    if _truthy(release_name) and hasattr(build_target, "builds_path"):
+        try:
+            output_dir = build_target.builds_path / str(release_name)
+        except Exception:
+            output_dir = None
+
+        if output_dir is None:
+            result.warning("Output folder", "Could not determine output path.")
+        elif output_dir.exists():
             result.warning(
                 "Output folder",
                 f"Build folder already exists and will require overwrite confirmation: {output_dir}",

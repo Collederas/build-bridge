@@ -160,6 +160,10 @@ class BuildTargetSetupDialog(QDialog):
         project_form = QFormLayout(self.project_form_widget)
         project_form.setContentsMargins(0, 0, 0, 0)  # Remove margins if needed
 
+        self.target_name_edit = QLineEdit()
+        self.target_name_edit.setPlaceholderText("e.g. Main App, Demo, QA")
+        project_form.addRow("Target Name:", self.target_name_edit)
+
         self.project_combo = QComboBox()
         self.source_edit = QLineEdit()
         browse_button = QPushButton("Browse")
@@ -521,8 +525,13 @@ class BuildTargetSetupDialog(QDialog):
             self.bt_ue_path_edit.setText(directory)
 
     def initialize_form(self):
-        # --- Refresh Project List and set visibility ---        
+        # --- Refresh Project List and set visibility ---
         self._refresh_project_list()
+
+        # Populate Target Name
+        self.target_name_edit.setText(
+            self.build_target.name if self.build_target and self.build_target.name else ""
+        )
 
         # --- Initialize Page 2 fields ---
         self.build_type_combo.clear()
@@ -631,6 +640,8 @@ class BuildTargetSetupDialog(QDialog):
             else:
                 # Ensure existing build_target is associated with the selected project
                 self.build_target.project = self.session_project
+
+            self.build_target.name = self.target_name_edit.text().strip()
 
             self.build_target.build_type = BuildTypeEnum(
                 self.build_type_combo.currentText()

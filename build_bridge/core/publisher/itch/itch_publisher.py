@@ -99,15 +99,15 @@ class ItchPublisher(BasePublisher):
                 "Butler not found. Please set it in Settings."
             )
 
-    def publish(self, content_dir: str):
+    def publish(self, content_dir: str, version: str = ""):
         """
         Prepares the butler command and launches the ItchUploadDialog to execute it.
 
         Args:
             content_dir: Path to the directory containing the built game files.
-            build_id: The version or identifier for this build (e.g., "1.0.0").
+            version: The version string for this build (e.g., "1.0.0").
         """
-        logging.info(f"Preparing Itch.io publish for build: {self.publish_profile.build_id}")
+        logging.info(f"Preparing Itch.io publish for build: {version}")
 
         # --- Construct Butler Command Arguments ---
         # Note: command executable is passed separately to QProcess
@@ -119,11 +119,12 @@ class ItchPublisher(BasePublisher):
             str(Path(content_dir).resolve()),  # Ensure absolute path
             f"{itch_target}:{self.publish_profile.itch_channel_name}",
             "--userversion",
-            self.publish_profile.build_id,
+            version,
         ]
 
         logging.info(f"Command: {butler_exe} {' '.join(arguments)}")
         logging.info(f"Target: {itch_target}")
+        project_name = self.publish_profile.project.name if self.publish_profile.project else ""
         # --- Launch Dialog ---
         try:
             dialog = GenericUploadDialog(
@@ -132,10 +133,10 @@ class ItchPublisher(BasePublisher):
                     "BUTLER_API_KEY": f"{self.publish_profile.itch_config.api_key}",
                     "BUTLER_NO_TTY": "1",
                 },
-                title=self.publish_profile.project.name,
+                title=project_name,
                 arguments=arguments,
                 display_info={  # Pass info for display in the dialog
-                    "build_id": self.publish_profile.build_id,
+                    "build_id": version,
                     "target": itch_target,
                     "content_dir": content_dir,
                 },

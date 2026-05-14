@@ -64,7 +64,7 @@ class SteamPublisher(BasePublisher):
         if not steam_config.steamcmd_path:
             raise InvalidConfigurationError("SteamCMD not set in Steam Settings.")
 
-    def publish(self, content_dir):
+    def publish(self, content_dir: str, version: str = ""):
         """Start the Steam publishing process."""
 
         self.validate_publish_profile()
@@ -93,11 +93,12 @@ class SteamPublisher(BasePublisher):
             else self.publish_profile.app_id
         )
         display_info = {
-            "Build ID": self.publish_profile.build_id,
+            "Build ID": version,
             "App ID": str(target_app_id),
             "Target": f"Steam ({self.publish_profile.steam_config.username})",
         }
-        title = f"Steam Upload: {self.publish_profile.project.name} - {self.publish_profile.build_id}"
+        project_name = self.publish_profile.project.name if self.publish_profile.project else ""
+        title = f"Steam Upload: {project_name} - {version}"
 
         # Proceed with publishing
         dialog = GenericUploadDialog(

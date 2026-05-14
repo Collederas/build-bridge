@@ -42,7 +42,10 @@ class PublishProfileDialog(QDialog):
 
         # Set window properties
         store_label = getattr(self.publish_profile.store_type, "value", str(self.publish_profile.store_type))
-        self.setWindowTitle(f"{store_label} Profile — {self.publish_profile.build_id}")
+        target_name = ""
+        if getattr(self.publish_profile, "build_target", None):
+            target_name = self.publish_profile.build_target.name or ""
+        self.setWindowTitle(f"{store_label} Profile — {target_name}")
 
         self.setMinimumWidth(650)
         self.setMinimumHeight(500)

@@ -22,6 +22,7 @@ from build_bridge.utils.paths import get_resource_path
 
 class BuildWindowDialog(QDialog):
     build_ready_signal = pyqtSignal()
+    build_failed_signal = pyqtSignal()
 
     def __init__(self, builder: UnrealBuilder, parent=None):
         super().__init__(parent)
@@ -155,6 +156,7 @@ class BuildWindowDialog(QDialog):
     def reset_after_cancel(self):
         self.build_in_progress = False
         self._cleanup_process_state()
+        self.build_failed_signal.emit()
         self._set_action_button("Retry Build", self.start_build)
         self.action_button.setEnabled(True)
 
@@ -205,6 +207,7 @@ class BuildWindowDialog(QDialog):
         else:
             self.append_output(f"\nERROR: BUILD FAILED (Exit code: {exit_code})")
             logging.info(f"Build failed with exit code {exit_code}")
+            self.build_failed_signal.emit()
             self._set_action_button("Close", self.close)
 
         self._cleanup_process_state()

@@ -1,9 +1,10 @@
 import logging
 import enum
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from sqlalchemy import JSON, Boolean, Column, Enum, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, validates, Mapped, mapped_column
 import keyring
 
@@ -31,6 +32,12 @@ class StoreEnum(str, enum.Enum):
     steam = "Steam"
 
 
+class BuildStatusEnum(str, enum.Enum):
+    in_progress = "in_progress"
+    success = "success"
+    failed = "failed"
+
+
 class Project(Base):
     __tablename__ = "project"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -42,16 +49,9 @@ class Project(Base):
     build_targets = relationship(
         "BuildTarget", back_populates="project", cascade="all, delete-orphan"
     )
-    publish_profiles = relationship(
-        "PublishProfile", back_populates="project", cascade="all, delete-orphan"
-    )
 
     def is_valid(self):
         return bool(self.name) and bool(self.source_dir) and bool(self.archive_directory)
-
-    @property
-    def builds_path(self):
-        return Path(str(self.archive_directory)) / self.name
 
 
 class BuildTarget(Base):
@@ -61,6 +61,8 @@ class BuildTarget(Base):
 
     project_id = Column(Integer, ForeignKey("project.id"), nullable=False)
     project = relationship("Project", back_populates="build_targets")
+
+    name = Column(String, nullable=False, default="")
 
     unreal_engine_base_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
@@ -80,8 +82,30 @@ class BuildTarget(Base):
 
     auto_sync_branch = Column(Boolean, nullable=False, default=False)
 
+    builds = relationship("Build", back_populates="build_target", cascade="all, delete-orphan")
+    publish_profiles = relationship("PublishProfile", back_populates="build_target", cascade="all, delete-orphan")
+
+    @property
+    def builds_path(self) -> Path:
+        return Path(str(self.project.archive_directory)) / self.project.name / self.name
+
     def __repr__(self):
-        return f"{self.project.name} - {self.target_platform.value}"
+        label = self.name or self.project.name
+        return f"{label} ({self.target_platform.value})"
+
+
+class Build(Base):
+    __tablename__ = "builds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    build_target_id = Column(Integer, ForeignKey("build_targets.id"), nullable=False)
+    build_target = relationship("BuildTarget", back_populates="builds")
+
+    version = Column(String, nullable=False)
+    output_path = Column(String, nullable=False)
+    status = Column(Enum(BuildStatusEnum), nullable=False, default=BuildStatusEnum.in_progress)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    vcs_commit = Column(String, nullable=True)
 
 
 class PublishProfile(Base):
@@ -90,13 +114,16 @@ class PublishProfile(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     store_type = Column(Enum(StoreEnum), nullable=False)
 
-    project_id = Column(Integer, ForeignKey("project.id"), nullable=False)
-    project = relationship("Project", back_populates="publish_profiles")
+    build_target_id = Column(Integer, ForeignKey("build_targets.id"), nullable=False)
+    build_target = relationship("BuildTarget", back_populates="publish_profiles")
 
-    build_id = Column(String, nullable=False)
     description = Column(String, nullable=True)
 
     __mapper_args__ = {"polymorphic_on": store_type, "polymorphic_identity": None}
+
+    @property
+    def project(self):
+        return self.build_target.project if self.build_target else None
 
 
 class SteamPublishProfile(PublishProfile):
@@ -134,9 +161,8 @@ class SteamPublishProfile(PublishProfile):
 
     @property
     def builder_path(self):
-        """This is built dynamically based on project"""
-        if self.project:
-            return str(Path(self.project.builds_path) / "Steam")
+        if self.build_target:
+            return str(self.build_target.builds_path / "Steam")
 
 
 class SteamConfig(Base):

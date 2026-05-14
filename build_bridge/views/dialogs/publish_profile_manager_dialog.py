@@ -12,8 +12,8 @@ from PyQt6.QtWidgets import (
 )
 
 from build_bridge.models import (
+    BuildTarget,
     ItchPublishProfile,
-    Project,
     PublishProfile,
     SteamPublishProfile,
     StoreEnum,
@@ -35,20 +35,24 @@ class PublishProfileManagerDialog(QDialog):
     def __init__(
         self,
         session,
-        build_id: str,
+        build_target_id: int,
         store_type: StoreEnum,
         selected_profile_id: int | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.session = session
-        self.build_id = build_id
+        self.build_target_id = build_target_id
         self.store_type = store_type
         self.selected_profile_id = selected_profile_id
+
+        build_target = session.get(BuildTarget, build_target_id)
+        target_label = build_target.name if build_target and build_target.name else f"Target #{build_target_id}"
 
         self.setWindowTitle(f"{store_type.value} Publish Profiles")
         self.setMinimumSize(560, 360)
 
+        self._target_label = target_label
         self._init_ui()
         self._refresh_profiles(selected_profile_id)
 
@@ -56,7 +60,7 @@ class PublishProfileManagerDialog(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(12)
 
-        header = QLabel(f"{self.store_type.value} profiles for {self.build_id}")
+        header = QLabel(f"{self.store_type.value} profiles for {self._target_label}")
         header.setObjectName("sectionTitle")
         main_layout.addWidget(header)
 
@@ -111,7 +115,7 @@ class PublishProfileManagerDialog(QDialog):
     def _refresh_profiles(self, selected_profile_id=None):
         profiles = (
             self.session.query(self._profile_model())
-            .filter_by(build_id=self.build_id)
+            .filter_by(build_target_id=self.build_target_id)
             .order_by(PublishProfile.id.asc())
             .all()
         )
@@ -150,10 +154,8 @@ class PublishProfileManagerDialog(QDialog):
         return self.session.get(self._profile_model(), profile_id)
 
     def _make_profile_instance(self):
-        project = self.session.query(Project).one_or_none()
         return self._profile_model()(
-            project_id=project.id if project else None,
-            build_id=self.build_id,
+            build_target_id=self.build_target_id,
             store_type=self.store_type,
             description="New Profile",
         )
@@ -185,21 +187,14 @@ class PublishProfileManagerDialog(QDialog):
 
         current_name = self._profile_label(profile)
         new_name, accepted = QInputDialog.getText(
-            self,
-            "Rename Profile",
-            "Profile name:",
-            text=current_name,
+            self, "Rename Profile", "Profile name:", text=current_name,
         )
         if not accepted:
             return
 
         new_name = new_name.strip()
         if not new_name:
-            QMessageBox.warning(
-                self,
-                "Rename Profile",
-                "Profile name cannot be empty.",
-            )
+            QMessageBox.warning(self, "Rename Profile", "Profile name cannot be empty.")
             return
 
         profile.description = new_name
@@ -215,8 +210,7 @@ class PublishProfileManagerDialog(QDialog):
             return
 
         response = QMessageBox.question(
-            self,
-            "Delete Profile",
+            self, "Delete Profile",
             f"Delete publish profile '{self._profile_label(profile)}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,

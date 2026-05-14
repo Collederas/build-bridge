@@ -222,7 +222,6 @@ def validate_publish_preflight(
     build_root: str,
     publish_profile,
     selected_store: StoreEnum,
-    publish_playtest: bool = False,
 ) -> PreflightResult:
     result = PreflightResult("Publish Preflight")
 
@@ -260,7 +259,7 @@ def validate_publish_preflight(
     if selected_store == StoreEnum.itch:
         _validate_itch_publish_preflight(result, publish_profile)
     elif selected_store == StoreEnum.steam:
-        _validate_steam_publish_preflight(result, publish_profile, publish_playtest)
+        _validate_steam_publish_preflight(result, publish_profile)
     else:
         result.error("Store", f"No preflight checks are available for {selected_store}.")
 
@@ -308,9 +307,7 @@ def _validate_itch_publish_preflight(result: PreflightResult, publish_profile):
             result.error("Itch API key", "API key was not found in system keyring.")
 
 
-def _validate_steam_publish_preflight(
-    result: PreflightResult, publish_profile, publish_playtest: bool
-):
+def _validate_steam_publish_preflight(result: PreflightResult, publish_profile):
     steam_config = getattr(publish_profile, "steam_config", None)
     if not steam_config:
         result.error("Steam settings", "Steam settings are missing.")
@@ -336,21 +333,13 @@ def _validate_steam_publish_preflight(
                 "No password found. SteamCMD may prompt or fail depending on account setup.",
             )
 
-    app_id = (
-        getattr(publish_profile, "playtest_app_id", None)
-        if publish_playtest
-        else getattr(publish_profile, "app_id", None)
-    )
+    app_id = getattr(publish_profile, "app_id", None)
     if app_id:
         result.ok("Steam app ID", str(app_id))
     else:
         result.error("Steam app ID", "App ID is not configured.")
 
-    depots = (
-        getattr(publish_profile, "playtest_depots", None)
-        if publish_playtest
-        else getattr(publish_profile, "depots", None)
-    )
+    depots = getattr(publish_profile, "depots", None)
     _validate_depots(result, depots)
 
     builder_path = getattr(publish_profile, "builder_path", None)

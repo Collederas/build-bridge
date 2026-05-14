@@ -131,16 +131,6 @@ It will place the build files in an auto-generated Steam folder in your Project'
 {: .notice--info }
 ![Steam Config Folder]({{ 'assets/images/builds_folder.png' | relative_url }})
 
-#### Playtest
-In version 0.5.0 support for a secondary Steam Profile was added, to allow publishing on to the [Steam Playtest](https://store.steampowered.com/news/group/4145017/view/2954884882167446257) version of your app.
-
-In the Edit Publish Profile dialog, you will find a tab dedicated to the Playtest setup:
-        ![Steam Publish Profile]({{ 'assets/images/playtest_edit.png' | relative_url }})
-
-In order to target this configuration when you press Publish, you need to check the related checkbox (available only when targeting Steam)
-        ![Steam Publish Profile]({{ 'assets/images/playtest_checkbox.png' | relative_url }})
-
-
 ## Itch
 
 ### Authentication

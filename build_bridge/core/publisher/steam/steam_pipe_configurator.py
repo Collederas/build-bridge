@@ -7,9 +7,8 @@ from build_bridge.models import SteamPublishProfile
 class SteamPipeConfigurator:
     TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), "app_build_template.vdf")
 
-    def __init__(self, publish_profile: SteamPublishProfile, publish_playtest=False):
+    def __init__(self, publish_profile: SteamPublishProfile):
         self.publish_profile = publish_profile
-        self.publish_playtest = publish_playtest
 
     def create_or_update_vdf_file(self, content_root: str):
         """
@@ -25,9 +24,9 @@ class SteamPipeConfigurator:
         
         builder_path = self.publish_profile.builder_path
 
-        app_id = self.publish_profile.app_id if not self.publish_playtest else self.publish_profile.playtest_app_id
-        description = self.publish_profile.description if not self.publish_playtest else self.publish_profile.playtest_description
-        depot_mappings = self.publish_profile.depots if not self.publish_playtest else self.publish_profile.playtest_depots
+        app_id = self.publish_profile.app_id
+        description = self.publish_profile.description
+        depot_mappings = self.publish_profile.depots
 
         # Create necessary directories and files if don't exist
         # <UserDefinedPath>

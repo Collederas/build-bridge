@@ -1,6 +1,6 @@
 # Build Bridge
 
-Build Bridge is a simple Windows App to build, organize and publish Unreal projects. I built it to help the workflow of playtesting and distributing my first game (One Last Toast - on Steam and Itch).
+Build Bridge is a simple Windows App to build, organize and publish Unreal projects. I built it to help the workflow of building and distributing my first game (One Last Toast - on Steam and Itch).
 
 The idea is:
 - to have a predefined build directory where builds are stored by version number

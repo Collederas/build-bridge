@@ -1,7 +1,7 @@
 """add game config field
 
 Revision ID: 1b6154ba883e
-Revises: b34d93bf8a1f
+Revises: dca64d720639
 Create Date: 2025-06-14 09:44:06.501164
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '1b6154ba883e'
-down_revision: Union[str, None] = 'b34d93bf8a1f'
+down_revision: Union[str, None] = 'dca64d720639'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

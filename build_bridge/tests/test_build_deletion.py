@@ -2,7 +2,11 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from build_bridge.core.builds import UnsafeBuildPathError, delete_build
+from build_bridge.core.builds import (
+    UnsafeBuildPathError,
+    delete_build,
+    register_successful_build,
+)
 from build_bridge.database import Base
 from build_bridge.models import (
     Build,
@@ -96,3 +100,19 @@ def test_delete_build_keeps_record_when_disk_delete_is_unsafe(session, tmp_path)
 
     assert session.get(Build, build_id) is not None
     assert build_file.exists()
+
+
+def test_register_successful_build_creates_only_success_records(session, tmp_path):
+    build_target = session.query(BuildTarget).first()
+    build_dir = tmp_path / "Builds" / "TestGame" / "Main" / "1.2.4"
+
+    build = register_successful_build(
+        session,
+        build_target_id=build_target.id,
+        version="1.2.4",
+        output_path=str(build_dir),
+    )
+
+    assert build.id is not None
+    assert build.status == BuildStatusEnum.success
+    assert session.query(Build).count() == 1

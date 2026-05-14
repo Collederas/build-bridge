@@ -23,9 +23,10 @@ from build_bridge.core.builder.unreal_builder import (
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
+from build_bridge.core.builds import register_successful_build
 from build_bridge.core.preflight import validate_build_preflight
 from build_bridge.database import session_scope
-from build_bridge.models import Build, BuildStatusEnum, BuildTarget
+from build_bridge.models import BuildTarget
 from build_bridge.views.dialogs.build_dialog import BuildWindowDialog
 from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
 from build_bridge.views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
@@ -257,63 +258,62 @@ class BuildTargetRow(QWidget):
                     QMessageBox.critical(self, "Build Setup Error", f"Failed to initialize builder:\n{str(e)}")
                     return
 
-                # Create Build record
-                build_record = Build(
-                    build_target_id=self._build_target_id,
-                    version=release_name,
-                    output_path=str(project_build_dir_root),
-                    status=BuildStatusEnum.in_progress,
-                )
-                session.add(build_record)
-                session.flush()
-                build_db_id = build_record.id
-
             logging.info(f"Starting build dialog for release '{release_name}'...")
-            dialog = BuildWindowDialog(unreal_builder, parent=self)
-            dialog.build_ready_signal.connect(lambda: self._on_build_success(build_db_id))
-            dialog.build_failed_signal.connect(lambda: self._on_build_failed(build_db_id))
+            dialog = BuildWindowDialog(unreal_builder, parent=self, auto_start=False)
+            dialog.build_ready_signal.connect(
+                lambda: self._on_build_success(
+                    self._build_target_id,
+                    release_name,
+                    str(project_build_dir_root),
+                )
+            )
             dialog.build_ready_signal.connect(self.build_ready_signal)
+            dialog.start_build()
             dialog.exec()
 
         except Exception as e:
             logging.info(f"Error during trigger_build: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
 
-    def _on_build_success(self, build_id: int):
+    def _on_build_success(self, build_target_id: int, release_name: str, output_path: str):
         try:
             with session_scope() as session:
-                build = session.get(Build, build_id)
-                if build:
-                    build.status = BuildStatusEnum.success
+                register_successful_build(
+                    session,
+                    build_target_id=build_target_id,
+                    version=release_name,
+                    output_path=output_path,
+                )
         except Exception as e:
-            logging.info(f"Failed to update build status to success: {e}")
-
-    def _on_build_failed(self, build_id: int):
-        try:
-            with session_scope() as session:
-                build = session.get(Build, build_id)
-                if build:
-                    build.status = BuildStatusEnum.failed
-        except Exception as e:
-            logging.info(f"Failed to update build status to failed: {e}")
+            logging.info(f"Failed to register successful build: {e}")
 
     def _convert_umap_path(self, full_path: str, project_source_dir: str) -> str:
-        full_path = os.path.normpath(full_path)
-        project_source_dir = os.path.normpath(project_source_dir)
+        full_path = os.path.abspath(os.path.normpath(full_path))
+        project_source_dir = os.path.abspath(os.path.normpath(project_source_dir))
 
-        if not full_path.startswith(project_source_dir):
+        try:
+            common_path = os.path.commonpath([full_path, project_source_dir])
+        except ValueError:
+            common_path = ""
+
+        if os.path.normcase(common_path) != os.path.normcase(project_source_dir):
             raise ValueError("Path is not within the project source directory")
+
+        if not full_path.lower().endswith(".umap"):
+            raise ValueError("Expected a .umap file")
 
         relative_path = os.path.relpath(full_path, project_source_dir).replace("\\", "/")
         parts = relative_path.split("/")
+        map_name = os.path.splitext(parts[-1])[0]
 
         if parts[0] == "Plugins":
             try:
-                plugin_name = parts[2]
                 content_index = parts.index("Content")
+                plugin_name = parts[content_index - 1]
+                if content_index < 2:
+                    raise ValueError("Plugin content path is missing the plugin folder")
                 map_subpath = parts[content_index + 1:-1]
-                map_name = os.path.splitext(parts[-1])[0]
-                return f"/{plugin_name}/{'/'.join(map_subpath)}/{map_name}"
+                return "/".join(["", plugin_name, *map_subpath, map_name])
             except (IndexError, ValueError):
                 raise ValueError("Invalid plugin map path structure")
         else:
@@ -321,8 +321,7 @@ class BuildTargetRow(QWidget):
                 if parts[0] != "Content":
                     raise ValueError("Expected path to start with 'Content'")
                 map_subpath = parts[1:-1]
-                map_name = os.path.splitext(parts[-1])[0]
-                return f"/Game/{'/'.join(map_subpath)}/{map_name}"
+                return "/".join(["", "Game", *map_subpath, map_name])
             except IndexError:
                 raise ValueError("Invalid base content path structure")
 

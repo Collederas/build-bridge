@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from build_bridge.models import Build
+from build_bridge.models import Build, BuildStatusEnum
 
 
 class BuildDeletionError(RuntimeError):
@@ -31,6 +31,23 @@ def delete_build(session, build: Build, delete_from_disk: bool = False) -> dict:
     session.delete(build)
     session.commit()
     return result
+
+
+def register_successful_build(
+    session,
+    build_target_id: int,
+    version: str,
+    output_path: str,
+) -> Build:
+    build = Build(
+        build_target_id=build_target_id,
+        version=version,
+        output_path=output_path,
+        status=BuildStatusEnum.success,
+    )
+    session.add(build)
+    session.commit()
+    return build
 
 
 def _delete_build_directory(output_path: str):

@@ -24,14 +24,15 @@ class BuildWindowDialog(QDialog):
     build_ready_signal = pyqtSignal()
     build_failed_signal = pyqtSignal()
 
-    def __init__(self, builder: UnrealBuilder, parent=None):
+    def __init__(self, builder: UnrealBuilder, parent=None, auto_start: bool = True):
         super().__init__(parent)
         self.builder = builder
         self.build_in_progress = False
         self.process = None
         self._current_pid = None
         self.setup_ui()
-        self.start_build()
+        if auto_start:
+            self.start_build()
 
     def setup_ui(self):
         self.setWindowTitle("Unreal Engine Builder")

@@ -167,7 +167,7 @@ def validate_build_preflight(build_target, release_name: str) -> PreflightResult
         elif output_dir.exists():
             result.warning(
                 "Output folder",
-                f"Build folder already exists and will require overwrite confirmation: {output_dir}",
+                f"Build folder already exists. Continuing will replace it: {output_dir}",
             )
         else:
             result.ok("Output folder", str(output_dir))

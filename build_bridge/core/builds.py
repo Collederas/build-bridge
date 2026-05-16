@@ -8,6 +8,10 @@ class BuildDeletionError(RuntimeError):
     pass
 
 
+class BuildExistsError(RuntimeError):
+    pass
+
+
 class UnsafeBuildPathError(BuildDeletionError):
     pass
 
@@ -50,6 +54,32 @@ def register_successful_build(
     return build
 
 
+def prepare_build_output_directory(output_path: str, overwrite: bool = False):
+    build_path = Path(output_path).expanduser().resolve()
+
+    if build_path.exists():
+        if not overwrite:
+            raise BuildExistsError(f"Build output path already exists: {build_path}")
+        _clear_build_directory_contents(build_path)
+
+
+def _clear_build_directory_contents(build_path: Path):
+    if not build_path.is_dir():
+        raise UnsafeBuildPathError(f"Build output path is not a directory: {build_path}")
+
+    if _is_unsafe_delete_root(build_path):
+        raise UnsafeBuildPathError(f"Refusing to clear unsafe path: {build_path}")
+
+    try:
+        for child in build_path.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    except OSError as exc:
+        raise BuildDeletionError(f"Failed to clear build output path: {exc}") from exc
+
+
 def _delete_build_directory(output_path: str):
     if not output_path:
         raise UnsafeBuildPathError("Build output path is empty.")
@@ -65,7 +95,10 @@ def _delete_build_directory(output_path: str):
     if _is_unsafe_delete_root(build_path):
         raise UnsafeBuildPathError(f"Refusing to delete unsafe path: {build_path}")
 
-    shutil.rmtree(build_path)
+    try:
+        shutil.rmtree(build_path)
+    except OSError as exc:
+        raise BuildDeletionError(f"Failed to delete build output path: {exc}") from exc
 
 
 def _is_unsafe_delete_root(path: Path) -> bool:

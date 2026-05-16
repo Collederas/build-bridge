@@ -53,7 +53,8 @@ class UnrealBuilder:
         maps: List[str],
         output_dir: str,
         clean: bool = False,
-        valve_package_pad: bool = False
+        valve_package_pad: bool = False,
+        allow_existing_output_dir: bool = False,
     ):
 
         self.source_dir = source_dir
@@ -66,7 +67,7 @@ class UnrealBuilder:
         self.valve_package_pad = valve_package_pad
 
         # Check if a build already exist for this release id
-        if os.path.exists(output_dir):
+        if os.path.exists(output_dir) and not allow_existing_output_dir:
             raise BuildAlreadyExistsError(f"{output_dir} already exists")
         
         self.output_dir = output_dir

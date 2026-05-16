@@ -1,6 +1,5 @@
 import os, logging
 from pathlib import Path
-import shutil
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -23,7 +22,12 @@ from build_bridge.core.builder.unreal_builder import (
     UnrealBuilder,
     UnrealEngineNotInstalledError,
 )
-from build_bridge.core.builds import register_successful_build
+from build_bridge.core.builds import (
+    BuildExistsError,
+    BuildDeletionError,
+    prepare_build_output_directory,
+    register_successful_build,
+)
 from build_bridge.core.preflight import validate_build_preflight
 from build_bridge.database import session_scope
 from build_bridge.models import BuildTarget
@@ -173,6 +177,7 @@ class BuildTargetRow(QWidget):
                                          "Project archive directory, source directory, or name is missing.")
                     return
 
+                project_build_dir_root = current_build_target.builds_path / release_name
                 preflight_result = validate_build_preflight(current_build_target, release_name)
                 if preflight_result.has_blockers:
                     self._refresh_build_state()
@@ -182,6 +187,8 @@ class BuildTargetRow(QWidget):
                         "Fix the build prerequisites before starting this build.",
                     )
                     return
+
+                overwrite_existing_build = project_build_dir_root.exists()
 
                 if preflight_result.has_warnings:
                     preflight_dialog = PreflightDialog(preflight_result, parent=self)
@@ -200,26 +207,6 @@ class BuildTargetRow(QWidget):
                                         "No target .cs file specified.\n\nPlease use 'Edit' to configure it.")
                     return
 
-                project_build_dir_root = current_build_target.builds_path / release_name
-
-                if project_build_dir_root.exists():
-                    response = QMessageBox.question(
-                        self, "Build Conflict",
-                        f"A build already exists for release:\n{release_name}\n\n"
-                        f"Directory:\n{project_build_dir_root}\n\nOverwrite it?",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.No,
-                    )
-                    if response == QMessageBox.StandardButton.No:
-                        return
-                    try:
-                        shutil.rmtree(project_build_dir_root)
-                        logging.info(f"Removed existing build directory: {project_build_dir_root}")
-                    except Exception as e:
-                        QMessageBox.critical(self, "Cleanup Error",
-                                              f"Failed to delete existing build directory:\n{str(e)}")
-                        return
-
                 maps = []
                 for incl_map in current_build_target.maps.keys():
                     maps.append(self._convert_umap_path(incl_map, source_dir))
@@ -234,6 +221,28 @@ class BuildTargetRow(QWidget):
                     return
 
                 try:
+                    prepare_build_output_directory(
+                        str(project_build_dir_root),
+                        overwrite=overwrite_existing_build,
+                    )
+                    if overwrite_existing_build:
+                        logging.info(f"Cleared existing build directory: {project_build_dir_root}")
+                except BuildExistsError:
+                    QMessageBox.warning(
+                        self,
+                        "Build Conflict",
+                        "The build output folder appeared after preflight. Try the build again.",
+                    )
+                    return
+                except BuildDeletionError as e:
+                    QMessageBox.critical(
+                        self,
+                        "Cleanup Error",
+                        f"Failed to delete existing build directory:\n{str(e)}",
+                    )
+                    return
+
+                try:
                     unreal_builder = UnrealBuilder(
                         source_dir=source_dir,
                         engine_path=engine_base_path,
@@ -244,6 +253,7 @@ class BuildTargetRow(QWidget):
                         output_dir=project_build_dir_root,
                         clean=False,
                         valve_package_pad=optimize_steam,
+                        allow_existing_output_dir=overwrite_existing_build,
                     )
                 except ProjectFileNotFoundError as e:
                     QMessageBox.critical(self, "Project File Error", f"Project file not found: {str(e)}")

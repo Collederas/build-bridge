@@ -3,8 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from build_bridge.core.builds import (
+    BuildExistsError,
     UnsafeBuildPathError,
     delete_build,
+    prepare_build_output_directory,
     register_successful_build,
 )
 from build_bridge.database import Base
@@ -116,3 +118,26 @@ def test_register_successful_build_creates_only_success_records(session, tmp_pat
     assert build.id is not None
     assert build.status == BuildStatusEnum.success
     assert session.query(Build).count() == 1
+
+
+def test_prepare_build_output_directory_requires_overwrite_for_existing_path(tmp_path):
+    build_dir = tmp_path / "Builds" / "TestGame" / "Main" / "1.2.3"
+    build_dir.mkdir(parents=True)
+
+    with pytest.raises(BuildExistsError):
+        prepare_build_output_directory(str(build_dir))
+
+    assert build_dir.exists()
+
+
+def test_prepare_build_output_directory_clears_existing_path_when_overwrite_is_allowed(tmp_path):
+    build_dir = tmp_path / "Builds" / "TestGame" / "Main" / "1.2.3"
+    nested_dir = build_dir / "Windows"
+    nested_dir.mkdir(parents=True)
+    (build_dir / "Game.exe").touch()
+    (nested_dir / "Game.pak").touch()
+
+    prepare_build_output_directory(str(build_dir), overwrite=True)
+
+    assert build_dir.exists()
+    assert list(build_dir.iterdir()) == []

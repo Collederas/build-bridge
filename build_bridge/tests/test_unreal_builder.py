@@ -1,10 +1,10 @@
 import pytest
 
-from build_bridge.core.builder.unreal_builder import UnrealBuilder
+from build_bridge.core.builder.unreal_builder import BuildAlreadyExistsError, UnrealBuilder
 from build_bridge.views.widgets.build_targets_widget import BuildTargetRow
 
 
-def _make_unreal_builder(tmp_path, maps):
+def _make_unreal_builder(tmp_path, maps, output_dir=None, allow_existing_output_dir=False):
     project_dir = tmp_path / "Project"
     project_dir.mkdir()
     (project_dir / "MyGame.uproject").write_text('{"EngineAssociation": "5.3"}')
@@ -26,7 +26,8 @@ def _make_unreal_builder(tmp_path, maps):
         target_config="Shipping",
         target=str(target_file),
         maps=maps,
-        output_dir=str(tmp_path / "Builds" / "MyGame"),
+        output_dir=str(output_dir or tmp_path / "Builds" / "MyGame"),
+        allow_existing_output_dir=allow_existing_output_dir,
     )
 
 
@@ -49,6 +50,26 @@ class TestUnrealBuilderMaps:
         command = builder.get_build_command()
 
         assert not any(arg.startswith("-map=") for arg in command)
+
+    def test_existing_output_directory_is_rejected_by_default(self, tmp_path):
+        output_dir = tmp_path / "Builds" / "MyGame"
+        output_dir.mkdir(parents=True)
+
+        with pytest.raises(BuildAlreadyExistsError):
+            _make_unreal_builder(tmp_path, [], output_dir=output_dir)
+
+    def test_existing_prepared_output_directory_can_be_allowed(self, tmp_path):
+        output_dir = tmp_path / "Builds" / "MyGame"
+        output_dir.mkdir(parents=True)
+
+        builder = _make_unreal_builder(
+            tmp_path,
+            [],
+            output_dir=output_dir,
+            allow_existing_output_dir=True,
+        )
+
+        assert builder.output_dir == str(output_dir)
 
 
 class TestUmapPathConversion:

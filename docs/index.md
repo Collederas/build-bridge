@@ -52,17 +52,22 @@ For **Itch**:
 1.  **Add a Project**
 * This is what you should see if you load the app for the first time:
     ![Empty App]({{ 'assets/images/mainui_empty.png' | relative_url }})
-* To add a Project go to File -> Settings -> Project and add a name (will be used to name the
-    folder containing your builds).
+* To add a Project go to **File -> Settings -> Project** (or use **+ New** in the
+    project row at the top of the main window) and add a name (will be used to
+    name the folder containing your builds).
     ![Add a project]({{ 'assets/images/settings_project_empty.png' | relative_url }})
 * Set Source Directory: this is the folder containing the .uproject file.
 * Set the Archive Directory: this is the root folder where all builds will go.
+* You can add as many projects as you want and switch between them using the
+    **Project** dropdown at the top of the main window. The selected project
+    drives which build targets and builds are shown below.
+    ![Project Selector]({{ 'assets/images/project_selection_dropdown.png' | relative_url }})
 
 
 2.  **Configure Build Target**
 * Click "+ Add new Build Target" or "Edit" to open the setup dialog. If you didn't create a Project you'll see a shortcut here.
     ![Add a Build Target]({{ 'assets/images/build_target_empty.png' | relative_url }})
-* Select the Project you just created (one day maybe we'll have multi-project support), verify the Source Directory.
+* Select the Project you just created, verify the Source Directory.
     ![Add a Build Target]({{ 'assets/images/build_target_proj_filled.png' | relative_url }})
 * Set the Build Type (Development/Shipping) and Target Platform (Win64, etc.).
     ![Add a Build Target]({{ 'assets/images/build_target_build.png' | relative_url }})
@@ -81,19 +86,42 @@ From version 0.6.0 the Maps and Target section was added. This allows you to spe
 
 4.  **Publish**
 * Once the build is complete, it will appear in the "Available Builds" list in a folder named _{Project.archive_directory}/{Project.name}/{BuildId}_
-        ![Build List]({{ 'assets/images/mainui_build_list_filled.png' | relative_url }})
-* Select the target platform (Steam/Itch.io) from the dropdown.
-* Click "Configure" to configure publishing for that build target and platform
-    (e.g., Steam App ID, Depots, Itch.io User/Game ID, Channel).
-    You'll need to have configured the related Steam/Itch.io settings first. See [Publishing Details](#publishing-details)
-        ![Configure Publishing]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
-* Once publishing is configured and valid, the "Publish" button will be
-    available to click. An upload dialog will show the progress.
-        ![Publish Dialog]({{ 'assets/images/publish_dialog.png' | relative_url }})
+        ![Build List]({{ 'assets/images/build_list_multi_store.png' | relative_url }})
+* Each build row shows a checkbox per store (Steam, Itch.io) with an inline
+    status indicator:
+    * **✓ ready** — preflight passed, ready to publish.
+    * **⚠ warnings** — publishable, but something's worth a glance (hover the label for details).
+    * **✗ issues** — a blocking problem; the checkbox is disabled until it's fixed.
+    * **⚠ not configured** — no profile exists yet for that store.
+* Hover the status text to see exactly what's missing or off.
+        ![Store Status Tooltip]({{ 'assets/images/store_status_tooltip.png' | relative_url }})
+* Click **Configure** next to a store to set its publishing details (Steam App ID
+    and Depots, or Itch.io User/Game ID and Channel). You'll need to have
+    configured the related Steam/Itch.io settings first — see [Publishing Details](#publishing-details).
+* Tick the stores you want to publish this build to. You can pick one, or
+    several. Then click **Publish**.
+* A publishing window opens with one pane per selected store. Uploads run
+    in parallel, each with its own log, status, and cancel button. The window
+    is non-modal, so you can keep using the main app while it runs.
+        ![Publish Dialog]({{ 'assets/images/publish_dialog_multi.png' | relative_url }})
 *SteamCMD buffers its output so you will see logs appearing with delay.*
-* If the "Publish" button is unavailable, hover it and wait for the
-    tooltip: it should provide you with hints on what is missing.
-        ![Tooltip]({{ 'assets/images/publish_button_tooltip.png' | relative_url }})
+* If Steam is one of the selected stores and your account uses SteamGuard,
+    the Steam pane will switch to a "Confirm on phone" state while you
+    approve the login. Other stores keep uploading in the meantime.
+* When a pane finishes successfully, it offers shortcuts to open the build
+    folder or the store page for that release.
+
+### Managing builds
+
+* **Browse** opens the build's output folder on disk.
+* **Remove** deletes the build entry from the list. You'll be asked whether
+  to also delete the files on disk.
+* **Import from disk** (toolbar button above the build list) scans your
+  project's archive directory for folders that look like builds and adds
+  them to the list — handy if you have builds from before BuildBridge
+  started tracking them, or if you cleared the database.
+* Running a new build with a version name that already exists will offer
+  to overwrite the previous folder.
 
 # Publishing Details
 For now Steam and Itch are the supported stores.
@@ -121,13 +149,16 @@ If everything goes well, after you accept the access on your Steam app you shoul
         ![Steam Connection Sunny Scenario]({{ 'assets/images/settings_steam_testing_success.png' | relative_url }})
 
 ### Publishing Configuration
-This dialog (Build List entry -> Configure button):
-![Publishing Configure Button]({{ 'assets/images/build_list_publish.png' | relative_url }})
-allows you to specify the fields that will end up in the vdf file.
-![Steam Publishing Configuration]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
+The Steam configuration dialog (Build List entry -> Configure button next to
+Steam) lets you specify the fields that will end up in the vdf file: App ID,
+depot mappings (Depot ID + content folder), and which Steam authentication
+profile to use.
+        ![Steam Publishing Configuration]({{ 'assets/images/publish_profile_steam.png' | relative_url }})
 
-Build Bridge automatically creates the required vdf file, using the single file approach (no separation for depots).
-It will place the build files in an auto-generated Steam folder in your Project's Builds directory.
+Build Bridge automatically creates the required vdf file, using the single
+file approach (no separation for depots). It will place the generated config
+and build logs in an auto-generated `Steam` folder under your Project's
+archive directory — this is managed for you, no configuration needed.
 {: .notice--info }
 ![Steam Config Folder]({{ 'assets/images/builds_folder.png' | relative_url }})
 
@@ -139,8 +170,8 @@ You can test a connection without butler (as it is done via simple HTTP API call
         ![Itch Config Folder]({{ 'assets/images/settings_itch_testing_success.png' | relative_url }})
 
 ### Publishing Configuration
-This dialog (Build List entry -> Configure button) allows you to specify the fields that butler uses to publish the build on your game's page.
-        ![Itch Publishing Configuration]({{ 'assets/images/publish_profile_edit.png' | relative_url }})
+This dialog (Build List entry -> Configure button next to Itch.io) allows you to specify the fields that butler uses to publish the build on your game's page.
+        ![Itch Publishing Configuration]({{ 'assets/images/publish_profile_itch.png' | relative_url }})
 
 
 ## Contact

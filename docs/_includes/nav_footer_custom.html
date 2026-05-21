@@ -1,0 +1,29 @@
+<footer class="site-footer">
+  <button class="btn js-toggle-dark-mode" style="margin: 1em 0;">Switch to dark mode</button>
+</footer>
+
+<script>
+  const toggleDarkMode = document.querySelector('.js-toggle-dark-mode');
+
+  function applyStoredTheme() {
+    const stored = localStorage.getItem('jtd-theme');
+    if (stored === 'dark') {
+      jtd.setTheme('dark');
+      toggleDarkMode.textContent = 'Switch to light mode';
+    }
+  }
+
+  jtd.onReady(applyStoredTheme);
+
+  jtd.addEvent(toggleDarkMode, 'click', function () {
+    if (jtd.getTheme() === 'dark') {
+      jtd.setTheme('light');
+      localStorage.setItem('jtd-theme', 'light');
+      toggleDarkMode.textContent = 'Switch to dark mode';
+    } else {
+      jtd.setTheme('dark');
+      localStorage.setItem('jtd-theme', 'dark');
+      toggleDarkMode.textContent = 'Switch to light mode';
+    }
+  });
+</script>

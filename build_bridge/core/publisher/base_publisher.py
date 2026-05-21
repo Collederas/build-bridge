@@ -1,18 +1,14 @@
 from abc import ABC, abstractmethod
 
-from build_bridge.models import PublishProfile
+from build_bridge.core.publisher.upload_spec import UploadSpec
 
 
 class BasePublisher(ABC):
-    # This was born with the idea of being a nice interface but it's
-    # almost useless. Probably worth removing it.
-
     @abstractmethod
     def validate_publish_profile(self):
         """Validate store-specific conf potentially misconfigured
         or missing from the given profile."""
 
-
     @abstractmethod
-    def publish(self, content_dir: str, version: str = ""):
-        """Execute the publishing process."""
+    def prepare(self, content_dir: str, version: str = "") -> UploadSpec:
+        """Build the UploadSpec for this publish. Does not start any process."""

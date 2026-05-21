@@ -342,12 +342,6 @@ def _validate_steam_publish_preflight(result: PreflightResult, publish_profile):
     depots = getattr(publish_profile, "depots", None)
     _validate_depots(result, depots)
 
-    builder_path = getattr(publish_profile, "builder_path", None)
-    if _truthy(builder_path):
-        result.ok("Steam build config folder", str(builder_path))
-    else:
-        result.error("Steam build config folder", "Could not determine builder path.")
-
 
 def _validate_depots(result: PreflightResult, depots: Iterable | dict | None):
     if not depots:

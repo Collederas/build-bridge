@@ -2,6 +2,7 @@ import sys, logging
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
+    QMessageBox,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -42,6 +43,7 @@ class BuildBridgeWindow(QMainWindow):
         self.build_list_widget = None
         self.build_target_widget = None
         self.project_combo = None
+        self._run_dialogs: set = set()
         self.init_ui()
 
     def init_ui(self):
@@ -219,7 +221,33 @@ class BuildBridgeWindow(QMainWindow):
     def refresh_builds(self):
         self.build_list_widget.refresh_builds()
 
+    def register_run_dialog(self, dialog):
+        self._run_dialogs.add(dialog)
+        dialog.closed.connect(self._unregister_run_dialog)
+
+    def _unregister_run_dialog(self, dialog):
+        self._run_dialogs.discard(dialog)
+
+    def _active_run_dialogs(self):
+        return [d for d in self._run_dialogs if d.has_active_panes()]
+
     def closeEvent(self, event):
+        active = self._active_run_dialogs()
+        if active:
+            reply = QMessageBox.question(
+                self,
+                "Uploads in progress",
+                f"{len(active)} upload window(s) still running. Cancel them and quit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+
+        for dialog in list(self._run_dialogs):
+            dialog.close()
+
         self.session.close()
         super().closeEvent(event)
 

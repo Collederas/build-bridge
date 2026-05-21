@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QSizePolicy,
     QMessageBox,
-    QDialog,
 )
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
@@ -32,7 +31,6 @@ from build_bridge.core.preflight import validate_build_preflight
 from build_bridge.database import session_scope
 from build_bridge.models import BuildTarget
 from build_bridge.views.dialogs.build_dialog import BuildWindowDialog
-from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
 from build_bridge.views.dialogs.build_target_setup_dialog import BuildTargetSetupDialog
 
 
@@ -189,11 +187,6 @@ class BuildTargetRow(QWidget):
                     return
 
                 overwrite_existing_build = project_build_dir_root.exists()
-
-                if preflight_result.has_warnings:
-                    preflight_dialog = PreflightDialog(preflight_result, parent=self)
-                    if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
-                        return
 
                 engine_base_path = current_build_target.unreal_engine_base_path
                 if not engine_base_path or not os.path.isdir(engine_base_path):

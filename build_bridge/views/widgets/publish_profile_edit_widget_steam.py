@@ -1,7 +1,6 @@
 import copy
 import logging
 import os
-from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget,
@@ -9,7 +8,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QFormLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QMessageBox,
     QFileDialog,
@@ -50,13 +48,6 @@ class SteamPublishProfileWidget(QWidget):
         self.target_name_label = QLabel(target_name or "—")
         common_form_layout.addRow("Build Target:", self.target_name_label)
 
-        self.builder_path_display = QLineEdit()
-        self.builder_path_display.setReadOnly(True)
-        self.builder_path_display.setToolTip(
-            "Managed by Build Bridge. This is where Steam config files and upload logs will go."
-        )
-        common_form_layout.addRow("Builder Path:", self.builder_path_display)
-
         main_layout.addLayout(common_form_layout)
 
         self.app_id_input = QSpinBox()
@@ -83,22 +74,12 @@ class SteamPublishProfileWidget(QWidget):
     def _populate_fields(self):
         with self.session.no_autoflush:
             self._refresh_auth_options()
-            self._update_builder_path()
 
             app_id = self.publish_profile.app_id or 0
             self.app_id_input.setValue(app_id)
 
             depots = copy.deepcopy(self.publish_profile.depots or {})
             self._load_depots_table(self.depots_table, depots)
-
-    def _update_builder_path(self):
-        path = "N/A"
-        try:
-            if self.publish_profile.build_target:
-                path = self.publish_profile.builder_path or "N/A"
-        except Exception as e:
-            path = f"Error: {e}"
-        self.builder_path_display.setText(str(path))
 
     def _refresh_auth_options(self):
         self.auth_combo.clear()

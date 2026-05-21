@@ -12,8 +12,6 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QVBoxLayout,
     QSizePolicy,
-    QComboBox,
-    QDialog,
     QStyle,
 )
 from PyQt6.QtCore import Qt
@@ -36,8 +34,8 @@ from build_bridge.core.preflight import validate_publish_preflight
 from build_bridge.database import SessionFactory
 from build_bridge.exceptions import InvalidConfigurationError
 from build_bridge.core.publisher.steam.steam_publisher import SteamPublisher
-from build_bridge.views.dialogs.preflight_dialog import PreflightDialog
 from build_bridge.views.dialogs.publish_profile_dialog import PublishProfileDialog
+from build_bridge.views.dialogs.publish_run_dialog import PublishRunDialog
 
 
 class PublishProfileListWidget(QWidget):
@@ -288,20 +286,29 @@ class PublishProfileEntry(QWidget):
         StoreEnum.itch: ItchPublishProfile,
         StoreEnum.steam: SteamPublishProfile,
     }
+    store_order = [StoreEnum.steam, StoreEnum.itch]
 
     def __init__(self, build: Build, session, show_target_name: bool = True, on_build_removed=None):
         super().__init__()
         self.build = build
         self.build_root = build.output_path
-        self.build_id = build.version  # kept for compatibility with existing label references
-        self.publish_profile: PublishProfile | None = None
+        self.build_id = build.version
         self.session = session
         self.on_build_removed = on_build_removed
 
+        # Per-store widgets keyed by StoreEnum
+        self.store_checkboxes: dict[StoreEnum, QCheckBox] = {}
+        self.store_status_labels: dict[StoreEnum, QLabel] = {}
+        self.store_configure_buttons: dict[StoreEnum, QPushButton] = {}
+
         self.setObjectName("buildRow")
-        self.main_layout = QHBoxLayout(self)
-        self.main_layout.setContentsMargins(10, 7, 10, 7)
-        self.main_layout.setSpacing(10)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 7, 10, 7)
+        outer.setSpacing(6)
+
+        # --- Top row: build info + actions ---
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
 
         build_info = QWidget()
         build_info_layout = QVBoxLayout(build_info)
@@ -318,46 +325,29 @@ class PublishProfileEntry(QWidget):
         except Exception:
             pass
 
-        if show_target_name and target_name:
-            display_name = f"{target_name} - {build.version}"
-        else:
-            display_name = build.version
+        display_name = (
+            f"{target_name} - {build.version}" if (show_target_name and target_name) else build.version
+        )
 
         self.display_name_label = QLabel(display_name)
         self.display_name_label.setObjectName("primaryText")
-        self.display_name_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.display_name_label.setWordWrap(True)
         self.display_name_label.setFont(display_name_font)
         self.display_name_label.setToolTip(f"Build folder:\n{self.build_root}")
         build_info_layout.addWidget(self.display_name_label)
 
-        self.profile_value_label = QLabel("Publishing not configured")
+        self.profile_value_label = QLabel(self._get_build_status_label())
         self.profile_value_label.setObjectName("secondaryText")
         self.profile_value_label.setWordWrap(True)
         build_info_layout.addWidget(self.profile_value_label)
-        self.main_layout.addWidget(build_info, 1)
-
-        self.store_type_combo = QComboBox()
-        self.store_type_combo.setMinimumWidth(100)
-        self.store_type_combo.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        for store_enum in self.store_publishers.keys():
-            self.store_type_combo.addItem(str(store_enum.value), store_enum)
-        self.store_type_combo.setToolTip("Select the target platform for publishing this build")
-        self.main_layout.addWidget(self.store_type_combo)
-
-        self.manage_profiles_button = QPushButton("Configure...")
-        self.manage_profiles_button.setObjectName("ghostButton")
-        self.manage_profiles_button.setToolTip("Configure publishing for this build target and store")
-        self.manage_profiles_button.clicked.connect(self.manage_publish_profiles)
-        self.manage_profiles_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.main_layout.addWidget(self.manage_profiles_button)
+        top_row.addWidget(build_info, 1)
 
         browse_archive_button = QPushButton("Browse")
         browse_archive_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         browse_archive_button.setToolTip(f"Open build folder:\n{self.build_root}")
         browse_archive_button.clicked.connect(self.browse_archive_directory)
         browse_archive_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.main_layout.addWidget(browse_archive_button)
+        top_row.addWidget(browse_archive_button)
 
         remove_button = QPushButton("Remove")
         remove_button.setObjectName("dangerButton")
@@ -365,70 +355,50 @@ class PublishProfileEntry(QWidget):
         remove_button.setToolTip("Remove this build from the list")
         remove_button.clicked.connect(self.handle_remove)
         remove_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.main_layout.addWidget(remove_button)
+        top_row.addWidget(remove_button)
+
+        outer.addLayout(top_row)
+
+        # --- Per-store selection row ---
+        stores_row = QHBoxLayout()
+        stores_row.setSpacing(14)
+
+        for store in self.store_order:
+            cell = QHBoxLayout()
+            cell.setSpacing(4)
+
+            checkbox = QCheckBox(store.value)
+            checkbox.toggled.connect(self._refresh_publish_button)
+            self.store_checkboxes[store] = checkbox
+            cell.addWidget(checkbox)
+
+            status = QLabel("…")
+            status.setObjectName("storePreflightStatus")
+            self.store_status_labels[store] = status
+            cell.addWidget(status)
+
+            configure = QPushButton("Configure")
+            configure.setObjectName("ghostButton")
+            configure.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            configure.clicked.connect(lambda _checked, s=store: self.manage_publish_profile(s))
+            self.store_configure_buttons[store] = configure
+            cell.addWidget(configure)
+
+            stores_row.addLayout(cell)
+
+        stores_row.addStretch(1)
 
         self.publish_button = QPushButton("Publish")
         self.publish_button.setObjectName("primaryButton")
         self.publish_button.clicked.connect(self.handle_publish)
         self.publish_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.main_layout.addWidget(self.publish_button)
+        stores_row.addWidget(self.publish_button)
 
-        self.store_type_combo.currentIndexChanged.connect(self.on_store_changed)
-        self.on_store_changed()
+        outer.addLayout(stores_row)
 
-    def update_publish_button_enabled(self):
-        ready = self.store_type_combo.currentData() is not None and self.publish_profile is not None
-        self.publish_button.setEnabled(ready)
-        self._refresh_publish_tooltip()
+        self.refresh_store_statuses()
 
-    def on_store_changed(self):
-        self._load_default_publish_profile()
-        self.update_publish_button_enabled()
-
-    def on_publish_profile_added_or_updated(self):
-        self._load_default_publish_profile()
-        self.update_publish_button_enabled()
-
-    def _get_profile_label(self, profile: PublishProfile):
-        store_label = getattr(profile.store_type, "value", "Store")
-        return f"{store_label} configured"
-
-    def _load_default_publish_profile(self):
-        selected_store_enum = self.store_type_combo.currentData()
-        if selected_store_enum is None:
-            self.publish_profile = None
-            self._refresh_profile_summary()
-            return
-
-        try:
-            self.session.refresh(self.build)
-            profile_model = self.profile_models[selected_store_enum]
-            self.publish_profile = (
-                self.session.query(profile_model)
-                .filter_by(
-                    build_target_id=self.build.build_target_id,
-                    store_type=selected_store_enum,
-                )
-                .order_by(PublishProfile.id.asc())
-                .first()
-            )
-        except Exception as e:
-            logging.info(f"Error loading publishing configuration: {e}")
-            self.publish_profile = None
-
-        self._refresh_profile_summary()
-
-    def _refresh_profile_summary(self):
-        status_label = self._get_build_status_label()
-        if self.publish_profile is None:
-            selected_store_enum = self.store_type_combo.currentData()
-            store_label = selected_store_enum.value if selected_store_enum else "store"
-            self.profile_value_label.setText(f"{status_label} | {store_label} publishing not configured")
-            self.profile_value_label.setToolTip("Use Configure... to set up publishing for this target.")
-        else:
-            profile_label = self._get_profile_label(self.publish_profile)
-            self.profile_value_label.setText(f"{status_label} | {profile_label}")
-            self.profile_value_label.setToolTip("Publishing is configured for this target and store.")
+    # ------------------------------------------------------------------ data
 
     def _get_build_status_label(self):
         status = getattr(self.build.status, "value", self.build.status) or "unknown"
@@ -437,74 +407,133 @@ class PublishProfileEntry(QWidget):
             return f"{status} | {created_at:%Y-%m-%d %H:%M}"
         return str(status)
 
-    def manage_publish_profiles(self):
-        selected_platform_enum = self.store_type_combo.currentData()
-        if selected_platform_enum is None:
-            QMessageBox.information(self, "Select Store", "Please select a store before configuring publishing.")
-            return
+    def _load_publish_profile(self, store: StoreEnum) -> PublishProfile | None:
+        profile_model = self.profile_models[store]
+        try:
+            return (
+                self.session.query(profile_model)
+                .filter_by(build_target_id=self.build.build_target_id, store_type=store)
+                .order_by(PublishProfile.id.asc())
+                .first()
+            )
+        except Exception as e:
+            logging.info(f"Error loading {store.value} profile: {e}")
+            return None
 
-        profile = self._get_or_create_publish_profile(selected_platform_enum)
-        dialog = PublishProfileDialog(
-            session=self.session,
-            publish_profile=profile,
-            parent=self,
-        )
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.publish_profile = dialog.publish_profile
-
-        self._load_default_publish_profile()
-        self.update_publish_button_enabled()
-
-    def _get_or_create_publish_profile(self, store_type: StoreEnum):
-        profile_model = self.profile_models[store_type]
-        profile = (
-            self.session.query(profile_model)
-            .filter_by(build_target_id=self.build.build_target_id, store_type=store_type)
-            .order_by(PublishProfile.id.asc())
-            .first()
-        )
-        if profile is not None:
-            return profile
+    def _get_or_create_publish_profile(self, store: StoreEnum):
+        existing = self._load_publish_profile(store)
+        if existing is not None:
+            return existing
 
         target_name = ""
         if self.build.build_target and self.build.build_target.name:
             target_name = self.build.build_target.name
 
+        profile_model = self.profile_models[store]
         return profile_model(
             build_target_id=self.build.build_target_id,
-            store_type=store_type,
+            store_type=store,
             description=target_name or "Default",
         )
 
-    def _refresh_publish_tooltip(self):
-        selected_platform_enum = self.store_type_combo.currentData()
-        if self.publish_profile is None:
-            store_label = selected_platform_enum.value if selected_platform_enum else "store"
-            self.publish_button.setToolTip(f"Configure {store_label} publishing for this build target first.")
-            return
-
+    def _preflight_store(self, store: StoreEnum):
+        """Return (profile, PreflightResult | None). Result is None when no profile exists."""
+        profile = self._load_publish_profile(store)
+        if profile is None:
+            return None, None
         try:
-            publisher_class = self.store_publishers.get(selected_platform_enum)
-            if not publisher_class:
-                raise InvalidConfigurationError(
-                    f"No publisher implementation found for {selected_platform_enum.value}"
-                )
+            result = validate_publish_preflight(self.build_root, profile, store)
+        except Exception as exc:
+            logging.info(f"Preflight error for {store.value}: {exc}", exc_info=True)
+            result = None
+        return profile, result
 
-            if selected_platform_enum == StoreEnum.steam:
-                publisher_instance = publisher_class(publish_profile=self.publish_profile)
+    # ---------------------------------------------------------------- UI sync
+
+    def refresh_store_statuses(self):
+        for store in self.store_order:
+            checkbox = self.store_checkboxes[store]
+            status = self.store_status_labels[store]
+            profile, result = self._preflight_store(store)
+
+            if profile is None:
+                severity = "none"
+                status.setText("⚠ not configured")
+                tip = "No publish profile has been created for this store yet."
+                status.setToolTip(tip)
+                checkbox.setEnabled(False)
+                checkbox.setChecked(False)
+                checkbox.setToolTip(tip)
+            elif result is None:
+                severity = "error"
+                status.setText("✗ preflight failed")
+                tip = "Could not run preflight checks (see logs)."
+                status.setToolTip(tip)
+                checkbox.setEnabled(False)
+                checkbox.setChecked(False)
+                checkbox.setToolTip(tip)
+            elif result.has_blockers:
+                severity = "error"
+                status.setText("✗ issues")
+                tip = self._format_issues(result, "error")
+                status.setToolTip(tip)
+                checkbox.setEnabled(False)
+                checkbox.setChecked(False)
+                checkbox.setToolTip(tip)
+            elif result.has_warnings:
+                severity = "warning"
+                status.setText("⚠ warnings")
+                tip = self._format_issues(result, "warning")
+                status.setToolTip(tip)
+                checkbox.setEnabled(True)
+                checkbox.setToolTip(f"Publish this build to {store.value}.\n\n{tip}")
             else:
-                publisher_instance = publisher_class(publish_profile=self.publish_profile)
+                severity = "ok"
+                status.setText("✓ ready")
+                status.setToolTip("")
+                checkbox.setEnabled(True)
+                checkbox.setToolTip(f"Publish this build to {store.value}.")
 
-            publisher_instance.validate_publish_profile()
-            self.publish_button.setToolTip(
-                f"Publish build '{self.build_id}' to {selected_platform_enum.value}"
-            )
+            status.setProperty("severity", severity)
+            status.style().unpolish(status)
+            status.style().polish(status)
 
-        except InvalidConfigurationError as e:
-            self.publish_button.setToolTip(f"Cannot publish: {e}")
-        except Exception as e:
-            self.publish_button.setToolTip(f"Unexpected validation error: {e}")
-            logging.info(f"Unexpected validation error: {e}")
+        self._refresh_publish_button()
+
+    @staticmethod
+    def _format_issues(result, severity: str) -> str:
+        lines = []
+        for issue in result.issues:
+            if issue.severity != severity:
+                continue
+            if issue.detail:
+                lines.append(f"• {issue.label}: {issue.detail}")
+            else:
+                lines.append(f"• {issue.label}")
+        return "\n".join(lines)
+
+    def _refresh_publish_button(self):
+        selected = [s for s, cb in self.store_checkboxes.items() if cb.isChecked()]
+        self.publish_button.setEnabled(bool(selected))
+        if selected:
+            labels = ", ".join(s.value for s in selected)
+            self.publish_button.setToolTip(f"Publish build '{self.build_id}' to: {labels}")
+        else:
+            self.publish_button.setToolTip("Select at least one configured store to publish.")
+
+    # ------------------------------------------------------------- configure
+
+    def manage_publish_profile(self, store: StoreEnum):
+        profile = self._get_or_create_publish_profile(store)
+        dialog = PublishProfileDialog(
+            session=self.session,
+            publish_profile=profile,
+            parent=self,
+        )
+        dialog.exec()
+        self.refresh_store_statuses()
+
+    # ------------------------------------------------------------- publishing
 
     def validate_build_content(self):
         if not self.build_root or not os.path.isdir(self.build_root):
@@ -540,6 +569,83 @@ class PublishProfileEntry(QWidget):
         except OSError as e:
             raise InvalidConfigurationError(f"Error accessing build directory content: {e}")
 
+    def handle_publish(self):
+        selected_stores = [s for s, cb in self.store_checkboxes.items() if cb.isChecked()]
+        if not selected_stores:
+            return
+
+        try:
+            self.validate_build_content()
+        except InvalidConfigurationError as exc:
+            QMessageBox.warning(self, "Publishing Error", str(exc))
+            return
+
+        # Resolve profiles for selected stores; abort if any selected store is unconfigured
+        # or has blocking preflight issues. Warnings proceed silently.
+        profiles_by_store: dict[StoreEnum, PublishProfile] = {}
+        blockers_by_store: dict[StoreEnum, str] = {}
+        for store in selected_stores:
+            profile, result = self._preflight_store(store)
+            if profile is None:
+                QMessageBox.warning(
+                    self,
+                    "Publishing Error",
+                    f"{store.value} publishing is not configured for this build target.",
+                )
+                return
+            if result is not None and result.has_blockers:
+                blockers_by_store[store] = self._format_issues(result, "error")
+                continue
+            profiles_by_store[store] = profile
+
+        if blockers_by_store:
+            sections = [
+                f"[{store.value}]\n{detail}" for store, detail in blockers_by_store.items()
+            ]
+            QMessageBox.warning(
+                self,
+                "Publishing Error",
+                "Fix the following before publishing:\n\n" + "\n\n".join(sections),
+            )
+            return
+
+        # Build specs after preflight passes.
+        specs = []
+        for store, profile in profiles_by_store.items():
+            publisher = self.store_publishers[store](profile)
+            try:
+                specs.append(publisher.prepare(content_dir=self.build_root, version=self.build.version))
+            except InvalidConfigurationError as exc:
+                QMessageBox.warning(
+                    self,
+                    "Publishing Error",
+                    f"Failed to prepare {store.value} publish:\n\n{exc}",
+                )
+                return
+            except Exception as exc:
+                logging.info(f"Unexpected error preparing {store.value}: {exc}", exc_info=True)
+                QMessageBox.critical(
+                    self,
+                    "Publishing Error",
+                    f"Unexpected error preparing {store.value}:\n\n{exc}",
+                )
+                return
+
+        title = f"Publishing {self.build.build_target.name if self.build.build_target else ''} - {self.build_id}"
+        run_dialog = PublishRunDialog(specs, title=title)
+
+        # Register with main window so close-app prompt knows about it.
+        main_window = self.window()
+        register = getattr(main_window, "register_run_dialog", None)
+        if callable(register):
+            register(run_dialog)
+
+        run_dialog.show()
+        run_dialog.raise_()
+        run_dialog.activateWindow()
+
+    # ----------------------------------------------------------------- misc
+
     def browse_archive_directory(self):
         if self.build_root and os.path.isdir(self.build_root):
             try:
@@ -565,11 +671,7 @@ class PublishProfileEntry(QWidget):
                 delete_from_disk=delete_from_disk,
             )
         except BuildDeletionError as e:
-            QMessageBox.critical(
-                self,
-                "Remove Build",
-                f"Build was not removed.\n\n{e}",
-            )
+            QMessageBox.critical(self, "Remove Build", f"Build was not removed.\n\n{e}")
             return
         except Exception as e:
             self.session.rollback()
@@ -614,53 +716,3 @@ class PublishProfileEntry(QWidget):
             return None
 
         return bool(disk_checkbox and disk_checkbox.isChecked())
-
-    def handle_publish(self):
-        selected_store_enum = self.store_type_combo.currentData()
-        if selected_store_enum is None:
-            QMessageBox.warning(self, "Error", "No target platform selected.")
-            return
-        if self.publish_profile is None:
-            QMessageBox.information(self, "Configure Publishing",
-                                     "Configure publishing for this build target before publishing.")
-            self.manage_publish_profiles()
-            return
-
-        publisher_class = self.store_publishers.get(selected_store_enum)
-        if not publisher_class:
-            QMessageBox.critical(self, "Error", f"No publisher found for {selected_store_enum.value}")
-            return
-
-        try:
-            self.validate_build_content()
-
-            if selected_store_enum == StoreEnum.steam:
-                publisher_instance = publisher_class(self.publish_profile)
-                logging.info(f"Attempting to publish build '{self.build_id}' to Steam...")
-            else:
-                publisher_instance = publisher_class(self.publish_profile)
-                logging.info(f"Attempting to publish build '{self.build_id}' to {selected_store_enum}...")
-
-            publisher_instance.validate_publish_profile()
-
-            preflight_result = validate_publish_preflight(
-                build_root=self.build_root,
-                publish_profile=self.publish_profile,
-                selected_store=selected_store_enum,
-            )
-            preflight_dialog = PreflightDialog(preflight_result, parent=self)
-            if preflight_dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-
-            publisher_instance.publish(content_dir=self.build_root, version=self.build.version)
-
-        except InvalidConfigurationError as e:
-            QMessageBox.warning(self, "Publishing Error",
-                                  f"Failed to publish '{self.build_id}' to {selected_store_enum.value}:\n\n{str(e)}")
-        except NotImplementedError:
-            QMessageBox.critical(self, "Not Implemented",
-                                   f"Publishing for {selected_store_enum.value} is not yet implemented.")
-        except Exception as e:
-            logging.info(f"Error during publish execution: {e}")
-            QMessageBox.critical(self, "Publishing Failed",
-                                   f"An unexpected error occurred while publishing to {selected_store_enum.value}:\n\n{str(e)}")

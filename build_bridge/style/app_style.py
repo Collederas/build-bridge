@@ -94,6 +94,28 @@ QLabel#preflightStatus[ready="true"] {
     color: #16803c;
 }
 
+QLabel#storePreflightStatus {
+    color: #59636f;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLabel#storePreflightStatus[severity="ok"] {
+    color: #16803c;
+}
+
+QLabel#storePreflightStatus[severity="warning"] {
+    color: #a07000;
+}
+
+QLabel#storePreflightStatus[severity="error"] {
+    color: #b32424;
+}
+
+QLabel#storePreflightStatus[severity="none"] {
+    color: #9aa3ad;
+}
+
 QLabel#emptyState {
     color: #66707c;
     font-size: 13px;

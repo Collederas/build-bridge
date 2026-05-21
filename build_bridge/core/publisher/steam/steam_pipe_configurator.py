@@ -10,6 +10,9 @@ class SteamPipeConfigurator:
     def __init__(self, publish_profile: SteamPublishProfile):
         self.publish_profile = publish_profile
 
+    def get_vdf_path(self) -> str:
+        return os.path.join(self.publish_profile.builder_path, "app_build.vdf")
+
     def create_or_update_vdf_file(self, content_root: str):
         """
         Generate an app_build.vdf file based on the template and configuration.

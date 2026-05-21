@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import subprocess
+import sys
 import webbrowser
 from enum import Enum
 from pathlib import Path
@@ -43,6 +45,38 @@ class PaneState(Enum):
 
 
 _TERMINAL_STATES = {PaneState.SUCCESS, PaneState.FAILED, PaneState.CANCELLED}
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Force-kill a process and all of its descendants.
+
+    QProcess.terminate() is a no-op for console apps on Windows (they have no
+    message loop to receive WM_CLOSE), and QProcess.kill() only kills the
+    immediate process. steamcmd bootstraps child processes, and butler can spawn
+    helpers — killing the parent alone leaves them running and the upload
+    continues. taskkill /T walks the tree.
+    """
+    if pid <= 0:
+        return
+    try:
+        if sys.platform == "win32":
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                creationflags=CREATE_NO_WINDOW,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        else:
+            # Don't killpg: QProcess doesn't put children in their own group,
+            # so getpgid(pid) returns our own group and we'd SIGKILL ourselves.
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except Exception as exc:
+        logging.info(f"Failed to kill process tree for pid {pid}: {exc}")
 
 
 class UploadPane(QWidget):
@@ -231,13 +265,18 @@ class UploadPane(QWidget):
 
         self._append("-" * 20)
         self._append("Cancelling...")
-        self.process.terminate()
-        if not self.process.waitForFinished(2000):
-            self.process.kill()
-            self.process.waitForFinished(1000)
-        # _handle_finished will run and call _set_state. Override afterward.
-        if self._state != PaneState.CANCELLED:
-            self._set_state(PaneState.CANCELLED)
+        # Mark cancelled before tearing the process down, so _handle_finished
+        # (which may fire synchronously from kill/waitForFinished) takes the
+        # cancelled branch instead of running success_checker against a partial
+        # log.
+        self._set_state(PaneState.CANCELLED)
+
+        pid = int(self.process.processId())
+        _kill_process_tree(pid)
+        # Reap QProcess's own bookkeeping so finished() fires and the handle
+        # is cleaned up.
+        self.process.kill()
+        self.process.waitForFinished(2000)
 
     # --------------------------------------------------------------- output
 
@@ -410,6 +449,8 @@ class UploadPane(QWidget):
                 self.process.readyReadStandardOutput.disconnect()
             except TypeError:
                 pass
+            pid = int(self.process.processId())
+            _kill_process_tree(pid)
             self.process.kill()
-            self.process.waitForFinished(500)
+            self.process.waitForFinished(1500)
         self.process = None

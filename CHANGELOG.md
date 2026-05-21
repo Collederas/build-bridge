@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.1
+
+### Fixed
+- Cancelling a parallel upload now kills the full butler / steamcmd process tree instead of leaving child processes running in the background
+
 ## v0.8.0
 
 ### Added

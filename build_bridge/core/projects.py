@@ -38,3 +38,18 @@ def set_active_project(session, project_id: int | None) -> Project | None:
     session.flush()
     return project
 
+
+def delete_project(session, project_id: int) -> None:
+    project = session.get(Project, project_id)
+    if project is None:
+        return
+
+    state = get_app_state(session)
+    if state.active_project_id == project.id:
+        state.active_project_id = None
+        session.add(state)
+        session.flush()
+
+    session.delete(project)
+    session.flush()
+

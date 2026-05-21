@@ -20,7 +20,7 @@ from build_bridge.utils.paths import get_resource_path
 
 from build_bridge.database import SessionFactory, create_or_update_db
 from build_bridge.models import Project
-from build_bridge.core.projects import get_active_project, set_active_project
+from build_bridge.core.projects import delete_project, get_active_project, set_active_project
 from build_bridge.views.widgets.build_targets_widget import BuildTargetListWidget
 from build_bridge.views.widgets.publish_profile_read_widgets import (
     PublishProfileListWidget,
@@ -89,6 +89,11 @@ class BuildBridgeWindow(QMainWindow):
         new_project_button.setObjectName("ghostButton")
         new_project_button.clicked.connect(self.open_new_project_dialog)
         project_layout.addWidget(new_project_button)
+
+        delete_project_button = QPushButton("Delete")
+        delete_project_button.setObjectName("dangerButton")
+        delete_project_button.clicked.connect(self.delete_active_project)
+        project_layout.addWidget(delete_project_button)
         project_layout.addStretch(1)
         main_layout.addWidget(project_row)
         self.refresh_project_selector()
@@ -217,6 +222,39 @@ class BuildBridgeWindow(QMainWindow):
                 self.refresh_project_views()
             except Exception as e:
                 logging.info(f"Error refreshing project after creation: {e}")
+
+    def delete_active_project(self):
+        if not self.project:
+            QMessageBox.information(self, "Delete Project", "No project to delete.")
+            return
+
+        project_name = self.project.name or f"Project {self.project.id}"
+        reply = QMessageBox.warning(
+            self,
+            "Delete Project",
+            (
+                f"Delete project '{project_name}'?\n\n"
+                "This removes its build targets, publish profiles, and build records "
+                "from Build Bridge. Files on disk are not touched."
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            delete_project(self.session, self.project.id)
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
+            logging.info(f"Error deleting project: {e}", exc_info=True)
+            QMessageBox.critical(self, "Delete Project", f"Failed to delete project.\n\n{e}")
+            return
+
+        self.project = self.load_active_project()
+        self.refresh_project_selector()
+        self.refresh_project_views()
 
     def refresh_builds(self):
         self.build_list_widget.refresh_builds()

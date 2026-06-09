@@ -172,7 +172,7 @@ def validate_build_preflight(build_target, release_name: str) -> PreflightResult
         else:
             result.ok("Output folder", str(output_dir))
 
-    engine_path = getattr(build_target, "unreal_engine_base_path", None)
+    engine_path = getattr(project, "unreal_engine_base_path", None)
     _check_directory(result, "Unreal Engine path", engine_path)
 
     if _truthy(engine_path):
@@ -185,7 +185,7 @@ def validate_build_preflight(build_target, release_name: str) -> PreflightResult
         )
         _check_file(result, "RunUAT script", str(uat_script))
 
-    target = getattr(build_target, "target", None)
+    target = getattr(project, "target", None)
     _check_file(result, "Target file", target)
 
     build_type = getattr(build_target, "build_type", None)

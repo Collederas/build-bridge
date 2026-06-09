@@ -154,6 +154,29 @@ class SettingsDialog(QDialog):
         archive_browse_button.clicked.connect(self.browse_archive_directory)
         form_layout.addWidget(archive_browse_button)
 
+        # Unreal Engine path (project-level: a .uproject has one engine).
+        self.engine_path_input = QLineEdit()
+        self.engine_path_input.setPlaceholderText("e.g., C:/Program Files/Epic Games/UE_5.3")
+        form_layout.addRow(QLabel("Unreal Engine Path:"), self.engine_path_input)
+        engine_browse_button = QPushButton("Browse")
+        engine_browse_button.clicked.connect(self.browse_engine_path)
+        form_layout.addWidget(engine_browse_button)
+        engine_hint = QLabel(
+            "Directory of the engine version used to build this project (e.g., UE_5.3). "
+            "Relies on standard engine folder names (UE_x.y)."
+        )
+        engine_hint.setStyleSheet("color: gray; font-size: 9pt;")
+        engine_hint.setWordWrap(True)
+        form_layout.addRow("", engine_hint)
+
+        # Target .cs file (project-level: a .uproject has one build target).
+        self.target_input = QLineEdit()
+        self.target_input.setPlaceholderText("e.g., .../Source/MyGame.Target.cs")
+        form_layout.addRow(QLabel("Target .cs File:"), self.target_input)
+        target_browse_button = QPushButton("Browse")
+        target_browse_button.clicked.connect(self.browse_target_file)
+        form_layout.addWidget(target_browse_button)
+
         layout.addLayout(form_layout)
         page.setLayout(layout)
         return page
@@ -173,6 +196,22 @@ class SettingsDialog(QDialog):
 
         if new_folder:
             self.archive_dir_input.setText(new_folder)
+
+    def browse_engine_path(self):
+        curr = self.engine_path_input.text().strip()
+        start = curr if os.path.isdir(curr) else ""
+        folder = QFileDialog.getExistingDirectory(self, "Select Unreal Engine Base Directory", start)
+        if folder:
+            self.engine_path_input.setText(folder)
+
+    def browse_target_file(self):
+        curr = self.target_input.text().strip()
+        start = os.path.dirname(curr) if curr else (self.source_dir_input.text().strip() or "")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Target.cs File", start, "Target.cs Files (*.Target.cs)"
+        )
+        if path:
+            self.target_input.setText(path)
 
     def create_vcs_page(self):
         page = QWidget()
@@ -277,6 +316,8 @@ class SettingsDialog(QDialog):
             self._initial_archive_dir = (
                 arch_dir  # monitored here to emit signal later if changed
             )
+            self.engine_path_input.setText(self.project.unreal_engine_base_path or "")
+            self.target_input.setText(self.project.target or "")
 
         except Exception as e:
             logging.info("Settings: Error loading form data: {str(e)}")
@@ -298,6 +339,8 @@ class SettingsDialog(QDialog):
             self.project.name = self.project_name_input.text().strip()
             self.project.source_dir = self.source_dir_input.text().strip()
             self.project.archive_directory = self.archive_dir_input.text().strip()
+            self.project.unreal_engine_base_path = self.engine_path_input.text().strip() or None
+            self.project.target = self.target_input.text().strip() or None
 
             if self.project.is_valid():
                 self.session.add(self.project)

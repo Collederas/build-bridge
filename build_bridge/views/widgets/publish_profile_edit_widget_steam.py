@@ -41,12 +41,12 @@ class SteamPublishProfileWidget(QWidget):
         main_layout = QVBoxLayout(self)
         common_form_layout = QFormLayout()
 
-        # Read-only build target label
-        target_name = ""
-        if self.publish_profile.build_target:
-            target_name = self.publish_profile.build_target.name or ""
-        self.target_name_label = QLabel(target_name or "—")
-        common_form_layout.addRow("Build Target:", self.target_name_label)
+        # Read-only project label
+        project_name = ""
+        if self.publish_profile.project:
+            project_name = self.publish_profile.project.name or ""
+        self.target_name_label = QLabel(project_name or "—")
+        common_form_layout.addRow("Project:", self.target_name_label)
 
         main_layout.addLayout(common_form_layout)
 
@@ -169,8 +169,8 @@ class SteamPublishProfileWidget(QWidget):
         start_dir = ""
         if current_path_item and current_path_item.text():
             start_dir = current_path_item.text()
-        elif self.publish_profile.build_target and self.publish_profile.build_target.builds_path:
-            start_dir = str(self.publish_profile.build_target.builds_path)
+        elif self.publish_profile.project and self.publish_profile.project.archive_directory:
+            start_dir = str(self.publish_profile.project.archive_directory)
 
         path = QFileDialog.getExistingDirectory(self, "Select Depot Directory", start_dir)
         if path:
@@ -272,9 +272,6 @@ class SteamPublishProfileWidget(QWidget):
             return False
 
     def _default_description(self):
-        target = self.publish_profile.build_target
-        if target and target.name:
-            return target.name
         project = self.publish_profile.project
         if project and project.name:
             return project.name

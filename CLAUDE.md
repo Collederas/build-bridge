@@ -40,9 +40,9 @@ Use `BUILD_BRIDGE_DB_PATH` env var to override the default DB location (useful f
 
 All state lives in SQLite via SQLAlchemy. Key models:
 
-- **`Project`** — one per app instance currently; holds `source_dir`, `archive_directory`, and the derived `builds_path` (`archive_directory / project_name`).
-- **`BuildTarget`** — links to a `Project`; holds UE engine path, platform, build type, target `.cs` file, and maps. One VCSConfig per target.
-- **`PublishProfile`** (polymorphic) → `SteamPublishProfile` / `ItchPublishProfile` — store-specific publish settings linked to a `Project`.
+- **`Project`** — the game (`.uproject`). Multiple projects are stored and switchable; `AppState.active_project_id` tracks the one currently active. Holds `source_dir`, `archive_directory`, the UE engine path, and the target `.cs` file.
+- **`BuildTarget`** — a thin build recipe linked to a `Project`: platform, build type, and the Steam packaging toggle. Its `builds_path` (`archive_directory / project_name / {platform}_{config}`) keys on-disk layout on platform/config, not a free-form name.
+- **`PublishProfile`** (polymorphic) → `SteamPublishProfile` / `ItchPublishProfile` — store-specific publish settings linked to a `Project` (one profile per store per project). Any of the project's builds can be published through it.
 - **`SteamConfig`** / **`ItchConfig`** — store-level auth/tool config (one per store, shared across profiles). Passwords and API keys are never stored in the DB; they go through `keyring`.
 
 The DB is located at `%APPDATA%\BuildBridge\build_bridge.db` on Windows, `~/Library/Application Support/BuildBridge/` on macOS. `database.py` handles integrity checks and migration repairs automatically on startup.

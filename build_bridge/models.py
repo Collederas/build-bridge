@@ -46,8 +46,18 @@ class Project(Base):
     source_dir = Column(String, nullable=False, default="")
     archive_directory = Column(String, nullable=False, default="")
 
+    # Project-level Unreal settings (a .uproject has one engine and one .Target.cs;
+    # these used to be duplicated per BuildTarget).
+    unreal_engine_base_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    target: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, default="MyTarget.Target.cs"
+    )
+
     build_targets = relationship(
         "BuildTarget", back_populates="project", cascade="all, delete-orphan"
+    )
+    publish_profiles = relationship(
+        "PublishProfile", back_populates="project", cascade="all, delete-orphan"
     )
 
     def is_valid(self):
@@ -64,6 +74,14 @@ class AppState(Base):
 
 class BuildTarget(Base):
     __tablename__ = "build_targets"
+    __table_args__ = (
+        # A build recipe is identified by (name, platform, config) within a project;
+        # two identical recipes would build the same artifact to the same folder.
+        UniqueConstraint(
+            "project_id", "name", "target_platform", "build_type",
+            name="uq_build_target_recipe",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -72,12 +90,8 @@ class BuildTarget(Base):
 
     name = Column(String, nullable=False, default="")
 
-    unreal_engine_base_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
     vcs_config = relationship("VCSConfig", uselist=False, back_populates="build_target")
     target_branch = Column(String, nullable=False, default="")
-
-    target: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="MyTarget.Target.cs")
 
     build_type = Column(Enum(BuildTypeEnum), nullable=False, default=BuildTypeEnum.prod)
     target_platform = Column(
@@ -90,11 +104,15 @@ class BuildTarget(Base):
     auto_sync_branch = Column(Boolean, nullable=False, default=False)
 
     builds = relationship("Build", back_populates="build_target", cascade="all, delete-orphan")
-    publish_profiles = relationship("PublishProfile", back_populates="build_target", cascade="all, delete-orphan")
 
     @property
     def builds_path(self) -> Path:
-        return Path(str(self.project.archive_directory)) / self.project.name / self.name
+        # archive / project / [name] / {platform}_{config}. Keyed on the recipe
+        # (name + platform/config) so distinct targets never collide on disk; the
+        # name segment is omitted when blank.
+        variant = f"{self.target_platform.value}_{self.build_type.value}"
+        root = Path(str(self.project.archive_directory)) / self.project.name
+        return root / self.name / variant if self.name else root / variant
 
     def __repr__(self):
         label = self.name or self.project.name
@@ -118,22 +136,18 @@ class Build(Base):
 class PublishProfile(Base):
     __tablename__ = "publish_profile"
     __table_args__ = (
-        UniqueConstraint("build_target_id", "store_type", name="uq_publish_profile_target_store"),
+        UniqueConstraint("project_id", "store_type", name="uq_publish_profile_project_store"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     store_type = Column(Enum(StoreEnum), nullable=False)
 
-    build_target_id = Column(Integer, ForeignKey("build_targets.id"), nullable=False)
-    build_target = relationship("BuildTarget", back_populates="publish_profiles")
+    project_id = Column(Integer, ForeignKey("project.id"), nullable=False)
+    project = relationship("Project", back_populates="publish_profiles")
 
     description = Column(String, nullable=True)
 
     __mapper_args__ = {"polymorphic_on": store_type, "polymorphic_identity": None}
-
-    @property
-    def project(self):
-        return self.build_target.project if self.build_target else None
 
 
 class SteamPublishProfile(PublishProfile):
@@ -167,8 +181,10 @@ class SteamPublishProfile(PublishProfile):
 
     @property
     def builder_path(self):
-        if self.build_target:
-            return str(self.build_target.builds_path / "Steam")
+        # SteamPipe staging area (app_build.vdf + BuildLogs). Lives under the project
+        # archive, independent of which build is being uploaded.
+        if self.project and self.project.archive_directory:
+            return str(Path(self.project.archive_directory) / self.project.name / "Steam")
 
 
 class SteamConfig(Base):

@@ -407,12 +407,16 @@ class PublishProfileEntry(QWidget):
             return f"{status} | {created_at:%Y-%m-%d %H:%M}"
         return str(status)
 
+    @property
+    def _project_id(self):
+        return self.build.build_target.project_id if self.build.build_target else None
+
     def _load_publish_profile(self, store: StoreEnum) -> PublishProfile | None:
         profile_model = self.profile_models[store]
         try:
             return (
                 self.session.query(profile_model)
-                .filter_by(build_target_id=self.build.build_target_id, store_type=store)
+                .filter_by(project_id=self._project_id, store_type=store)
                 .order_by(PublishProfile.id.asc())
                 .first()
             )
@@ -425,15 +429,12 @@ class PublishProfileEntry(QWidget):
         if existing is not None:
             return existing
 
-        target_name = ""
-        if self.build.build_target and self.build.build_target.name:
-            target_name = self.build.build_target.name
-
+        project = self.build.build_target.project if self.build.build_target else None
         profile_model = self.profile_models[store]
         return profile_model(
-            build_target_id=self.build.build_target_id,
+            project_id=self._project_id,
             store_type=store,
-            description=target_name or "Default",
+            description=(project.name if project else None) or "Default",
         )
 
     def _preflight_store(self, store: StoreEnum):
@@ -590,7 +591,7 @@ class PublishProfileEntry(QWidget):
                 QMessageBox.warning(
                     self,
                     "Publishing Error",
-                    f"{store.value} publishing is not configured for this build target.",
+                    f"{store.value} publishing is not configured for this project.",
                 )
                 return
             if result is not None and result.has_blockers:

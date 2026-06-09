@@ -24,14 +24,15 @@ def _make_build_target(tmp_path):
     project.name = "MyGame"
     project.source_dir = str(tmp_path)
     project.archive_directory = str(tmp_path / "Builds")
+    # Engine path and target.cs are project-level now.
+    project.unreal_engine_base_path = str(engine_dir)
+    project.target = str(target_file)
     (tmp_path / "Builds").mkdir()
 
     bt = MagicMock()
     bt.project = project
     bt.name = "Main"
     bt.builds_path = tmp_path / "Builds" / "MyGame" / "Main"
-    bt.unreal_engine_base_path = str(engine_dir)
-    bt.target = str(target_file)
     bt.build_type = MagicMock(value="Shipping")
     bt.target_platform = MagicMock(value="Win64")
     return bt
@@ -52,7 +53,7 @@ class TestBuildPreflight:
 
     def test_missing_engine_path_is_blocker(self, tmp_path):
         bt = _make_build_target(tmp_path)
-        bt.unreal_engine_base_path = str(tmp_path / "nonexistent_engine")
+        bt.project.unreal_engine_base_path = str(tmp_path / "nonexistent_engine")
         result = validate_build_preflight(bt, "1.0.0")
         assert result.has_blockers
 

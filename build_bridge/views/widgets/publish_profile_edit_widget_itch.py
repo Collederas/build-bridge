@@ -41,12 +41,12 @@ class ItchPublishProfileWidget(QWidget):
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
 
-        # Read-only build target label
-        target_name = ""
-        if self.publish_profile.build_target:
-            target_name = self.publish_profile.build_target.name or ""
-        self.target_name_label = QLabel(target_name or "—")
-        form_layout.addRow("Build Target:", self.target_name_label)
+        # Read-only project label
+        project_name = ""
+        if self.publish_profile.project:
+            project_name = self.publish_profile.project.name or ""
+        self.target_name_label = QLabel(project_name or "—")
+        form_layout.addRow("Project:", self.target_name_label)
 
         self.user_game_id_input = QLineEdit()
         self.user_game_id_input.setPlaceholderText("username/game-slug")
@@ -84,13 +84,6 @@ class ItchPublishProfileWidget(QWidget):
 
             if existing_channel and existing_channel != "":
                 channel_name = existing_channel
-            else:
-                bt = self.publish_profile.build_target
-                if bt and bt.target_platform:
-                    try:
-                        channel_name = bt.target_platform.value.lower()
-                    except Exception:
-                        pass
 
             self.channel_name_input.setText(channel_name)
 
@@ -185,9 +178,6 @@ class ItchPublishProfileWidget(QWidget):
             return False
 
     def _default_description(self):
-        target = self.publish_profile.build_target
-        if target and target.name:
-            return target.name
         project = self.publish_profile.project
         if project and project.name:
             return project.name

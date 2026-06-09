@@ -116,7 +116,8 @@ class TestBuildModel:
             target_platform=BuildTargetPlatformEnum.win_64,
         )
 
-        expected = Path(str(tmp_path / "Builds")) / "MyGame" / "Demo"
+        # builds_path keys on the recipe: name + platform/config.
+        expected = Path(str(tmp_path / "Builds")) / "MyGame" / "Demo" / "Win64_Shipping"
         assert bt.builds_path == expected
 
     def test_build_target_name_in_repr(self, session):
@@ -124,14 +125,27 @@ class TestBuildModel:
         assert "Main" in repr(bt)
         assert "Win64" in repr(bt)
 
-    def test_build_target_has_one_publish_profile_per_store(self, session):
+    def test_duplicate_recipe_is_rejected(self, session):
         bt = session.query(BuildTarget).first()
+        dup = BuildTarget(
+            project_id=bt.project_id,
+            name=bt.name,
+            build_type=bt.build_type,
+            target_platform=bt.target_platform,
+        )
+        session.add(dup)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    def test_project_has_one_publish_profile_per_store(self, session):
+        bt = session.query(BuildTarget).first()
+        project_id = bt.project_id
         auth = ItchConfig(username="tester")
         session.add(auth)
         session.flush()
 
         first = ItchPublishProfile(
-            build_target_id=bt.id,
+            project_id=project_id,
             store_type=StoreEnum.itch,
             description="Main",
             itch_user_game_id="tester/game",
@@ -139,7 +153,7 @@ class TestBuildModel:
             itch_config_id=auth.id,
         )
         second = ItchPublishProfile(
-            build_target_id=bt.id,
+            project_id=project_id,
             store_type=StoreEnum.itch,
             description="Duplicate",
             itch_user_game_id="tester/game",

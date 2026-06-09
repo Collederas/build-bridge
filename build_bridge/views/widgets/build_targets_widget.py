@@ -188,16 +188,16 @@ class BuildTargetRow(QWidget):
 
                 overwrite_existing_build = project_build_dir_root.exists()
 
-                engine_base_path = current_build_target.unreal_engine_base_path
+                engine_base_path = current_build_target.project.unreal_engine_base_path
                 if not engine_base_path or not os.path.isdir(engine_base_path):
                     QMessageBox.warning(self, "Configuration Error",
-                                        "Unreal Engine base path is not configured or invalid.\n\nPlease use 'Edit' to configure it.")
+                                        "Unreal Engine base path is not configured or invalid.\n\nPlease set it in the project's Settings.")
                     return
 
-                target = current_build_target.target
+                target = current_build_target.project.target
                 if not target:
                     QMessageBox.warning(self, "Configuration Error",
-                                        "No target .cs file specified.\n\nPlease use 'Edit' to configure it.")
+                                        "No target .cs file specified.\n\nPlease set it in the project's Settings.")
                     return
 
                 try:

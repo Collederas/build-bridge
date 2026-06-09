@@ -200,10 +200,6 @@ class BuildTargetRow(QWidget):
                                         "No target .cs file specified.\n\nPlease use 'Edit' to configure it.")
                     return
 
-                maps = []
-                for incl_map in current_build_target.maps.keys():
-                    maps.append(self._convert_umap_path(incl_map, source_dir))
-
                 try:
                     target_platform_val = current_build_target.target_platform.value
                     build_type_val = current_build_target.build_type.value
@@ -242,7 +238,6 @@ class BuildTargetRow(QWidget):
                         target_platform=target_platform_val,
                         target_config=build_type_val,
                         target=target,
-                        maps=maps,
                         output_dir=project_build_dir_root,
                         clean=False,
                         valve_package_pad=optimize_steam,
@@ -289,44 +284,6 @@ class BuildTargetRow(QWidget):
                 )
         except Exception as e:
             logging.info(f"Failed to register successful build: {e}")
-
-    def _convert_umap_path(self, full_path: str, project_source_dir: str) -> str:
-        full_path = os.path.abspath(os.path.normpath(full_path))
-        project_source_dir = os.path.abspath(os.path.normpath(project_source_dir))
-
-        try:
-            common_path = os.path.commonpath([full_path, project_source_dir])
-        except ValueError:
-            common_path = ""
-
-        if os.path.normcase(common_path) != os.path.normcase(project_source_dir):
-            raise ValueError("Path is not within the project source directory")
-
-        if not full_path.lower().endswith(".umap"):
-            raise ValueError("Expected a .umap file")
-
-        relative_path = os.path.relpath(full_path, project_source_dir).replace("\\", "/")
-        parts = relative_path.split("/")
-        map_name = os.path.splitext(parts[-1])[0]
-
-        if parts[0] == "Plugins":
-            try:
-                content_index = parts.index("Content")
-                plugin_name = parts[content_index - 1]
-                if content_index < 2:
-                    raise ValueError("Plugin content path is missing the plugin folder")
-                map_subpath = parts[content_index + 1:-1]
-                return "/".join(["", plugin_name, *map_subpath, map_name])
-            except (IndexError, ValueError):
-                raise ValueError("Invalid plugin map path structure")
-        else:
-            try:
-                if parts[0] != "Content":
-                    raise ValueError("Expected path to start with 'Content'")
-                map_subpath = parts[1:-1]
-                return "/".join(["", "Game", *map_subpath, map_name])
-            except IndexError:
-                raise ValueError("Invalid base content path structure")
 
 
 class BuildTargetListWidget(QWidget):

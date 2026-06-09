@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from typing import List, Optional
+from typing import Optional
 
 from build_bridge.models import BuildTargetPlatformEnum, BuildTypeEnum
 
@@ -50,7 +50,6 @@ class UnrealBuilder:
         target_platform: BuildTargetPlatformEnum,
         target_config: BuildTypeEnum,
         target: str,
-        maps: List[str],
         output_dir: str,
         clean: bool = False,
         valve_package_pad: bool = False,
@@ -62,7 +61,6 @@ class UnrealBuilder:
         self.target_platform = target_platform
         self.target_config = target_config
         self.target = target
-        self.maps = maps
         self.clean = clean
         self.valve_package_pad = valve_package_pad
 
@@ -187,13 +185,6 @@ class UnrealBuilder:
         target_name = target_with_suffix.split('.')[0]
         command.append(f'-target={target_name}')
 
-        # Add maps as a single explicit UAT map list. BuildCookRun expects the
-        # -map value to contain all maps separated by '+'. Repeating -map can
-        # leave UAT using only one value or falling back to project defaults.
-        map_argument = self._format_maps_argument(self.maps)
-        if map_argument:
-            command.append(map_argument)
-
         # Add standard build options
         command.extend(["-build", "-cook", "-stage", "-pak", "-prereqs"])
 
@@ -215,21 +206,3 @@ class UnrealBuilder:
             command.extend(["-patchpaddingalign=1048576", "-blocksize=1048576"])
 
         return command
-
-    @staticmethod
-    def _format_maps_argument(maps: List[str]) -> str | None:
-        normalized_maps = []
-        seen = set()
-
-        for incl_map in maps or []:
-            normalized_map = str(incl_map).strip()
-            if not normalized_map or normalized_map in seen:
-                continue
-
-            normalized_maps.append(normalized_map)
-            seen.add(normalized_map)
-
-        if not normalized_maps:
-            return None
-
-        return f"-map={'+'.join(normalized_maps)}"

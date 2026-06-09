@@ -78,7 +78,6 @@ class BuildTarget(Base):
     target_branch = Column(String, nullable=False, default="")
 
     target: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="MyTarget.Target.cs")
-    maps = Column(JSON, nullable=True, default=dict)
 
     build_type = Column(Enum(BuildTypeEnum), nullable=False, default=BuildTypeEnum.prod)
     target_platform = Column(

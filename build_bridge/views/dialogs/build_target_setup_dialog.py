@@ -14,10 +14,6 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QMessageBox,
     QWidget,
-    QTableWidget,
-    QAbstractItemView,
-    QTableWidgetItem,
-    QHeaderView
 )
 
 from PyQt6.QtGui import QIcon
@@ -341,30 +337,13 @@ class BuildTargetSetupDialog(QDialog):
         target_layout.addWidget(self.target_value)
         target_layout.addWidget(browse_target_button)
 
-        # MAPS
-        self.maps_table = QTableWidget(0, 2)
-        self.maps_table.setHorizontalHeaderLabels(["Path (Directory)", "Browse"])
-
-
-        self.maps_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.maps_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-
-        self.maps_table.horizontalHeader().setStretchLastSection(False)
-        self.maps_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.maps_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-
-        # ---
-
         form.addRow(optimize_layout)
-        target_label = QLabel("Target and Maps")
+        target_label = QLabel("Target")
         target_label.setStyleSheet("font-weight: bold; font-size: 16px;")
-        form.addRow(target_label)     
+        form.addRow(target_label)
         form.addRow(target_layout)
         layout.addLayout(form)
 
-
-        layout.addWidget(self.maps_table)
-        layout.addLayout(self._create_maps_buttons(self.maps_table))
         layout.addStretch()
 
         return widget
@@ -429,75 +408,6 @@ class BuildTargetSetupDialog(QDialog):
                 return  # Stay on page 1
             # --- End Validation ---
             self.page2_clicked(None)
-
-    def _create_maps_buttons(self, target_table):
-        """Helper function to create Add/Remove buttons for a specific map table."""
-        layout = QHBoxLayout()
-        add_button = QPushButton("Add Map")
-        # Pass the target table to the slot
-        add_button.clicked.connect(lambda: self._add_map_row(target_table))
-        remove_button = QPushButton("Remove Selected Map")
-        # Pass the target table to the slot
-        remove_button.clicked.connect(lambda: self._remove_map_row())
-        layout.addWidget(add_button)
-        layout.addWidget(remove_button)
-        layout.addStretch()
-        return layout
-    
-    def _add_map_row(self, table_widget: QTableWidget):
-        """Adds a new, empty row to the specified maps table."""
-        self._insert_map_row(table_widget)
-        table_widget.scrollToBottom()
-
-    def _remove_map_row(self):
-        """Removes the currently selected row from the maps table."""
-        current_row = self.maps_table.currentRow()
-        if current_row >= 0:
-            self.maps_table.removeRow(current_row)
-        else:
-            QMessageBox.warning(
-                self, "No Selection", "Please select a map row to remove."
-            )
-
-    def _insert_map_row(self, table_widget: QTableWidget, map_path=None):
-        row = table_widget.rowCount()
-        table_widget.insertRow(row)
-
-        # Path item in column 0
-        path_item = QTableWidgetItem(map_path or "")
-        table_widget.setItem(row, 0, path_item)
-
-        # Browse button in column 1
-        browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(
-            lambda checked=False, tbl=table_widget, r=row: self._browse_map_path(tbl, r)
-        )
-        table_widget.setCellWidget(row, 1, browse_button)
-
-    def _load_maps_table(self, table_widget: QTableWidget, maps_dict: dict):
-        """Load maps into the specified table."""
-        print(f"MAP dict are: {maps_dict}")
-        table_widget.setRowCount(0) # Clear existing rows
-        if not isinstance(maps_dict, dict):
-            logging.info(f"Warning: Maps data is not a dictionary: {maps_dict}")
-            return
-        for map_path in maps_dict.keys():
-            self._insert_map_row(table_widget, map_path)
-
-    def _browse_map_path(self, table_widget: QTableWidget, row):
-        """Open a directory dialog to select a map path for the specified table."""
-        current_path_item = table_widget.item(row, 1)
-        start_dir = ""
-        if current_path_item and current_path_item.text():
-            start_dir = current_path_item.text()
-
-        file_dialog = QFileDialog(self)
-        file_dialog.setNameFilter("UMAP Files (*.umap)")
-        file_dialog.selectNameFilter("UMAP Files (*.umap)")
-        file_dialog.setDirectory(os.path.dirname(start_dir))
-        file_dialog.setOption(QFileDialog.Option.ReadOnly)
-        if file_dialog.exec():
-            table_widget.setItem(row, 0, QTableWidgetItem(file_dialog.selectedFiles()[0]))
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(
@@ -570,27 +480,6 @@ class BuildTargetSetupDialog(QDialog):
         self.optimize_checkbox.setChecked(
             bool(self.build_target.optimize_for_steam) if self.build_target else True
         )
-        maps = self.build_target.maps or {}
-        self._load_maps_table(self.maps_table, maps)
-
-    def _collect_and_validate_maps(self, table_widget: QTableWidget):
-        """ Helper to collect and validate maps from a specific table.
-            Returns a dictionary of maps or None if validation fails.
-        """
-        maps_to_save = {}
-        for row in range(table_widget.rowCount()):
-            path_item = table_widget.item(row, 0)
-
-            if not path_item or not path_item.text().strip():
-                QMessageBox.warning(self, "Validation Error", f"Map Path is missing in row {row+1}.")
-                table_widget.selectRow(row)
-                table_widget.setFocus()
-                return None 
-
-            map_path = path_item.text().strip()
-
-            maps_to_save[map_path] = map_path
-        return maps_to_save
 
     def accept(self):
         try:
@@ -664,9 +553,6 @@ class BuildTargetSetupDialog(QDialog):
             )
 
             self.build_target.optimize_for_steam = self.optimize_checkbox.isChecked()
-
-            maps = self._collect_and_validate_maps(self.maps_table)
-            self.build_target.maps = maps
 
             self.session.commit()
             logging.info(

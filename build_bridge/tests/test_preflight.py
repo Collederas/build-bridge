@@ -34,7 +34,6 @@ def _make_build_target(tmp_path):
     bt.target = str(target_file)
     bt.build_type = MagicMock(value="Shipping")
     bt.target_platform = MagicMock(value="Win64")
-    bt.maps = {}
     return bt
 
 

@@ -200,21 +200,6 @@ def validate_build_preflight(build_target, release_name: str) -> PreflightResult
     else:
         result.error("Target platform", "Target platform is not configured.")
 
-    maps = getattr(build_target, "maps", None) or {}
-    if not maps:
-        result.warning(
-            "Maps",
-            "No maps are explicitly included. Unreal may use project defaults.",
-        )
-    elif isinstance(maps, dict):
-        for map_path in maps.keys():
-            if os.path.isfile(str(map_path)) and str(map_path).endswith(".umap"):
-                result.ok("Map", str(map_path))
-            else:
-                result.error("Map", f"Missing or invalid .umap path: {map_path}")
-    else:
-        result.error("Maps", "Saved map configuration is not valid.")
-
     return result
 
 

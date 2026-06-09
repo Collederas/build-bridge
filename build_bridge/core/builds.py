@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 
@@ -35,6 +36,38 @@ def delete_build(session, build: Build, delete_from_disk: bool = False) -> dict:
     session.delete(build)
     session.commit()
     return result
+
+
+def latest_build_for_target(session, build_target_id: int):
+    """The most recent build recorded for a target, or None."""
+    return (
+        session.query(Build)
+        .filter(Build.build_target_id == build_target_id)
+        .order_by(Build.created_at.desc(), Build.id.desc())
+        .first()
+    )
+
+
+def bump_version(version: str) -> str:
+    """Increment the trailing integer of a version string.
+
+    "0.3" -> "0.4", "1.0.2" -> "1.0.3". A version whose tail isn't numeric
+    ("0.2-beta") is returned unchanged for the user to edit by hand.
+    """
+    version = version.strip()
+    match = re.search(r"\d+$", version)
+    if not match:
+        return version
+    return f"{version[: match.start()]}{int(match.group()) + 1}"
+
+
+def suggest_next_version(session, build_target_id: int, seed: str = "0.1") -> str:
+    """Version to prefill for the next build: the last build's version bumped,
+    or a seed when the target has no builds yet."""
+    latest = latest_build_for_target(session, build_target_id)
+    if latest and latest.version:
+        return bump_version(latest.version)
+    return seed
 
 
 def register_successful_build(

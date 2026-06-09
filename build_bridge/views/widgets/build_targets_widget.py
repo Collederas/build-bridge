@@ -26,6 +26,7 @@ from build_bridge.core.builds import (
     BuildDeletionError,
     prepare_build_output_directory,
     register_successful_build,
+    suggest_next_version,
 )
 from build_bridge.core.preflight import validate_build_preflight
 from build_bridge.database import session_scope
@@ -63,9 +64,12 @@ class BuildTargetRow(QWidget):
         version_label.setObjectName("fieldLabel")
         row_layout.addWidget(version_label)
 
-        self.build_version_input = QLineEdit("0.1")
+        self.build_version_input = QLineEdit()
         self.build_version_input.setFixedWidth(92)
-        self.build_version_input.setToolTip("Version string for this build (e.g. 1.0, 0.2-beta)")
+        self.build_version_input.setToolTip(
+            "Version string for this build (e.g. 1.0, 0.2-beta).\n"
+            "Defaults to the last build's version, bumped."
+        )
         self.build_version_input.textChanged.connect(self._refresh_build_state)
         row_layout.addWidget(self.build_version_input)
 
@@ -85,7 +89,19 @@ class BuildTargetRow(QWidget):
         self.build_button.clicked.connect(self.trigger_build)
 
         self._refresh_label()
+        self._seed_version()
         self._refresh_build_state()
+
+    def _seed_version(self):
+        """Prefill the version from build history (last build, bumped) so it
+        persists across sessions instead of resetting to a literal default."""
+        try:
+            with session_scope() as session:
+                version = suggest_next_version(session, self._build_target_id)
+        except Exception as e:
+            logging.info(f"Could not suggest build version: {e}")
+            version = "0.1"
+        self.build_version_input.setText(version)
 
     def _refresh_label(self):
         try:
@@ -284,6 +300,8 @@ class BuildTargetRow(QWidget):
                 )
         except Exception as e:
             logging.info(f"Failed to register successful build: {e}")
+        # Advance the field to the next version now that this one exists.
+        self._seed_version()
 
 
 class BuildTargetListWidget(QWidget):
